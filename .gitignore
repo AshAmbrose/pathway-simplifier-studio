@@ -1,0 +1,17 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Confidential and test images, answer keys drafted from them, run outputs.
+# The two exercise figures must never be committed.
+local/
+
+# Uploaded figures, extraction runs and the AI cost ledger (per machine; uploads may be confidential)
+data/
+
+# Build / tooling
+node_modules/
+dist/
+.DS_Store
+*.log
