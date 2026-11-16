@@ -50,11 +50,13 @@ export const CONFIDENCE = ['high', 'medium', 'low'] as const;
  *   add_to_group      id = shape, to = group
  *   remove_from_group id = shape, to = group
  *   set_box           id = shape, value = "x,y,width,height" in percent (hand fixes only)
+ *   add_element       id = the new shape's id, to = the compartment it sits in (or null),
+ *                     value = '{"box":[x,y,w,h],"fill":"#rrggbb"}' (hand fixes only; never offered to the model)
  */
 export const EDIT_OPS = [
   'move_badge', 'add_badge', 'remove_badge', 'set_arrow_from', 'set_arrow_to', 'add_arrow', 'remove_arrow',
   'set_arrow_head', 'set_arrow_line', 'set_arrow_meaning', 'set_arrow_text', 'set_label', 'remove_element',
-  'add_to_group', 'remove_from_group', 'set_box',
+  'add_to_group', 'remove_from_group', 'set_box', 'add_element',
 ] as const;
 export const EditSchema = z.object({
   op: z.enum(EDIT_OPS),

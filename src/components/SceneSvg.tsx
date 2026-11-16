@@ -34,6 +34,13 @@ export interface SceneUi {
   quiet: boolean;
   picking: boolean;
   editable: boolean;
+  /** "+ Arrow" mode: pressing any shape starts a new arrow. */
+  drawing: boolean;
+  /** "+ Shape" mode: a click (or a dragged-out box) on either view places a new shape there. */
+  placing: boolean;
+  onPlace: (box: BoxPx | { x: number; y: number }) => void;
+  /** A new arrow drawn from a shape: to another shape or cluster, or (to = null) to an empty spot. */
+  onNewArrow: (from: string, to: string | null, at: { x: number; y: number }) => void;
   onSelect: (id: string) => void;
   onPin: (n: number) => void;
   onMoveBadge: (from: string, badge: string, to: string) => void;
@@ -187,14 +194,14 @@ function PinsAndDots({ scene, ui, dots }: { scene: Scene; ui: SceneUi; dots: boo
 type Drag =
   | { kind: 'badge'; node: string; index: number; x: number; y: number }
   | { kind: 'end'; arrow: string; end: 'from' | 'to'; x: number; y: number }
-  | { kind: 'node'; id: string; dx: number; dy: number };
+  | { kind: 'node'; id: string; dx: number; dy: number }
+  | { kind: 'resize'; id: string; x: number; y: number }
+  | { kind: 'new'; from: string; sx: number; sy: number; x: number; y: number };
 
-export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
-  const sw = Math.max(1.2, scene.width / 650);
-  const u = ui.unit;
-  const [drag, setDrag] = useState<Drag | null>(null);
+/** Pointer helpers shared by every drag on the picture: press, move past a small threshold, release. */
+function usePointerDrag<D>() {
+  const [drag, setDrag] = useState<D | null>(null);
   const start = useRef<{ cx: number; cy: number; px: number; py: number; moved: boolean } | null>(null);
-  const hotArrow = (a: { id: string; from: string; to: string }) => ui.hot === a.id || ui.hot === a.from || ui.hot === a.to;
 
   /** Pointer position in picture coordinates. */
   const at = (e: RPointerEvent<SVGElement>) => {
@@ -227,9 +234,57 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
     setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 80);
     return at(e);
   };
+  return { drag, setDrag, start, at, begin, moving, finish };
+}
 
-  const dropTarget = drag && drag.kind !== 'node' ? hitTest(scene, drag.x, drag.y, drag.kind === 'end') : null;
+/**
+ * "+ Shape" mode: a layer over the whole picture. A click places a shape of typical size centred there;
+ * dragging out a box places it at that size. Used on both views, so a shape can be placed on the original too.
+ */
+function PlaceLayer({ scene, ui }: { scene: Scene; ui: SceneUi }) {
+  const { drag, setDrag, start, at, begin, moving, finish } = usePointerDrag<{ x0: number; y0: number; x: number; y: number }>();
+  if (!ui.placing) return null;
+  const u = ui.unit;
+  const r = drag && { x: Math.min(drag.x0, drag.x), y: Math.min(drag.y0, drag.y), width: Math.abs(drag.x - drag.x0), height: Math.abs(drag.y - drag.y0) };
+  return (
+    <g>
+      <rect x={-scene.width} y={-scene.height} width={scene.width * 3} height={scene.height * 3} fill="transparent" style={{ cursor: 'crosshair' }}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={begin}
+        onPointerMove={(e) => { const p = moving(e); if (p && start.current) setDrag({ x0: start.current.px, y0: start.current.py, x: p.x, y: p.y }); }}
+        onPointerUp={(e) => {
+          const s = start.current;
+          const p = finish(e);
+          if (p && s) ui.onPlace({ x: Math.min(s.px, p.x), y: Math.min(s.py, p.y), width: Math.abs(p.x - s.px), height: Math.abs(p.y - s.py) });
+          else ui.onPlace(at(e));
+        }} />
+      {r && <rect x={r.x} y={r.y} width={r.width} height={r.height} rx={4 * u} fill="rgba(37,99,235,0.1)" stroke={SEL} strokeWidth={2 * u} strokeDasharray={`${5 * u} ${4 * u}`} style={{ pointerEvents: 'none' }} />}
+    </g>
+  );
+}
+
+export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
+  const sw = Math.max(1.2, scene.width / 650);
+  const u = ui.unit;
+  const { drag, setDrag, start, begin, moving, finish } = usePointerDrag<Drag>();
+  const hotArrow = (a: { id: string; from: string; to: string }) => ui.hot === a.id || ui.hot === a.from || ui.hot === a.to;
+
+  /** Starts a new arrow from shape `from` (from "+ Arrow" mode, or a connector dot on the selected shape). */
+  const newArrowHandlers = (from: string) => ({
+    onPointerDown: begin,
+    onPointerMove: (e: RPointerEvent<SVGElement>) => { const p = moving(e); if (p && start.current) setDrag({ kind: 'new', from, sx: start.current.px, sy: start.current.py, x: p.x, y: p.y }); },
+    onPointerUp: (e: RPointerEvent<SVGElement>) => {
+      const p = finish(e);
+      if (!p) return;
+      const to = hitTest(scene, p.x, p.y, true);
+      if (to !== from) ui.onNewArrow(from, to, { x: p.x, y: p.y });
+    },
+  });
+
+  const dropTarget = drag && (drag.kind === 'badge' || drag.kind === 'end' || drag.kind === 'new')
+    ? (() => { const t = hitTest(scene, drag.x, drag.y, drag.kind !== 'badge'); return drag.kind === 'new' && t === drag.from ? null : t; })() : null;
   const selArrow = ui.editable ? scene.arrows.find((a) => a.id === ui.selected) : undefined;
+  const selNode = ui.editable && !ui.drawing && !ui.picking ? scene.nodes.find((n) => n.id === ui.selected) : undefined;
 
   return (
     <g style={ui.picking ? { cursor: 'crosshair' } : undefined}>
@@ -267,20 +322,23 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
         );
       })}
       {scene.nodes.map((n) => {
-        const movable = ui.editable && !ui.picking && ui.selected === n.id;
+        const drawFrom = ui.drawing && !ui.picking;
+        const movable = !drawFrom && ui.editable && !ui.picking && ui.selected === n.id;
         const off = drag?.kind === 'node' && drag.id === n.id ? drag : { dx: 0, dy: 0 };
         return (
-          <g key={n.id} transform={`translate(${n.x + off.dx},${n.y + off.dy})`} style={{ cursor: movable ? 'move' : 'pointer' }}
+          <g key={n.id} transform={`translate(${n.x + off.dx},${n.y + off.dy})`} style={{ cursor: drawFrom ? 'crosshair' : movable ? 'move' : 'pointer' }}
             onMouseEnter={() => ui.onHover(n.id)} onMouseLeave={() => ui.onHover(null)}
-            onClick={(e) => { e.stopPropagation(); ui.onSelect(n.id); }}
-            onPointerDown={movable ? begin : undefined}
-            onPointerMove={movable ? (e) => { const p = moving(e); if (p && start.current) setDrag({ kind: 'node', id: n.id, dx: p.x - start.current.px, dy: p.y - start.current.py }); } : undefined}
-            onPointerUp={movable ? (e) => { const s = start.current; const p = finish(e); if (p && s) ui.onMoveNode(n.id, { x: n.x + p.x - s.px, y: n.y + p.y - s.py, width: n.width, height: n.height }); } : undefined}>
+            onClick={(e) => { e.stopPropagation(); if (!drawFrom) ui.onSelect(n.id); }}
+            {...(drawFrom ? newArrowHandlers(n.id) : movable ? {
+              onPointerDown: begin,
+              onPointerMove: (e: RPointerEvent<SVGElement>) => { const p = moving(e); if (p && start.current) setDrag({ kind: 'node', id: n.id, dx: p.x - start.current.px, dy: p.y - start.current.py }); },
+              onPointerUp: (e: RPointerEvent<SVGElement>) => { const s = start.current; const p = finish(e); if (p && s) ui.onMoveNode(n.id, { x: n.x + p.x - s.px, y: n.y + p.y - s.py, width: n.width, height: n.height }); },
+            } : {})}>
             <NodeShape n={n} hot={ui.hot === n.id} />
             <NodeLabel n={n} maxFs={Math.max(9, scene.width / 55)} />
             {badgeLayout(n).map((b, i) => {
               const lifted = drag?.kind === 'badge' && drag.node === n.id && drag.index === i;
-              const can = ui.editable && !ui.picking;
+              const can = ui.editable && !ui.picking && !ui.drawing;
               return (
                 <g key={i} transform={`translate(${b.cx},${b.cy})`} style={{ cursor: can ? 'grab' : 'pointer' }}
                   onPointerDown={can ? begin : undefined}
@@ -302,6 +360,30 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
         const b = n && badgeLayout(n)[drag.index];
         return b && <g transform={`translate(${drag.x},${drag.y})`} style={{ pointerEvents: 'none' }}><BadgePill b={b} stroke={SEL} /></g>;
       })()}
+      {drag?.kind === 'new' && <line x1={drag.sx} y1={drag.sy} x2={drag.x} y2={drag.y} stroke={SEL} strokeWidth={2 * u} strokeDasharray={`${5 * u} ${4 * u}`} markerEnd="url(#m-arrow)" style={{ pointerEvents: 'none' }} />}
+      {selNode && (() => {
+        // The selected shape's tools: four connector dots to draw an arrow from, and a corner handle to resize.
+        const r = drag?.kind === 'resize' && drag.id === selNode.id
+          ? { ...selNode, width: Math.max(8 * u, drag.x - selNode.x), height: Math.max(6 * u, drag.y - selNode.y) } : selNode;
+        const dots = [[r.x + r.width / 2, r.y], [r.x + r.width, r.y + r.height / 2], [r.x + r.width / 2, r.y + r.height], [r.x, r.y + r.height / 2]];
+        return (
+          <g>
+            {r !== selNode && <rect x={r.x} y={r.y} width={r.width} height={r.height} rx={4 * u} fill="none" stroke={SEL} strokeWidth={2 * u} strokeDasharray={`${5 * u} ${4 * u}`} style={{ pointerEvents: 'none' }} />}
+            {dots.map(([cx, cy], i) => (
+              <circle key={i} cx={cx} cy={cy} r={5 * u} fill={SEL} stroke="#ffffff" strokeWidth={1.5 * u} style={{ cursor: 'crosshair' }} onClick={(e) => e.stopPropagation()} {...newArrowHandlers(selNode.id)}>
+                <title>Drag from here to draw a new arrow</title>
+              </circle>
+            ))}
+            <rect x={r.x + r.width - 4.5 * u} y={r.y + r.height - 4.5 * u} width={9 * u} height={9 * u} rx={2 * u} fill="#ffffff" stroke={SEL} strokeWidth={2 * u} style={{ cursor: 'nwse-resize' }}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={begin}
+              onPointerMove={(e) => { const p = moving(e); if (p) setDrag({ kind: 'resize', id: selNode.id, x: p.x, y: p.y }); }}
+              onPointerUp={(e) => { const p = finish(e); if (p) ui.onMoveNode(selNode.id, { x: selNode.x, y: selNode.y, width: Math.max(8 * u, p.x - selNode.x), height: Math.max(6 * u, p.y - selNode.y) }); }}>
+              <title>Drag to resize</title>
+            </rect>
+          </g>
+        );
+      })()}
       {selArrow && (['from', 'to'] as const).map((end) => {
         const fixed = end === 'from' ? { x: selArrow.x2, y: selArrow.y2 } : { x: selArrow.x1, y: selArrow.y1 };
         const here = drag?.kind === 'end' && drag.arrow === selArrow.id && drag.end === end ? drag : end === 'from' ? { x: selArrow.x1, y: selArrow.y1 } : { x: selArrow.x2, y: selArrow.y2 };
@@ -319,6 +401,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
         );
       })}
       <PinsAndDots scene={scene} ui={ui} dots />
+      <PlaceLayer scene={scene} ui={ui} />
     </g>
   );
 }
@@ -342,6 +425,7 @@ export function ImageLayer({ scene, src, ui }: { scene: Scene; src: string; ui: 
       ))}
       <Marks scene={scene} ui={ui} arrows="ends" />
       <PinsAndDots scene={scene} ui={ui} dots={false} />
+      <PlaceLayer scene={scene} ui={ui} />
     </g>
   );
 }

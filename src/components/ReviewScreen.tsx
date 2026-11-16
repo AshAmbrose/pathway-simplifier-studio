@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveReview, type RunRecord } from '../api.ts';
-import { applyEdits, optionState } from '../edit/applyEdits.ts';
+import { applyEdits, dependents, optionState } from '../edit/applyEdits.ts';
 import { describeEdit, nameOf, regionName } from '../edit/describe.ts';
 import type { BoxPx } from '../render/edgePorts.ts';
 import { anchorOf, boxOf, nearest, regionAt, toScene, union } from '../render/toScene.ts';
@@ -24,8 +24,44 @@ import { ReviewPanel, type QuestionStatus } from './ReviewPanel.tsx';
 import { ImageLayer, MarkerDefs, SceneSvg, type Mark, type Pin, type SceneUi } from './SceneSvg.tsx';
 
 type Active = { kind: 'q'; i: number } | { kind: 'sel'; id: string } | null;
-/** An arrow end waiting for the "there is no shape here" check, in picture coordinates. */
-interface FreeEnd { arrow: string; end: 'from' | 'to'; x: number; y: number }
+/**
+ * An arrow end waiting for the "there is no shape here" check, in picture coordinates: an existing arrow's end
+ * (`arrow`), or the end of a new arrow being drawn from shape `from`.
+ */
+type FreeEnd = { x: number; y: number } & ({ arrow: string; end: 'from' | 'to'; from?: undefined } | { arrow: null; end: 'to'; from: string });
+type Mode = 'place' | 'draw' | null;
+
+/**
+ * The colour of the uploaded image inside a box: the most common colour among a grid of samples, so a label's
+ * text doesn't win. Null if the image can't be read.
+ */
+function sampleColour(img: HTMLImageElement | null, b: BoxPx): string | null {
+  if (!img || !img.naturalWidth) return null;
+  try {
+    const c = document.createElement('canvas');
+    const w = Math.max(1, Math.round(b.width)), h = Math.max(1, Math.round(b.height));
+    c.width = w; c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true })!;
+    g.drawImage(img, b.x, b.y, b.width, b.height, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data;
+    const count = new Map<string, { n: number; r: number; g: number; b: number }>();
+    const step = Math.max(1, Math.floor(Math.sqrt((w * h) / 400)));
+    for (let y = 0; y < h; y += step) for (let x = 0; x < w; x += step) {
+      const i = (y * w + x) * 4;
+      if (d[i + 3] < 128) continue;
+      const k = `${d[i] >> 4},${d[i + 1] >> 4},${d[i + 2] >> 4}`;
+      const v = count.get(k) ?? { n: 0, r: 0, g: 0, b: 0 };
+      v.n++; v.r += d[i]; v.g += d[i + 1]; v.b += d[i + 2];
+      count.set(k, v);
+    }
+    const best = [...count.values()].sort((a, z) => z.n - a.n)[0];
+    if (!best) return null;
+    const hex = (v: number) => Math.round(v / best.n).toString(16).padStart(2, '0');
+    return `#${hex(best.r)}${hex(best.g)}${hex(best.b)}`;
+  } catch {
+    return null;
+  }
+}
 
 let counter = 0;
 const newKey = () => `${Date.now().toString(36)}${(counter++).toString(36)}`;
@@ -50,6 +86,11 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const [hoverOpt, setHoverOpt] = useState<number | null>(null);
   const [pick, setPick] = useState<PickRequest | null>(null);
   const [check, setCheck] = useState<FreeEnd | null>(null);
+  const [mode, setMode] = useState<Mode>(null);
+  const [focusName, setFocusName] = useState<string | null>(null);
+  // The uploaded image, read once, for taking a new shape's colour from the figure.
+  const img = useRef<HTMLImageElement | null>(null);
+  useEffect(() => { const i = new Image(); i.src = imageUrl; img.current = i; }, [imageUrl]);
   const [showChanges, setShowChanges] = useState(false);
   const [hot, setHot] = useState<string | null>(null);
   const viewer = useRef<ViewerHandle>(null);
@@ -73,16 +114,21 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const settled = useMemo(() => applyEdits(base, inOrder(review.edits)), [base, review.edits]);
   const settledScene = useMemo(() => toScene(settled.extraction, W, H), [settled, W, H]);
 
-  /** The change that puts an arrow's end at a point with no shape: in the compartment there, or in open space. */
-  const freeEdit = (c: FreeEnd): Edit => ({
-    op: c.end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: c.arrow, to: regionAt(settledScene, c.x, c.y)?.id ?? null,
-    value: `${Math.round((c.x / W) * 1e4) / 100},${Math.round((c.y / H) * 1e4) / 100}`,
-  });
+  /**
+   * The changes that put an arrow's end at a point with no shape (in the compartment there, or in open space).
+   * For a new arrow: add it, then move its end to the point. `key` names the new arrow.
+   */
+  const freeEdits = (c: FreeEnd, key: string): (Edit & { key: string })[] => {
+    const point = { to: regionAt(settledScene, c.x, c.y)?.id ?? null, value: `${Math.round((c.x / W) * 1e4) / 100},${Math.round((c.y / H) * 1e4) / 100}` };
+    if (c.arrow) return [{ op: c.end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: c.arrow, ...point, key }];
+    const from = c.from!;
+    return [{ op: 'add_arrow', id: from, to: from, value: 'arrow', key }, { op: 'set_arrow_to', id: `new-${key}`, ...point, key: key + 'e' }];
+  };
 
   // What is drawn: the model's own reading, or the settled picture, or a preview of a hovered answer / a pending check.
   const editsNow = useMemo<(Edit & { key?: string })[]>(() => {
     if (asExtracted) return [];
-    if (check) return [...inOrder(review.edits), freeEdit(check)];
+    if (check) return [...inOrder(review.edits), ...freeEdits(check, 'preview')];
     if (question && qi !== null && hoverOpt !== null) return withAnswer(review.edits, qi, question.options[hoverOpt].edits);
     return inOrder(review.edits);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -95,15 +141,20 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   // The change list in plain words, each described against the picture just before it.
   const changeList = useMemo(() => {
     let cur = base;
-    return inOrder(review.edits).map((e) => {
-      const text = describeEdit(cur, e);
+    const list = inOrder(review.edits);
+    return list.map((e, i) => {
+      // A new arrow drawn into open space is two changes (add it, then place its end); list it as one.
+      const next = list[i + 1];
+      const joined = e.op === 'add_arrow' && next?.op === 'set_arrow_to' && next.id === `new-${e.key}` && /,/.test(next.value ?? '');
+      const text = joined ? `Arrow added: ${nameOf(cur, e.id)} → ${nameOf(applyEdits(cur, [e, next]).extraction, next.to ?? 'open')}` : describeEdit(cur, e);
+      const hidden = i > 0 && e.op === 'set_arrow_to' && e.id === `new-${list[i - 1].key}` && list[i - 1].op === 'add_arrow' && /,/.test(e.value ?? '');
       const r = applyEdits(cur, [e]);
       // Reasons name things by id; show the name as written instead.
       const before = cur;
       const failed = r.failed[0]?.reason.replace(/"([^"]+)"/g, (m, id: string) => (nameOf(before, id) !== id ? `"${nameOf(before, id)}"` : m)) ?? null;
       cur = r.extraction;
-      return { edit: e, text, failed };
-    });
+      return { edit: e, text, failed, hidden };
+    }).filter((c) => !c.hidden);
   }, [base, review.edits]);
 
   // Where each question stands. An answer the model gave no usable changes for is recorded, but still needs a fix by hand.
@@ -151,13 +202,15 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (check) setCheck(null); else if (pick) setPick(null); else if (showChanges) setShowChanges(false); else setActive(null);
+      if (check) setCheck(null); else if (pick) setPick(null); else if (mode) setMode(null); else if (showChanges) setShowChanges(false); else setActive(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [pick, showChanges, check]);
+  }, [pick, showChanges, check, mode]);
 
-  const openQuestion = (i: number) => { setPick(null); setCheck(null); setHoverOpt(null); setShowChanges(false); setActive({ kind: 'q', i }); };
+  const toggleMode = (m: Exclude<Mode, null>) => { setMode((cur) => (cur === m ? null : m)); setActive(null); setHoverOpt(null); setPick(null); setCheck(null); setShowChanges(false); };
+
+  const openQuestion = (i: number) => { setPick(null); setCheck(null); setMode(null); setHoverOpt(null); setShowChanges(false); setActive({ kind: 'q', i }); };
   const close = () => { setActive(null); setHoverOpt(null); };
 
   const stamp = (source: string) => (e: Edit): AppliedEdit => ({ ...e, key: newKey(), source, at: new Date().toISOString() });
@@ -168,6 +221,31 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     const merge = last && last.source === 'manual' && last.op === e.op && last.id === e.id && ['set_box', 'set_label', 'set_arrow_text'].includes(e.op);
     return { ...r, edits: [...(merge ? r.edits.slice(0, -1) : r.edits), stamp('manual')(e)] };
   });
+  /** Several changes that make one action (a new arrow ending in open space), with their keys already chosen. */
+  const addAll = (es: (Edit & { key: string })[]) => setReview((r) => ({ ...r, edits: [...r.edits, ...es.map((e) => ({ ...e, source: 'manual', at: new Date().toISOString() }))] }));
+
+  /** "+ Shape": a click places a shape of typical size centred there; a dragged-out box places it at that size. */
+  const typical = useMemo(() => {
+    const sizes = baseScene.nodes.filter((n) => n.outline !== 'text only' && n.kind !== 'dna' && n.kind !== 'heading');
+    const med = (v: number[]) => v.sort((a, b) => a - b)[Math.floor(v.length / 2)] ?? 0;
+    return { width: med(sizes.map((n) => n.width)) || W * 0.08, height: med(sizes.map((n) => n.height)) || H * 0.05 };
+  }, [baseScene, W, H]);
+  const place = (p: BoxPx | { x: number; y: number }) => {
+    const sized = 'width' in p && p.width > typical.width * 0.3 && p.height > typical.height * 0.3;
+    const b: BoxPx = sized ? (p as BoxPx) : { x: p.x - typical.width / 2, y: p.y - typical.height / 2, ...typical };
+    const id = `new-${newKey()}`;
+    const pct = [b.x / W * 100, b.y / H * 100, b.width / W * 100, b.height / H * 100].map((v) => Math.round(v * 100) / 100);
+    add({ op: 'add_element', id, to: regionAt(settledScene, b.x + b.width / 2, b.y + b.height / 2)?.id ?? null, value: JSON.stringify({ box: pct, fill: sampleColour(img.current, b) }) });
+    setMode(null);
+    setFocusName(id);
+    setActive({ kind: 'sel', id });
+  };
+
+  /** A new arrow drawn from a shape. Onto a shape or cluster it is added; onto an empty spot it goes to the check. */
+  const newArrow = (from: string, to: string | null, at: { x: number; y: number }) => {
+    if (to) { add({ op: 'add_arrow', id: from, to, value: 'arrow' }); return; }
+    setCheck({ arrow: null, end: 'to', from, ...at });
+  };
 
   const clearAnswer = (i: number) => setReview((r) => {
     const answers = { ...r.answers }; delete answers[String(i)];
@@ -195,9 +273,13 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     if (next !== null) setActive({ kind: 'q', i: next }); else { setActive(null); viewer.current?.reset(); }
   };
 
+  /** Undoing a change also undoes the later changes that only exist because of it (an added shape's name, arrows, moves). */
   const undo = (e: AppliedEdit) => {
     if (e.source !== 'manual') return clearAnswer(Number(e.source.slice(1)));
-    setReview((r) => ({ ...r, edits: r.edits.filter((v) => v.key !== e.key) }));
+    setReview((r) => {
+      const gone = new Set([e.key, ...dependents(r.edits, e.key).map((d) => d.key)]);
+      return { ...r, edits: r.edits.filter((v) => !gone.has(v.key)) };
+    });
   };
 
   const select = (id: string) => {
@@ -230,11 +312,12 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     const id = involved(i).find((v) => anchorOf(scene, v));
     return id ? [{ n: i + 1, id, done: answered(i), active: qi === i, warn: statuses[i].state === 'needsHand' }] : [];
   });
-  const selId = check ? check.arrow : active?.kind === 'sel' && boxOf(scene, active.id) ? active.id : null;
+  const selId = check ? (check.arrow ?? check.from) : active?.kind === 'sel' && boxOf(scene, active.id) ? active.id : null;
   const toPercent = (b: BoxPx) => [b.x / W * 100, b.y / H * 100, b.width / W * 100, b.height / H * 100].map((v) => Math.round(v * 100) / 100).join(',');
   const ui = (unit: number): SceneUi => ({
     unit, hot, onHover: setHot, marks, selected: pick ? null : selId, touched: asExtracted ? new Set() : applied.touched, pins,
-    quiet: !!question || !!pick || !!check, picking: !!pick, editable: !asExtracted && !check,
+    quiet: !!question || !!pick || !!check || !!mode, picking: !!pick, editable: !asExtracted && !check,
+    drawing: mode === 'draw' && !check, placing: mode === 'place', onPlace: place, onNewArrow: newArrow,
     onSelect: select, onPin: (n) => openQuestion(n - 1),
     onMoveBadge: (from, badge, to) => add({ op: 'move_badge', id: from, to, value: badge }),
     onArrowEnd: (arrow, end, to) => add({ op: end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: arrow, to, value: null }),
@@ -270,6 +353,14 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
         <button className={chip} onClick={onBack}>← Back</button>
         <h1 className="text-lg font-semibold tracking-tight">{run.name}</h1>
         <span className="flex-1" />
+        {!asExtracted && (
+          <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white p-0.5 dark:border-slate-600 dark:bg-slate-900" role="group" aria-label="Add to the reconstruction">
+            {([['place', '+ Shape', 'Add a shape the model missed'], ['draw', '+ Arrow', 'Draw an arrow from a shape']] as const).map(([m, label, title]) => (
+              <button key={m} title={title} aria-pressed={mode === m} onClick={() => toggleMode(m)}
+                className={`rounded-md px-3 py-1 text-sm font-medium ${mode === m ? 'bg-blue-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>{label}</button>
+            ))}
+          </div>
+        )}
         {base.clarify.length > 0 && (
           <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300" title="Questions the model asked about this figure">
             <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"><div className="h-full rounded-full bg-green-600 transition-all" style={{ width: `${(nAnswered / base.clarify.length) * 100}%` }} /></div>
@@ -282,21 +373,21 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
           </button>
         )}
         <div className="relative">
-          <button className={chip} onClick={() => setShowChanges((v) => !v)}>{review.edits.length} change{review.edits.length === 1 ? '' : 's'} ▾</button>
+          <button className={chip} onClick={() => setShowChanges((v) => !v)}>{changeList.length} change{changeList.length === 1 ? '' : 's'} ▾</button>
           {showChanges && (
             <div className="absolute right-0 z-20 mt-1 max-h-[60vh] w-96 overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 text-sm shadow-xl dark:border-slate-600 dark:bg-slate-800">
               <label className="flex items-center gap-2"><input type="checkbox" checked={asExtracted} onChange={(e) => { setAsExtracted(e.target.checked); close(); setPick(null); setCheck(null); }} /> Show as extracted (hide my changes)</label>
               {changeList.length === 0 ? <p className="mt-2 text-slate-500 dark:text-slate-400">No changes yet. The reconstruction is exactly what the model read.</p> : (
                 <ul className="mt-2 space-y-1.5">
-                  {changeList.map(({ edit, text, failed }) => (
+                  {changeList.map(({ edit, text, failed }) => { const deps = edit.source === 'manual' ? dependents(review.edits, edit.key).length : 0; return (
                     <li key={edit.key} className="flex items-start justify-between gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700">
                       <div>
                         <div className={failed ? 'text-slate-400 line-through' : ''}>{text}</div>
                         <div className="text-xs text-slate-500 dark:text-slate-400">{edit.source === 'manual' ? 'by hand' : `answer to question ${Number(edit.source.slice(1)) + 1}`}{failed ? ` · could not be applied: ${failed}` : ''}</div>
                       </div>
-                      <button className="shrink-0 text-xs underline" title={edit.source === 'manual' ? 'Undo this change' : 'Clear this answer'} onClick={() => undo(edit)}>Undo</button>
+                      <button className="shrink-0 text-xs underline" title={deps ? `Also undoes ${deps} later change${deps === 1 ? '' : 's'} that depend on it` : edit.source === 'manual' ? 'Undo this change' : 'Clear this answer'} onClick={() => undo(edit)}>{deps ? `Undo (+${deps})` : 'Undo'}</button>
                     </li>
-                  ))}
+                  ); })}
                 </ul>
               )}
               {changeList.length > 1 && <button className="mt-2 text-xs underline text-red-700 dark:text-red-400" onClick={() => { setReview(EMPTY_REVIEW); close(); }}>Undo everything</button>}
@@ -315,11 +406,16 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
         hint={hot ? nameOf(x, hot) : null}
         onBackgroundClick={(at) => {
           setShowChanges(false);
-          if (check) return;
+          if (check || mode) return;
           if (pick) { if (pick.acceptPoint) { pick.acceptPoint(at); setPick(null); } return; }
           close();
         }}
-        banner={pick ? (
+        banner={mode && !check ? (
+          <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white">
+            <span>{mode === 'place' ? 'Click where the new shape goes, on either picture (or drag out a box to size it).' : 'Drag from the shape where the arrow starts to where it ends (a shape, or an empty spot). Draw as many as you like.'}</span>
+            <button className="underline" onClick={() => setMode(null)}>{mode === 'draw' ? 'Done (Esc)' : 'Cancel (Esc)'}</button>
+          </div>
+        ) : pick ? (
           <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white">
             <span>{pick.prompt}</span><button className="underline" onClick={() => setPick(null)}>Cancel (Esc)</button>
           </div>
@@ -333,10 +429,14 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
           if (pick || !anchorBox) return null;
           if (check) return (
             <Popover anchor={anchorBox} place={place} width={290}>
-              <CheckPopover end={check.end} where={checkRegion ? `open space in the ${regionName(checkRegion)}` : 'open space'}
+              <CheckPopover end={check.end} isNew={!check.arrow} where={checkRegion ? `open space in the ${regionName(checkRegion)}` : 'open space'}
                 near={nearest(settledScene, point(check), { exclude: [], groups: true, count: 2 }).map((id) => ({ id, name: nameOf(settled.extraction, id) }))}
-                onAccept={() => { add(freeEdit(check)); setCheck(null); }}
-                onNear={(id) => { add({ op: check.end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: check.arrow, to: id, value: null }); setCheck(null); }}
+                onAccept={() => { addAll(freeEdits(check, newKey())); setCheck(null); }}
+                onNear={(id) => {
+                  if (check.arrow) add({ op: check.end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: check.arrow, to: id, value: null });
+                  else add({ op: 'add_arrow', id: check.from!, to: id, value: 'arrow' });
+                  setCheck(null);
+                }}
                 onCancel={() => setCheck(null)} />
             </Popover>
           );
@@ -348,8 +448,8 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
           );
           if (selId) return (
             <Popover anchor={anchorBox} place={place} width={310}>
-              <EditPopover key={selId} x={x} scene={scene} id={selId} add={add} startPick={setPick}
-                onFreeEnd={(arrow, end, at) => setCheck({ arrow, end, ...at })} onClose={close} />
+              <EditPopover key={selId} x={x} scene={scene} id={selId} add={add} startPick={setPick} focusName={focusName === selId}
+                onFreeEnd={(arrow, end, at) => setCheck({ arrow, end, ...at })} onFreeArrow={(from, at) => setCheck({ arrow: null, end: 'to', from, ...at })} onClose={close} />
             </Popover>
           );
           return null;

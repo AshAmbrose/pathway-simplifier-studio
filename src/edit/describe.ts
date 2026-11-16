@@ -9,7 +9,7 @@ export const regionName = (r: { label: string | null; kind: string }) => r.label
 export function nameOf(x: Extraction, id: string | null): string {
   if (!id) return '(nothing)';
   const e = x.elements.find((v) => v.id === id);
-  if (e) return e.label ?? `(${e.kind}, no label)`;
+  if (e) return e.label ?? (e.id.startsWith('new-') ? '(new shape)' : `(${e.kind}, no label)`);
   const g = x.groups.find((v) => v.id === id);
   if (g) return g.label ?? `[${g.members.map((m) => nameOf(x, m)).join(' + ')}]`;
   const a = x.arrows.find((v) => v.id === id);
@@ -44,5 +44,6 @@ export function describeEdit(before: Extraction, e: Edit): string {
     case 'add_to_group': return `${n(e.id)} added to group ${n(e.to)}`;
     case 'remove_from_group': return `${n(e.id)} taken out of group ${n(e.to)}`;
     case 'set_box': return `${n(e.id)} moved or resized`;
+    case 'add_element': return `Shape added${e.to ? ` in ${n(e.to).replace('open space in the ', 'the ')}` : ''}`;
   }
 }

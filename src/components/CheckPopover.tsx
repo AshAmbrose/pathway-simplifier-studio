@@ -4,8 +4,10 @@
  */
 import { CloseButton } from './Popover.tsx';
 
-export function CheckPopover({ end, where, near, onAccept, onNear, onCancel }: {
+export function CheckPopover({ end, isNew, where, near, onAccept, onNear, onCancel }: {
   end: 'from' | 'to';
+  /** A new arrow being drawn, rather than an existing arrow's end being moved. */
+  isNew?: boolean;
   /** "open space in the cytoplasm", or "open space" if it is outside every compartment. */
   where: string;
   near: { id: string; name: string }[];
@@ -29,7 +31,7 @@ export function CheckPopover({ end, where, near, onAccept, onNear, onCancel }: {
           <button key={n.id} onClick={() => onNear(n.id)} className="rounded-lg border border-slate-300 px-3 py-2 text-left font-medium hover:border-blue-500 hover:bg-blue-50 dark:border-slate-600 dark:hover:bg-slate-700">{n.name}</button>
         ))}
       </div>
-      <button className="mt-2 text-xs text-slate-500 underline hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200" onClick={onCancel}>Cancel: leave the arrow as it was</button>
+      <button className="mt-2 text-xs text-slate-500 underline hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200" onClick={onCancel}>{isNew ? "Cancel: don't add the arrow" : 'Cancel: leave the arrow as it was'}</button>
     </div>
   );
 }

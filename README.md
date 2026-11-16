@@ -7,7 +7,7 @@ opt-in, reversible changes, with every difference from the original listed.
 - **Extract:** upload → one model call extracts the figure → the original and a reconstruction side by side, at the original positions.
 - **Review on the canvas:**
   - The model's questions about ambiguous parts are pins on both views. Each comes with ready-made answers: the shapes drawn next to the item, chosen by position only.
-  - Any shape or arrow can be fixed by hand.
+  - Any shape or arrow can be fixed by hand, and shapes or arrows the model missed can be added ("+ Shape", "+ Arrow"). A new shape takes its colour from the figure where it is placed.
   - Every answer or fix is a change on top of the untouched extraction, listed in plain words and undoable.
 - No other data sources and no simplification yet.
 
@@ -27,6 +27,8 @@ opt-in, reversible changes, with every difference from the original listed.
 - **`src/render/toScene.ts`:** places each extracted element at its box on the original image. The arrow routing and text-contrast helpers are copied from BioPathway Studio.
 
 ## Scripts
+- `node scripts/make-practice-run.ts <result.json> <image> "<name>" [ids]`: a practice run with chosen shapes taken out, to put back by hand (offline).
+- `node scripts/check-practice.ts <run id>`: says whether each removed shape and its arrows were put back.
 - `npm run check:extraction`: offline checks of the schema and render (no network).
 - `npm run spend`: AI spend by day.
 - `node scripts/run-figures.ts --yes`: **paid**. Runs the prompt on the local test figures, for scoring against the answer keys.

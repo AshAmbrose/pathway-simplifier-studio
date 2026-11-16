@@ -24,9 +24,9 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** A text box that saves when you leave it or press Enter. */
-function TextCommit({ value, placeholder, onCommit }: { value: string; placeholder?: string; onCommit: (v: string) => void }) {
+function TextCommit({ value, placeholder, onCommit, autoFocus }: { value: string; placeholder?: string; onCommit: (v: string) => void; autoFocus?: boolean }) {
   return (
-    <input key={value} defaultValue={value} placeholder={placeholder} className={input}
+    <input key={value} defaultValue={value} placeholder={placeholder} className={input} autoFocus={autoFocus}
       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); e.stopPropagation(); }}
       onBlur={(e) => { if (e.currentTarget.value.trim() !== value) onCommit(e.currentTarget.value.trim()); }} />
   );
@@ -53,8 +53,12 @@ function Targets({ x, scene, from, at, exclude, groups, prompt, onPick, onPoint,
   );
 }
 
-export function EditPopover({ x, scene, id, add, startPick, onFreeEnd, onClose }: {
+export function EditPopover({ x, scene, id, add, startPick, onFreeEnd, onFreeArrow, focusName, onClose }: {
   x: Extraction; scene: Scene; id: string; add: (e: Edit) => void; startPick: (p: PickRequest) => void;
+  /** A new arrow from this shape to an empty spot: the screen checks before adding it. */
+  onFreeArrow: (from: string, at: { x: number; y: number }) => void;
+  /** Put the cursor in the name box (a shape that was just added). */
+  focusName?: boolean;
   /** An arrow end was put where there is no shape: the screen checks before accepting. */
   onFreeEnd: (arrow: string, end: 'from' | 'to', at: { x: number; y: number }) => void; onClose: () => void;
 }) {
@@ -76,7 +80,7 @@ export function EditPopover({ x, scene, id, add, startPick, onFreeEnd, onClose }
     return (
       <div>
         {header(nameOf(x, id), el.kind)}
-        <Row label="Name as written"><TextCommit value={el.label ?? ''} placeholder="(no label)" onCommit={(v) => add(E('set_label', id, null, v || null))} /></Row>
+        <Row label="Name as written"><TextCommit value={el.label ?? ''} placeholder={focusName ? 'Type the name as written…' : '(no label)'} autoFocus={focusName} onCommit={(v) => add(E('set_label', id, null, v || null))} /></Row>
         <Row label="Badges">
           {el.modifications.length === 0 && <span className="text-xs text-slate-500 dark:text-slate-400">None.</span>}
           {el.modifications.map((m, i) => {
@@ -103,8 +107,9 @@ export function EditPopover({ x, scene, id, add, startPick, onFreeEnd, onClose }
             <button className={btn} onClick={() => toggle('arrow')}>Arrow from here to…</button>
             <button className={btn} onClick={() => toggle('bar')}>Bar from here to…</button>
           </div>
-          {(open === 'arrow' || open === 'bar') && <Targets x={x} scene={scene} from={id} exclude={[id]} groups prompt="Click the shape the new arrow points to"
-            onPick={(to) => { add(E('add_arrow', id, to, open === 'bar' ? 'bar' : 'arrow')); setOpen(null); }} startPick={startPick} />}
+          {(open === 'arrow' || open === 'bar') && <Targets x={x} scene={scene} from={id} exclude={[id]} groups prompt="Click where the new arrow ends: a shape, or an empty spot"
+            onPick={(to) => { add(E('add_arrow', id, to, open === 'bar' ? 'bar' : 'arrow')); setOpen(null); }} onPoint={(at) => onFreeArrow(id, at)} startPick={startPick} />}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Or drag from one of the blue dots on the shape.</p>
         </Row>
         {x.groups.length > 0 && (
           <Row label="Cluster">
@@ -125,7 +130,7 @@ export function EditPopover({ x, scene, id, add, startPick, onFreeEnd, onClose }
         <div className="mt-3 border-t border-slate-200 pt-2 dark:border-slate-700">
           <button className="text-xs text-red-700 underline dark:text-red-400" onClick={() => { add(E('remove_element', id)); onClose(); }}>Remove this shape (it isn't in the figure)</button>
         </div>
-        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Shortcut: drag a badge onto another shape, or drag this shape to move it.</p>
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Drag the shape to move it, its corner to resize it, or a badge onto another shape.</p>
       </div>
     );
   }

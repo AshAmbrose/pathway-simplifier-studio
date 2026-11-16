@@ -170,6 +170,21 @@ function applyOne(x: Extraction, e: Edit, key: string, touched: Set<string>): st
       touched.add(g.id); touched.add(s.id);
       return null;
     }
+    case 'add_element': {
+      if (!/^new-/.test(e.id)) return 'an added shape needs a new id';
+      if (el(e.id) || gr(e.id) || ar(e.id)) return `"${e.id}" already exists`;
+      let spec: { box?: unknown; fill?: unknown };
+      try { spec = JSON.parse(e.value ?? ''); } catch { return 'the new shape has no position'; }
+      const b = parseBox(Array.isArray(spec.box) ? spec.box.join(',') : null);
+      if (!b) return 'the new shape has no position';
+      if (e.to && !x.regions.some((r) => r.id === e.to)) return `compartment "${e.to}" is not there`;
+      x.elements.push({
+        id: e.id, label: null, kind: 'protein', region: e.to ?? null, panel: null, modifications: [], description: 'added by hand',
+        box: b, fill: typeof spec.fill === 'string' ? spec.fill : null, outline: 'rounded box', textColour: null,
+      });
+      touched.add(e.id);
+      return null;
+    }
     case 'set_box': {
       const s = el(e.id);
       if (!s) return `shape "${e.id}" is not there`;
@@ -217,5 +232,33 @@ export function optionProblems(x: Extraction): string[] {
       else if (o.edits.length === 0 && !o.asRead) out.push(`question ${i + 1}, answer "${o.label}": no changes given (fix by hand)`);
     }
   });
+  return out;
+}
+
+/** The ids an edit creates: a new shape, or a new arrow (named from the edit's key). */
+export function createdBy(e: Edit & { key?: string }): string | null {
+  if (e.op === 'add_element') return e.id;
+  if (e.op === 'add_arrow' && e.key) return `new-${e.key}`;
+  return null;
+}
+
+/**
+ * The later changes that only make sense because of this one: anything that refers to the shape or arrow it
+ * created, and, in turn, anything referring to what those created. Undoing a change takes these with it.
+ */
+export function dependents<T extends Edit & { key: string }>(edits: T[], key: string): T[] {
+  const start = edits.findIndex((e) => e.key === key);
+  if (start < 0) return [];
+  const ids = new Set<string>();
+  const first = createdBy(edits[start]);
+  if (first) ids.add(first);
+  const out: T[] = [];
+  for (const e of edits.slice(start + 1)) {
+    if (ids.has(e.id) || (e.to && ids.has(e.to))) {
+      out.push(e);
+      const c = createdBy(e);
+      if (c) ids.add(c);
+    }
+  }
   return out;
 }
