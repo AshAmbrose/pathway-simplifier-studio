@@ -1,13 +1,47 @@
 /**
- * Draws a Scene: only what was extracted, at its extracted position and with its extracted look.
+ * Draws a Scene: only what was extracted (plus the user's changes), at its position and with its look.
  * Arrowheads take their line's colour (context-stroke); badges show the modification text as written.
+ *
+ * Review marks sit on top, sized in screen pixels (`unit` = picture units per pixel) so they stay small at any zoom:
+ * numbered pins for the model's questions, outlines for the shapes a question concerns, a dot on changed items.
+ * Dragging is a shortcut, never the only route: a badge onto another shape, an arrow's end onto another shape,
+ * or the selected shape to move it.
  */
+import { useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import type { Scene, SceneNode } from '../render/toScene.ts';
-import { colour, wrapLabel } from '../render/toScene.ts';
+import { anchorOf, boxOf, colour, hitTest, wrapLabel } from '../render/toScene.ts';
+import type { BoxPx } from '../render/edgePorts.ts';
 import { readableTextColors } from '../render/textContrast.ts';
 
 const HL = '#f97316';
+const SEL = '#2563eb';
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+
+export type Mark = 'about' | 'candidate' | 'hover';
+/** `warn`: answered, but the answer could not be applied by itself and still needs a fix by hand. */
+export interface Pin { n: number; id: string; done: boolean; active: boolean; warn?: boolean }
+
+/** Everything the review screen layers over the two views. Both views get the same object. */
+export interface SceneUi {
+  unit: number;
+  hot: string | null;
+  onHover: (id: string | null) => void;
+  marks: Map<string, Mark>;
+  selected: string | null;
+  touched: Set<string>;
+  pins: Pin[];
+  /** A question or a "click the target" step is open: pins and change dots fade back. */
+  quiet: boolean;
+  picking: boolean;
+  editable: boolean;
+  onSelect: (id: string) => void;
+  onPin: (n: number) => void;
+  onMoveBadge: (from: string, badge: string, to: string) => void;
+  onArrowEnd: (arrow: string, end: 'from' | 'to', to: string) => void;
+  /** An arrow's end was dropped where there is no shape: open space or a compartment. The screen asks before accepting. */
+  onArrowEndFree: (arrow: string, end: 'from' | 'to', at: { x: number; y: number }) => void;
+  onMoveNode: (id: string, box: BoxPx) => void;
+}
 
 export function MarkerDefs() {
   return (
@@ -45,7 +79,8 @@ function NodeShape({ n, hot }: { n: SceneNode; hot: boolean }) {
   if (n.outline === 'oval' || n.outline === 'circle')
     return <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={fill} stroke={stroke} strokeWidth={sw} />;
   const rx = n.outline === 'rounded box' ? Math.min(h / 2.5, 12) : n.outline === 'box' ? 2 : 4;
-  return <rect width={w} height={h} rx={rx} fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={n.outline === 'other' ? '3 2' : undefined} />;
+  // A text-only shape still needs something to click.
+  return <rect width={w} height={h} rx={rx} fill={fill === 'none' ? 'transparent' : fill} stroke={stroke} strokeWidth={sw} strokeDasharray={n.outline === 'other' ? '3 2' : undefined} />;
 }
 
 function NodeLabel({ n, maxFs }: { n: SceneNode; maxFs: number }) {
@@ -66,18 +101,82 @@ function NodeLabel({ n, maxFs }: { n: SceneNode; maxFs: number }) {
   );
 }
 
-function Badges({ n }: { n: SceneNode }) {
+/** Where a shape's badges sit, relative to the shape. Shared by the drawing and the drag ghost. */
+function badgeLayout(n: SceneNode) {
   const r = clamp(n.height * 0.22, 5, 10);
+  // Laid out right to left along the top edge, each as wide as its text, so a long badge doesn't cover its neighbours.
+  let right = n.width + r * 0.4;
+  return n.mods.map((m) => {
+    const fs = clamp(r * (m.text.length > 2 ? 0.75 : 1.05), 5, 11);
+    const wide = Math.max(r * 2, m.text.length * fs * 0.62 + 4);
+    const cx = right - wide / 2;
+    right -= wide + r * 0.1;
+    return { text: m.text, r, fs, cx, cy: -r * 0.3, wide };
+  });
+}
+
+function BadgePill({ b, stroke = '#334155', opacity = 1 }: { b: ReturnType<typeof badgeLayout>[number]; stroke?: string; opacity?: number }) {
+  return (
+    <g opacity={opacity}>
+      <rect x={-b.wide / 2} y={-b.r} width={b.wide} height={b.r * 2} rx={b.r} fill="#ffffff" stroke={stroke} strokeWidth={stroke === '#334155' ? 1 : 2} />
+      <text y={b.fs * 0.35} textAnchor="middle" fontSize={b.fs} fontWeight={700} fontFamily="ui-sans-serif, system-ui" fill="#0f172a" style={{ pointerEvents: 'none' }}>{b.text}</text>
+    </g>
+  );
+}
+
+/** Outlines for the shapes a question concerns, the answers on offer, and the selected item. */
+function Marks({ scene, ui, arrows }: { scene: Scene; ui: SceneUi; arrows: 'path' | 'ends' }) {
+  const u = ui.unit;
+  const out: React.ReactNode[] = [];
+  const outline = (id: string, key: string, stroke: string, width: number, dash?: string, fill?: string) => {
+    const a = scene.arrows.find((v) => v.id === id);
+    if (a && arrows === 'path') {
+      out.push(<path key={key} d={a.d} fill="none" stroke={stroke} strokeWidth={width * u * 1.6} strokeOpacity={0.45} strokeLinecap="round" style={{ pointerEvents: 'none' }} />);
+      return;
+    }
+    if (a) {
+      // On the original there is no drawn path to trace: show the reconstruction's route, dashed.
+      out.push(<path key={key} d={a.d} fill="none" stroke={stroke} strokeWidth={width * u} strokeDasharray={`${6 * u} ${5 * u}`} strokeLinecap="round" style={{ pointerEvents: 'none' }} />);
+      return;
+    }
+    const b = boxOf(scene, id);
+    if (!b) return;
+    const pad = 3 * u;
+    out.push(<rect key={key} x={b.x - pad} y={b.y - pad} width={b.width + pad * 2} height={b.height + pad * 2} rx={5 * u} fill={fill ?? 'none'} stroke={stroke} strokeWidth={width * u}
+      strokeDasharray={dash ? dash.split(' ').map((v) => Number(v) * u).join(' ') : undefined} style={{ pointerEvents: 'none' }} />);
+  };
+  for (const [id, m] of ui.marks) {
+    if (m === 'about') outline(id, 'm-' + id, HL, 2.5);
+    else if (m === 'candidate') outline(id, 'm-' + id, HL, 2, '5 4');
+    else outline(id, 'm-' + id, HL, 4, undefined, 'rgba(249,115,22,0.14)');
+  }
+  if (ui.selected) outline(ui.selected, 'sel', SEL, 2.5);
+  return <>{out}</>;
+}
+
+/** Numbered pins for open questions (a small tick once answered), and a dot on each changed item. */
+function PinsAndDots({ scene, ui, dots }: { scene: Scene; ui: SceneUi; dots: boolean }) {
+  const u = ui.unit;
+  const seen = new Map<string, number>();
   return (
     <>
-      {n.mods.map((m, i) => {
-        const cx = n.width - r * 0.6 - i * r * 2.1, cy = -r * 0.3;
-        const fs = clamp(r * (m.text.length > 2 ? 0.75 : 1.05), 5, 11);
-        const wide = Math.max(r * 2, m.text.length * fs * 0.62 + 4);
+      {dots && [...ui.touched].map((id) => {
+        const a = scene.arrows.find((v) => v.id === id);
+        const b = a ? null : boxOf(scene, id);
+        const p = a ? { x: a.midX, y: a.midY } : b ? { x: b.x, y: b.y + b.height } : null;
+        return p && <circle key={'d-' + id} cx={p.x} cy={p.y} r={3.5 * u} fill={SEL} stroke="#ffffff" strokeWidth={1.2 * u} opacity={ui.quiet ? 0.25 : 1} style={{ pointerEvents: 'none' }}><title>Changed from the model's reading</title></circle>;
+      })}
+      {ui.pins.map((p) => {
+        const at = anchorOf(scene, p.id);
+        if (!at) return null;
+        const k = seen.get(p.id) ?? 0; seen.set(p.id, k + 1);
+        const r = (p.done ? 6.5 : 9) * u;
         return (
-          <g key={i} transform={`translate(${cx},${cy})`} style={{ pointerEvents: 'none' }}>
-            <rect x={-wide / 2} y={-r} width={wide} height={r * 2} rx={r} fill="#ffffff" stroke="#334155" strokeWidth={1} />
-            <text y={fs * 0.35} textAnchor="middle" fontSize={fs} fontWeight={700} fontFamily="ui-sans-serif, system-ui" fill="#0f172a">{m.text}</text>
+          <g key={'p-' + p.n} transform={`translate(${at.x + (k * 20 + (at.onArrow ? 15 : 0)) * u},${at.y})`} opacity={ui.quiet && !p.active ? 0.3 : 1} style={{ cursor: 'pointer' }}
+            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); ui.onPin(p.n); }}>
+            <title>{p.warn ? `Question ${p.n}: answered, but still needs a fix by hand` : p.done ? `Question ${p.n}: answered (click to change)` : `Question ${p.n}`}</title>
+            <circle r={r} fill={p.warn ? '#d97706' : p.done ? '#16a34a' : HL} stroke="#ffffff" strokeWidth={(p.active ? 2.5 : 1.5) * u} />
+            <text y={(p.done ? 2.4 : 3.6) * u} textAnchor="middle" fontSize={(p.done ? 7 : 10.5) * u} fontWeight={700} fill="#ffffff" fontFamily="ui-sans-serif, system-ui" style={{ pointerEvents: 'none' }}>{p.warn ? '!' : p.done ? '✓' : p.n}</text>
           </g>
         );
       })}
@@ -85,23 +184,69 @@ function Badges({ n }: { n: SceneNode }) {
   );
 }
 
-export function SceneSvg({ scene, hot, onHover }: { scene: Scene; hot: string | null; onHover: (id: string | null) => void }) {
+type Drag =
+  | { kind: 'badge'; node: string; index: number; x: number; y: number }
+  | { kind: 'end'; arrow: string; end: 'from' | 'to'; x: number; y: number }
+  | { kind: 'node'; id: string; dx: number; dy: number };
+
+export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
   const sw = Math.max(1.2, scene.width / 650);
-  const hotArrow = (a: { id: string; from: string; to: string }) => hot === a.id || hot === a.from || hot === a.to;
+  const u = ui.unit;
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const start = useRef<{ cx: number; cy: number; px: number; py: number; moved: boolean } | null>(null);
+  const hotArrow = (a: { id: string; from: string; to: string }) => ui.hot === a.id || ui.hot === a.from || ui.hot === a.to;
+
+  /** Pointer position in picture coordinates. */
+  const at = (e: RPointerEvent<SVGElement>) => {
+    const svg = e.currentTarget.ownerSVGElement!;
+    return new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM()!.inverse());
+  };
+  const begin = (e: RPointerEvent<SVGElement>) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const p = at(e);
+    start.current = { cx: e.clientX, cy: e.clientY, px: p.x, py: p.y, moved: false };
+  };
+  const moving = (e: RPointerEvent<SVGElement>) => {
+    const s = start.current;
+    if (!s || !(e.buttons & 1)) return null;
+    if (!s.moved && Math.hypot(e.clientX - s.cx, e.clientY - s.cy) < 4) return null;
+    s.moved = true;
+    return at(e);
+  };
+  /** Ends a drag. Returns where it was dropped, or null if the pointer never really moved (a click). */
+  const finish = (e: RPointerEvent<SVGElement>) => {
+    const s = start.current;
+    start.current = null;
+    setDrag(null);
+    if (!s?.moved) return null;
+    // After a drag the browser may still send a click (to whatever is under the pointer); it must not select
+    // or close anything. Catch it before anything else sees it, and stop waiting if none comes.
+    const stop = (ev: Event) => ev.stopPropagation();
+    window.addEventListener('click', stop, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 80);
+    return at(e);
+  };
+
+  const dropTarget = drag && drag.kind !== 'node' ? hitTest(scene, drag.x, drag.y, drag.kind === 'end') : null;
+  const selArrow = ui.editable ? scene.arrows.find((a) => a.id === ui.selected) : undefined;
+
   return (
-    <g>
+    <g style={ui.picking ? { cursor: 'crosshair' } : undefined}>
       {scene.regions.map((r) => (
-        <g key={r.id}>
+        <g key={r.id} style={{ pointerEvents: 'none' }}>
           <rect x={r.x} y={r.y} width={r.width} height={r.height} rx={r.kind === 'nucleus' ? 24 : 6}
             fill={REGION_FILL[r.kind] ?? '#f8fafc'} fillOpacity={0.7} stroke="#94a3b8" strokeWidth={r.kind === 'plasma_membrane' ? 2.5 : 1.2} strokeDasharray={dashFor(r.boundary)} />
           {r.label && <text x={r.x + 8} y={r.y + 16} fontSize={clamp(scene.width / 70, 10, 20)} fill="#475569" fontFamily="ui-sans-serif, system-ui">{r.label}</text>}
         </g>
       ))}
-      {scene.panels.map((p) => <rect key={p.id} x={p.x} y={p.y} width={p.width} height={p.height} fill="none" stroke="#cbd5e1" strokeDasharray="2 4" />)}
+      {scene.panels.map((p) => <rect key={p.id} x={p.x} y={p.y} width={p.width} height={p.height} fill="none" stroke="#cbd5e1" strokeDasharray="2 4" style={{ pointerEvents: 'none' }} />)}
       {scene.groups.map((g) => (
-        <g key={g.id} onMouseEnter={() => onHover(g.id)} onMouseLeave={() => onHover(null)}>
-          <rect x={g.x} y={g.y} width={g.width} height={g.height} rx={8} fill="none" stroke={hot === g.id ? HL : '#64748b'} strokeOpacity={hot === g.id ? 1 : 0.55}
-            strokeWidth={hot === g.id ? 3 : 1} strokeDasharray="5 4" />
+        <g key={g.id} onMouseEnter={() => ui.onHover(g.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(g.id); }} style={{ cursor: 'pointer' }}>
+          {/* Only the outline is clickable, so the shapes inside stay reachable. */}
+          <rect x={g.x} y={g.y} width={g.width} height={g.height} rx={8} fill="none" stroke="transparent" strokeWidth={10 * u} pointerEvents="stroke" />
+          <rect x={g.x} y={g.y} width={g.width} height={g.height} rx={8} fill="none" stroke={ui.hot === g.id ? HL : '#64748b'} strokeOpacity={ui.hot === g.id ? 1 : 0.55}
+            strokeWidth={ui.hot === g.id ? 3 : 1} strokeDasharray="5 4" style={{ pointerEvents: 'none' }} />
           {g.label && <text x={g.x} y={g.y - 4} fontSize={clamp(scene.width / 80, 9, 16)} fill="#334155" fontFamily="ui-sans-serif, system-ui">{g.label}</text>}
         </g>
       ))}
@@ -110,40 +255,93 @@ export function SceneSvg({ scene, hot, onHover }: { scene: Scene; hot: string | 
         const dash = a.line === 'dashed' ? '7 5' : a.line === 'dotted' ? '1.5 4' : a.line === 'mixed' ? '8 3 2 3' : undefined;
         const marker = a.head === 'arrow' ? 'url(#m-arrow)' : a.head === 'bar' ? 'url(#m-bar)' : a.head === 'other' ? 'url(#m-other)' : undefined;
         return (
-          <g key={a.id} onMouseEnter={() => onHover(a.id)} onMouseLeave={() => onHover(null)}>
-            <path d={a.d} fill="none" stroke="transparent" strokeWidth={14} />
+          <g key={a.id} onMouseEnter={() => ui.onHover(a.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(a.id); }} style={{ cursor: 'pointer' }}>
+            <path d={a.d} fill="none" stroke="transparent" strokeWidth={Math.max(14, 14 * u)} />
             <path d={a.d} fill="none" stroke={h ? HL : a.colour} strokeWidth={h ? sw * 2 : sw} strokeDasharray={dash} strokeLinecap="round"
               opacity={a.line === 'faint' && !h ? 0.45 : 1} markerEnd={marker} />
+            {/* An end that is not on a shape gets a small ring, so "ends in open space" is visible. */}
+            {a.freeFrom && <circle cx={a.x1} cy={a.y1} r={sw * 2.4} fill="#ffffff" stroke={h ? HL : a.colour} strokeWidth={sw} />}
+            {a.freeTo && <circle cx={a.x2} cy={a.y2} r={sw * 4} fill="none" stroke={h ? HL : a.colour} strokeWidth={sw * 0.8} strokeDasharray={`${sw * 1.6} ${sw * 1.6}`} />}
             {a.text && <text x={a.midX} y={a.midY} textAnchor="middle" fontSize={clamp(scene.width / 90, 8, 14)} fill="#0f172a" stroke="#ffffff" strokeWidth={3} paintOrder="stroke" fontFamily="ui-sans-serif, system-ui">{a.text}</text>}
           </g>
         );
       })}
-      {scene.nodes.map((n) => (
-        <g key={n.id} transform={`translate(${n.x},${n.y})`} onMouseEnter={() => onHover(n.id)} onMouseLeave={() => onHover(null)}>
-          <NodeShape n={n} hot={hot === n.id} />
-          <NodeLabel n={n} maxFs={Math.max(9, scene.width / 55)} />
-          <Badges n={n} />
-        </g>
-      ))}
+      {scene.nodes.map((n) => {
+        const movable = ui.editable && !ui.picking && ui.selected === n.id;
+        const off = drag?.kind === 'node' && drag.id === n.id ? drag : { dx: 0, dy: 0 };
+        return (
+          <g key={n.id} transform={`translate(${n.x + off.dx},${n.y + off.dy})`} style={{ cursor: movable ? 'move' : 'pointer' }}
+            onMouseEnter={() => ui.onHover(n.id)} onMouseLeave={() => ui.onHover(null)}
+            onClick={(e) => { e.stopPropagation(); ui.onSelect(n.id); }}
+            onPointerDown={movable ? begin : undefined}
+            onPointerMove={movable ? (e) => { const p = moving(e); if (p && start.current) setDrag({ kind: 'node', id: n.id, dx: p.x - start.current.px, dy: p.y - start.current.py }); } : undefined}
+            onPointerUp={movable ? (e) => { const s = start.current; const p = finish(e); if (p && s) ui.onMoveNode(n.id, { x: n.x + p.x - s.px, y: n.y + p.y - s.py, width: n.width, height: n.height }); } : undefined}>
+            <NodeShape n={n} hot={ui.hot === n.id} />
+            <NodeLabel n={n} maxFs={Math.max(9, scene.width / 55)} />
+            {badgeLayout(n).map((b, i) => {
+              const lifted = drag?.kind === 'badge' && drag.node === n.id && drag.index === i;
+              const can = ui.editable && !ui.picking;
+              return (
+                <g key={i} transform={`translate(${b.cx},${b.cy})`} style={{ cursor: can ? 'grab' : 'pointer' }}
+                  onPointerDown={can ? begin : undefined}
+                  onPointerMove={can ? (e) => { const p = moving(e); if (p) setDrag({ kind: 'badge', node: n.id, index: i, x: p.x, y: p.y }); } : undefined}
+                  onPointerUp={can ? (e) => { const p = finish(e); const to = p && hitTest(scene, p.x, p.y, false); if (to && to !== n.id) ui.onMoveBadge(n.id, b.text, to); } : undefined}>
+                  <title>{can ? `${b.text}: drag onto another shape, or click the shape for more` : b.text}</title>
+                  <BadgePill b={b} opacity={lifted ? 0.3 : 1} />
+                </g>
+              );
+            })}
+          </g>
+        );
+      })}
+
+      <Marks scene={scene} ui={ui} arrows="path" />
+      {dropTarget && (() => { const b = boxOf(scene, dropTarget)!; return <rect x={b.x - 3 * u} y={b.y - 3 * u} width={b.width + 6 * u} height={b.height + 6 * u} rx={5 * u} fill="rgba(37,99,235,0.12)" stroke={SEL} strokeWidth={3 * u} style={{ pointerEvents: 'none' }} />; })()}
+      {drag?.kind === 'badge' && (() => {
+        const n = scene.nodes.find((v) => v.id === drag.node);
+        const b = n && badgeLayout(n)[drag.index];
+        return b && <g transform={`translate(${drag.x},${drag.y})`} style={{ pointerEvents: 'none' }}><BadgePill b={b} stroke={SEL} /></g>;
+      })()}
+      {selArrow && (['from', 'to'] as const).map((end) => {
+        const fixed = end === 'from' ? { x: selArrow.x2, y: selArrow.y2 } : { x: selArrow.x1, y: selArrow.y1 };
+        const here = drag?.kind === 'end' && drag.arrow === selArrow.id && drag.end === end ? drag : end === 'from' ? { x: selArrow.x1, y: selArrow.y1 } : { x: selArrow.x2, y: selArrow.y2 };
+        return (
+          <g key={end}>
+            {drag?.kind === 'end' && drag.end === end && <line x1={fixed.x} y1={fixed.y} x2={here.x} y2={here.y} stroke={SEL} strokeWidth={2 * u} strokeDasharray={`${5 * u} ${4 * u}`} style={{ pointerEvents: 'none' }} />}
+            <circle cx={here.x} cy={here.y} r={6.5 * u} fill="#ffffff" stroke={SEL} strokeWidth={2.5 * u} style={{ cursor: 'grab' }}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={begin}
+              onPointerMove={(e) => { const p = moving(e); if (p) setDrag({ kind: 'end', arrow: selArrow.id, end, x: p.x, y: p.y }); }}
+              onPointerUp={(e) => { const p = finish(e); if (!p) return; const to = hitTest(scene, p.x, p.y, true); if (to) ui.onArrowEnd(selArrow.id, end, to); else ui.onArrowEndFree(selArrow.id, end, { x: p.x, y: p.y }); }}>
+              <title>{end === 'from' ? 'Start of the arrow: drag onto another shape' : 'End of the arrow: drag onto another shape'}</title>
+            </circle>
+          </g>
+        );
+      })}
+      <PinsAndDots scene={scene} ui={ui} dots />
     </g>
   );
 }
 
-/** The uploaded image, with invisible hit areas over each extracted box and an outline on the hovered one. */
-export function ImageLayer({ scene, src, hot, onHover }: { scene: Scene; src: string; hot: string | null; onHover: (id: string | null) => void }) {
+/** The uploaded image, with invisible hit areas over each extracted box, and the same pins and outlines as the reconstruction. */
+export function ImageLayer({ scene, src, ui }: { scene: Scene; src: string; ui: SceneUi }) {
   const boxes = [...scene.nodes, ...scene.groups].sort((a, b) => b.width * b.height - a.width * a.height);
-  const hotBox = boxes.find((b) => b.id === hot);
-  const hotArrow = scene.arrows.find((a) => a.id === hot);
+  const u = ui.unit;
+  const hotBox = boxes.find((b) => b.id === ui.hot);
+  const hotArrow = scene.arrows.find((a) => a.id === ui.hot);
   const ends = hotArrow ? boxes.filter((b) => b.id === hotArrow.from || b.id === hotArrow.to) : [];
   return (
-    <g>
+    <g style={ui.picking ? { cursor: 'crosshair' } : undefined}>
       <image href={src} x={0} y={0} width={scene.width} height={scene.height} />
       {boxes.map((b) => (
-        <rect key={b.id} x={b.x} y={b.y} width={b.width} height={b.height} fill="transparent" onMouseEnter={() => onHover(b.id)} onMouseLeave={() => onHover(null)} />
+        <rect key={b.id} x={b.x} y={b.y} width={b.width} height={b.height} fill="transparent" style={{ cursor: 'pointer' }}
+          onMouseEnter={() => ui.onHover(b.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(b.id); }} />
       ))}
       {[...(hotBox ? [hotBox] : []), ...ends].map((b) => (
-        <rect key={'hl-' + b.id} x={b.x - 2} y={b.y - 2} width={b.width + 4} height={b.height + 4} rx={4} fill="none" stroke={HL} strokeWidth={Math.max(2.5, scene.width / 400)} style={{ pointerEvents: 'none' }} />
+        <rect key={'hl-' + b.id} x={b.x - 2 * u} y={b.y - 2 * u} width={b.width + 4 * u} height={b.height + 4 * u} rx={4 * u} fill="none" stroke={HL} strokeWidth={2 * u} strokeOpacity={0.8} style={{ pointerEvents: 'none' }} />
       ))}
+      <Marks scene={scene} ui={ui} arrows="ends" />
+      <PinsAndDots scene={scene} ui={ui} dots={false} />
     </g>
   );
 }

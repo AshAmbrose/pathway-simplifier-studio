@@ -6,6 +6,7 @@
  *   GET  /api/runs              -> RunSummary[] (newest first)
  *   GET  /api/runs/<id>         -> RunRecord
  *   GET  /api/runs/<id>/image   -> the uploaded image
+ *   PUT  /api/runs/<id>/review  -> Review      (the user's answers and fixes; the extraction is not altered)
  *
  * Keys are read on the server from .env.local and never sent to the browser.
  */
@@ -13,7 +14,7 @@ import type { IncomingMessage } from 'node:http';
 import { loadEnv, type Plugin } from 'vite';
 import { localDay, spentOn } from './aiLedger.ts';
 import { ExtractError, extractFigure } from './extract.ts';
-import { getRun, listRuns, runImage, saveRun } from './runs.ts';
+import { getRun, listRuns, runImage, saveReview, saveRun } from './runs.ts';
 
 const MAX_BODY = 15_000_000; // base64 of a ~11 MB image
 const MIME = new Set(['image/png', 'image/jpeg', 'image/webp']);
@@ -76,6 +77,12 @@ export function apiPlugin(): Plugin {
             return json(200, rec);
           }
           if (url === '/api/runs' && req.method === 'GET') return json(200, listRuns());
+          const rv = url.match(/^\/api\/runs\/([^/]+)\/review$/);
+          if (rv && req.method === 'PUT') {
+            let saved;
+            try { saved = saveReview(rv[1], await readJson(req, 2_000_000)); } catch { throw new ExtractError('The changes could not be saved (unexpected format).', 400); }
+            return saved ? json(200, saved) : json(404, { error: 'Not found.' });
+          }
           const m = url.match(/^\/api\/runs\/([^/]+)(\/image)?$/);
           if (m && req.method === 'GET') {
             if (m[2]) {

@@ -1,5 +1,6 @@
 /** Browser-side calls to the local /api routes. Types come from the server modules (type-only imports). */
 import type { RunRecord, RunSummary } from '../server/runs.ts';
+import type { Review } from './types/extraction.ts';
 
 export type { RunRecord, RunSummary };
 
@@ -22,3 +23,5 @@ export const getRun = (id: string) => call<RunRecord>(`/api/runs/${id}`);
 export const runImageUrl = (id: string) => `/api/runs/${id}/image`;
 export const extract = (body: { name: string; mimeType: string; data: string; width: number; height: number }) =>
   call<RunRecord>('/api/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+export const saveReview = (id: string, review: Review) =>
+  call<Review>(`/api/runs/${id}/review`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(review) });
