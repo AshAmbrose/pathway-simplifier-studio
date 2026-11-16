@@ -134,11 +134,16 @@ function NodeLabel({ n, maxFs, sceneW }: { n: SceneNode; maxFs: number; sceneW: 
   while (lines.length * fs * 1.15 > n.height * 1.05 && fs > 6) { fs -= 0.5; lines = wrapLabel(n.label, n.width, fs); }
   const fill = colour(n.fill, '#ffffff');
   const c = n.outline === 'text only' ? { text: colour(n.textColour, '#0f172a'), halo: 'rgba(255,255,255,0.85)' } : readableTextColors(fill, n.textColour ?? undefined);
-  const top = n.height / 2 - ((lines.length - 1) * fs * 1.15) / 2;
+  // A collapsed shape's members ("A + B + C") sit in a smaller line under the name; the name moves up to make room.
+  const sfs = Math.max(6, fs * 0.62);
+  const sub = n.sublabel ? wrapLabel(n.sublabel, n.width * 0.95, sfs).slice(0, 2) : [];
+  const top = n.height / 2 - ((lines.length - 1) * fs * 1.15) / 2 - (sub.length * sfs * 1.1) / 2;
+  const subTop = top + (lines.length - 1) * fs * 1.15 + fs * 0.35 + sfs * 1.25;
   return (
     <text x={n.width / 2} textAnchor="middle" fontSize={fs} fontFamily="ui-sans-serif, system-ui, sans-serif" fontWeight={600}
       fill={c.text} stroke={c.halo} strokeWidth={fs * 0.18} paintOrder="stroke" style={{ pointerEvents: 'none' }}>
       {lines.map((l, i) => <tspan key={i} x={n.width / 2} y={top + i * fs * 1.15 + fs * 0.35}>{l}</tspan>)}
+      {sub.map((l, i) => <tspan key={'s' + i} x={n.width / 2} y={subTop + i * sfs * 1.1} fontSize={sfs} fontWeight={500}>{l}</tspan>)}
     </text>
   );
 }
@@ -381,8 +386,9 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
           </g>
         );
       })}
-      {/* Bigger shapes first, so a small shape drawn on a bigger one (a ligand on its receptor) stays on top. */}
-      {[...scene.nodes].sort((a, b) => b.width * b.height - a.width * a.height).map((n) => {
+      {/* Faded shapes (left out by a step) underneath everything; then bigger shapes first, so a small shape drawn
+          on a bigger one (a ligand on its receptor) stays on top. */}
+      {[...scene.nodes].sort((a, b) => Number(!!ui.faded?.has(b.id)) - Number(!!ui.faded?.has(a.id)) || b.width * b.height - a.width * a.height).map((n) => {
         const drawFrom = ui.drawing && !ui.picking;
         const movable = !drawFrom && ui.editable && !ui.picking && ui.selected === n.id;
         const off = drag?.kind === 'node' && drag.id === n.id ? drag : { dx: 0, dy: 0 };

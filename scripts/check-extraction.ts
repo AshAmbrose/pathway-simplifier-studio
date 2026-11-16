@@ -7,7 +7,9 @@
  *  5. every kind of change applies, a change that can't apply is reported, and no changes gives back the extraction;
  *  6. runs saved before prompt v3 (local data/, if present) still load;
  *  7. simplification: the order changes apply in, the "hide" change, and step 2's route tracing on the saved
- *     test figures (local data/, if present), with untick → left out → tick back → restored exactly.
+ *     test figures (local data/, if present), with untick → left out → tick back → restored exactly;
+ *  8. steps 3–4: repeats found on the test figures, merging leaves no duplicate arrows, self-loops or clusters,
+ *     and collapsing part of a cluster re-points its arrows.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems } from '../src/types/extraction.ts';
@@ -19,6 +21,8 @@ import { EDIT_OPS, EMPTY_SIMPLIFY, ReviewSchema, type Edit } from '../src/types/
 import { inOrder } from '../src/edit/order.ts';
 import { findIssues } from '../src/simplify/issues.ts';
 import { focusHidden, setItem, toggleShape, traceRoutes } from '../src/simplify/routes.ts';
+import { findRepeats } from '../src/simplify/repeats.ts';
+import { collapseEdit } from '../src/simplify/clusters.ts';
 import { getRun, listRuns } from '../server/runs.ts';
 
 let failed = 0;
@@ -102,6 +106,11 @@ const cases: [Edit, (x: typeof base) => boolean][] = [
   [E('set_box', 'e1', null, '40,40,12,6'), (x) => x.elements[0].box.join() === '40,40,12,6'],
   [E('add_element', 'new-k1', null, JSON.stringify({ box: [70, 70, 8, 4], fill: '#aabbcc' })), (x) => x.elements.length === 5 && x.elements[4].fill === '#aabbcc' && x.elements[4].label === null],
   [E('hide', 'e2', null, 'not on a chosen pathway'), (x) => x.elements.length === 3 && x.arrows.length === 0 && x.contacts.length === 0],
+  // B merged into A: A → B becomes A → A and is dropped (it wasn't drawn as a loop), B → cluster becomes A → cluster.
+  [E('merge_into', 'e2', 'e1'), (x) => x.elements.length === 3 && x.arrows.length === 1 && x.arrows[0].from === 'e1' && x.arrows[0].to === 'g1' && x.contacts.length === 0],
+  // C and D collapsed: their cluster goes, and the arrow to it points at the new shape, which keeps "C + D" under its name.
+  [E('collapse', 'col-k', null, JSON.stringify({ members: ['e3', 'e4'], label: 'CD', sub: 'C + D' })),
+    (x) => x.elements.length === 3 && x.groups.length === 0 && x.arrows.some((a) => a.to === 'col-k') && x.elements.some((e) => e.id === 'col-k' && e.sublabel === 'C + D')],
 ];
 check(cases.length === EDIT_OPS.length && new Set(cases.map(([e]) => e.op)).size === EDIT_OPS.length, `every kind of change has a test (${EDIT_OPS.length})`);
 for (const [e, ok] of cases) {
@@ -140,7 +149,8 @@ check(optionState(base, oA) === 'ready' && optionState(base, oB) === 'ready' && 
 check(optionProblems(base).length === 1 && optionProblems(base)[0].includes('"Z"'), 'an answer whose changes cannot apply is listed as a problem');
 
 // --- simplification ---
-check(!JSON.stringify(extractionJsonSchema()).includes('"hide"'), 'the model is never offered the simplification-only "hide" change');
+check(!['"hide"', '"merge_into"', '"collapse"', '"sublabel"'].some((w) => JSON.stringify(extractionJsonSchema()).includes(w)), 'the model is never offered the simplification-only changes, nor the sub-label');
+check(applyEdits(base, [E('collapse', 'col-z', null, JSON.stringify({ members: ['e3', 'e9'], label: null }))]).failed.length === 1, 'a collapse naming a shape that is gone is reported');
 check(applyEdits(base, [E('hide', 'a1', null, 'x')]).extraction.arrows.map((a) => a.id).join() === 'a2' && applyEdits(base, [E('hide', 'g1', null, 'x')]).extraction.elements.length === 2,
   'hiding an arrow takes only that arrow; hiding a cluster takes its shapes');
 const src = (source: string, key: string) => ({ ...E('set_label', 'e1', null, key), key, source, at: '' });
@@ -191,6 +201,32 @@ else {
     const clicked = focusHidden(x, t, click), unclicked = focusHidden(x, t, toggleShape(click, t, first.members[0], false));
     check(ok && back.size === 0 && clicked.has(first.members[0]) && unclicked.size === 0,
       `${r.id}: nothing left out by default; unticking "${first.name}" leaves out ${h.size} shape(s) not shared with other routes, and their arrows; ticking it back, or clicking a shape out and in, restores everything`);
+  }
+  // Step 3 on the test figures.
+  const yuRun = find('yu2020-nfkb-v3'), wntRun = find('wnt-liu2022-v3');
+  if (yuRun) {
+    const x = yuRun.extraction, rep = findRepeats(x, traceRoutes(x), false);
+    const found = rep.groups.map((g) => x.elements.find((e) => e.id === g.copies[0])!.label);
+    const merged = applyEdits(x, rep.groups.flatMap((g) => g.copies.filter((c) => c !== g.keeper).map((c) => E('merge_into', c, g.keeper))));
+    const keys = merged.extraction.arrows.map((a) => `${a.from}>${a.to}>${a.head}>${a.line}`);
+    const clusters = merged.extraction.groups.map((g) => [...g.members].sort().join());
+    const loops = (v: typeof x) => v.arrows.filter((a) => a.from === a.to).length;
+    check(['TAB2/3', 'TAK1'].every((l) => found.includes(l)) && merged.failed.length === 0 && keys.length === new Set(keys).size
+      && clusters.length === new Set(clusters).size && loops(merged.extraction) === loops(x),
+      `Yu, parts of one picture: repeats found (${[...new Set(found)].join(', ')}); merging them all leaves no duplicate arrows, clusters or new self-loops`);
+  }
+  if (wntRun) {
+    const x = wntRun.extraction, rep = findRepeats(x, traceRoutes(x), true);
+    const bcat = rep.apart.find((a) => a.name === 'β-catenin');
+    check(rep.groups.length === 0 && !!bcat && bcat.reason.includes('compartments') && bcat.reason.includes('panels'),
+      `Wnt, different conditions: nothing merged across OFF and ON; β-catenin left apart (${bcat?.reason})`);
+    const members = ['e_gsk_2', 'e_axin_2', 'e_apc_2'];
+    const col = applyEdits(x, [collapseEdit(x, 't', members, 'Destruction complex core')]);
+    const n = col.extraction.elements.find((e) => e.id === 'col-t');
+    const g2 = col.extraction.groups.find((g) => g.id === 'g_2');
+    check(col.failed.length === 0 && !!n && n.sublabel === 'GSK-3β + Axin + APC' && !members.some((m) => col.extraction.elements.some((e) => e.id === m))
+      && !!g2 && g2.members.includes('col-t') && g2.members.length === 3 && col.extraction.arrows.some((a) => a.from === 'e_dvl_2' && (a.to === 'col-t' || a.to === 'g_2')),
+      'Wnt: collapsing part of the destruction complex makes one named shape (members as its sub-label), kept in the cluster with the rest, with the Dishevelled arrow re-pointed');
   }
   const hu = find('hu2021-jak-stat-v3');
   if (hu) {

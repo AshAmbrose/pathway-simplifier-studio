@@ -56,6 +56,59 @@ function dropElements(x: Extraction, ids: string[], touched: Set<string>) {
   x.contacts = x.contacts.filter((c) => !gone(c.a) && !gone(c.b));
 }
 
+/**
+ * Points everything that refers to one shape or cluster at another instead: arrow ends, contacts, and cluster
+ * places (dropped where the other is already a member).
+ */
+function repoint(x: Extraction, from: string, to: string) {
+  for (const a of x.arrows) { if (a.from === from) a.from = to; if (a.to === from) a.to = to; }
+  for (const c of x.contacts) { if (c.a === from) c.a = to; if (c.b === from) c.b = to; }
+  for (const g of x.groups) if (g.members.includes(from)) g.members = [...new Set(g.members.map((m) => (m === from ? to : m)))];
+}
+
+/** What a merge or collapse starts from, so its tidy-up only touches what the change itself affected. */
+function snapshot(x: Extraction) {
+  return { loops: new Set(x.arrows.filter((a) => a.from === a.to).map((a) => a.id)), sizes: new Map(x.groups.map((g) => [g.id, g.members.length])) };
+}
+
+/**
+ * After merging or collapsing, around the shapes in `around` only: an arrow from a shape to itself is dropped
+ * (unless it was drawn as a self-loop), arrows with the same ends, head and line are drawn as one (BioPathway
+ * Studio's rule for several records of one arrow), contacts are de-duplicated, clusters holding exactly the same
+ * shapes become one, and a cluster this change left with one shape stops being a cluster.
+ */
+function tidy(x: Extraction, before: ReturnType<typeof snapshot>, around: Set<string>) {
+  const loops = before.loops;
+  for (const g of x.groups) if (g.members.some((m) => around.has(m))) around.add(g.id);
+  // Clusters that now hold the same shapes: keep the first, point the others' arrows at it.
+  const seen = new Map<string, string>();
+  for (const g of [...x.groups]) {
+    const k = [...g.members].sort().join('|');
+    const first = seen.get(k);
+    if (first && (around.has(g.id) || around.has(first))) { around.add(first); repoint(x, g.id, first); x.groups = x.groups.filter((v) => v.id !== g.id); } else if (!first) seen.set(k, g.id);
+  }
+  // A cluster this change left with one shape is no longer a cluster: its arrows go to that shape.
+  for (const g of [...x.groups]) if (g.members.length === 1 && (before.sizes.get(g.id) ?? 1) > 1) { repoint(x, g.id, g.members[0]); x.groups = x.groups.filter((v) => v.id !== g.id); }
+  const arrows = new Set<string>();
+  x.arrows = x.arrows.filter((a) => {
+    if (!around.has(a.from) && !around.has(a.to)) return true;
+    if (a.from === a.to && !loops.has(a.id)) return false;
+    const k = `${a.from}>${a.to}>${a.head}>${a.line}`;
+    if (arrows.has(k)) return false;
+    arrows.add(k);
+    return true;
+  });
+  const contacts = new Set<string>();
+  x.contacts = x.contacts.filter((c) => {
+    if (!around.has(c.a) && !around.has(c.b)) return true;
+    if (c.a === c.b) return false;
+    const k = [c.a, c.b].sort().join('|') + c.kind;
+    if (contacts.has(k)) return false;
+    contacts.add(k);
+    return true;
+  });
+}
+
 /** Applies one change in place. Returns the reason it couldn't be applied, or null. */
 function applyOne(x: Extraction, e: Edit, key: string, touched: Set<string>): string | null {
   const el = (id: string | null) => x.elements.find((v) => v.id === id);
@@ -203,6 +256,50 @@ function applyOne(x: Extraction, e: Edit, key: string, touched: Set<string>): st
       touched.add(e.id);
       return null;
     }
+    case 'merge_into': {
+      const gone = el(e.id), stays = el(e.to);
+      if (!gone) return `shape "${e.id}" is not there`;
+      if (!stays) return `shape "${e.to}" is not there`;
+      if (gone.id === stays.id) return 'a shape cannot be merged into itself';
+      const before = snapshot(x);
+      repoint(x, gone.id, stays.id);
+      x.elements = x.elements.filter((v) => v.id !== gone.id);
+      tidy(x, before, new Set([stays.id]));
+      touched.add(stays.id);
+      return null;
+    }
+    case 'collapse': {
+      let spec: { members?: unknown; label?: unknown; sub?: unknown };
+      try { spec = JSON.parse(e.value ?? ''); } catch { return 'the collapse has no members'; }
+      const ids = Array.isArray(spec.members) ? spec.members.filter((m): m is string => typeof m === 'string') : [];
+      if (ids.length < 2) return 'a collapse needs at least two shapes';
+      if (el(e.id) || gr(e.id) || ar(e.id)) return `"${e.id}" already exists`;
+      const missing = ids.find((m) => !el(m));
+      if (missing) return `shape "${missing}" is not there`;
+      const ms = ids.map((m) => el(m)!);
+      const before = snapshot(x);
+      const inner = new Set(ids);
+      // Arrows between the collapsed shapes disappear into the new shape.
+      x.arrows = x.arrows.filter((a) => !(inner.has(a.from) && inner.has(a.to)));
+      const x0 = Math.min(...ms.map((m) => m.box[0])), y0 = Math.min(...ms.map((m) => m.box[1]));
+      const x1 = Math.max(...ms.map((m) => m.box[0] + m.box[2])), y1 = Math.max(...ms.map((m) => m.box[1] + m.box[3]));
+      const common = <T,>(vals: T[]) => { const c = new Map<T, number>(); for (const v of vals) c.set(v, (c.get(v) ?? 0) + 1); return [...c].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null; };
+      const same = <T,>(vals: T[]) => (vals.every((v) => v === vals[0]) ? vals[0] : null);
+      x.elements.push({
+        id: e.id, label: typeof spec.label === 'string' && spec.label.trim() ? spec.label.trim() : null, kind: 'complex',
+        region: same(ms.map((m) => m.region)), panel: same(ms.map((m) => m.panel)),
+        modifications: ms.flatMap((m) => m.modifications), description: 'collapsed from several shapes',
+        box: [x0, y0, x1 - x0, y1 - y0], fill: common(ms.map((m) => m.fill).filter((f): f is string => !!f)), outline: 'rounded box', textColour: null,
+        sublabel: typeof spec.sub === 'string' && spec.sub.trim() ? spec.sub.trim() : null,
+      });
+      // A cluster made entirely of these shapes is the new shape now: its arrows go to it.
+      for (const g of [...x.groups]) if (g.members.every((m) => inner.has(m))) { repoint(x, g.id, e.id); x.groups = x.groups.filter((v) => v.id !== g.id); }
+      for (const m of ids) repoint(x, m, e.id);
+      x.elements = x.elements.filter((v) => !inner.has(v.id));
+      tidy(x, before, new Set([e.id]));
+      touched.add(e.id);
+      return null;
+    }
     case 'set_box': {
       const s = el(e.id);
       if (!s) return `shape "${e.id}" is not there`;
@@ -259,7 +356,7 @@ export function optionProblems(x: Extraction): string[] {
 
 /** The ids an edit creates: a new shape, or a new arrow (named from the edit's key). */
 export function createdBy(e: Edit & { key?: string }): string | null {
-  if (e.op === 'add_element') return e.id;
+  if (e.op === 'add_element' || e.op === 'collapse') return e.id;
   if (e.op === 'add_arrow' && e.key) return `new-${e.key}`;
   return null;
 }
