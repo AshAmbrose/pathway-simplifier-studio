@@ -1,5 +1,5 @@
 /**
- * The app's two screens: upload a figure, or work on one (RunScreen: Current and Simplified). The open run's id
+ * The app's two screens: upload a figure, or work on one (RunScreen: Check, then the simplification steps). The open run's id
  * is kept in the address (?run=<id>), so a run can be reloaded or bookmarked.
  */
 import { useEffect, useState } from 'react';

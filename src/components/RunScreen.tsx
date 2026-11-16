@@ -1,32 +1,34 @@
 /**
- * One run, in two stages, switched in the header:
- *  - Current: the original beside the reconstruction, with questions, fixes and additions (ReviewScreen);
- *  - Simplified: the five simplification steps, each shown before → after (SimplifyScreen).
- * Both edit one change list, held here and saved here, so switching never loses or overwrites anything.
- * The stage is kept in the address (?stage=simplified), so a reload comes back to it.
+ * One run, as one linear journey shown in the step bar:
+ *  - Check: the original beside the reconstruction; answer the questions, fix and add (ReviewScreen).
+ *    "Continue to simplify →" moves on.
+ *  - ① Issues … ⑤ Layout: the simplification steps, each shown before → after (SimplifyScreen).
+ * Every step edits one change list, held here and saved here, so moving back and forth never loses anything.
+ * Where you are is kept in the address (?step=focus), so a reload comes back to it.
  */
 import { useEffect, useRef, useState } from 'react';
 import { saveReview, type RunRecord } from '../api.ts';
-import { EMPTY_REVIEW, type Review } from '../types/extraction.ts';
+import { EMPTY_REVIEW, STEPS, type Review, type StepId } from '../types/extraction.ts';
 import { ReviewScreen } from './ReviewScreen.tsx';
 import { SimplifyScreen } from './SimplifyScreen.tsx';
+import { StepBar, type JourneyStep } from './StepBar.tsx';
 
-export type Stage = 'current' | 'simplified';
-export const chip = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800';
+const chip = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800';
 
-function stageParam(): Stage {
-  return new URL(location.href).searchParams.get('stage') === 'simplified' ? 'simplified' : 'current';
+function stepParam(): JourneyStep {
+  const s = new URL(location.href).searchParams.get('step');
+  return s && (STEPS as readonly string[]).includes(s) ? (s as StepId) : 'check';
 }
 
 export function RunScreen({ run, imageUrl, onBack }: { run: RunRecord; imageUrl: string; onBack: () => void }) {
   const [review, setReview] = useState<Review>(run.review ?? EMPTY_REVIEW);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [reloaded, setReloaded] = useState(false);
-  const [stage, setStageState] = useState<Stage>(stageParam);
-  const setStage = (s: Stage) => {
-    setStageState(s);
+  const [step, setStepState] = useState<JourneyStep>(stepParam);
+  const setStep = (s: JourneyStep) => {
+    setStepState(s);
     const u = new URL(location.href);
-    if (s === 'simplified') u.searchParams.set('stage', s); else u.searchParams.delete('stage');
+    if (s === 'check') u.searchParams.delete('step'); else u.searchParams.set('step', s);
     history.replaceState(null, '', u);
   };
 
@@ -53,15 +55,16 @@ export function RunScreen({ run, imageUrl, onBack }: { run: RunRecord; imageUrl:
 
   const top = (
     <>
-      <button className={chip} onClick={() => { setStage('current'); onBack(); }}>← Back</button>
+      <button className={chip} onClick={() => { setStep('check'); onBack(); }}>← All figures</button>
       <h1 className="text-lg font-semibold tracking-tight">{run.name}</h1>
-      <div className="flex items-center gap-0.5 rounded-lg bg-slate-200 p-0.5 dark:bg-slate-800" role="group" aria-label="Stage">
-        {([['current', 'Current', 'The reconstruction, checked against the original'], ['simplified', 'Simplified', 'Simplify the figure, step by step']] as const).map(([s, label, title]) => (
-          <button key={s} title={title} aria-pressed={stage === s} onClick={() => setStage(s)}
-            className={`rounded-md px-3 py-1 text-sm font-medium ${stage === s ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-600 dark:text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}`}>{label}</button>
-        ))}
-      </div>
     </>
+  );
+  // From Check, "Continue" goes to the first simplification step not yet done or skipped.
+  const status = review.simplify?.steps ?? {};
+  const firstOpen = STEPS.find((k) => !status[k]) ?? 'issues';
+  const checkBar = (
+    <StepBar current="check" status={status} choices={0} onJump={setStep} onNext={() => setStep(firstOpen)}
+      note={openQuestions ? `${openQuestions} question${openQuestions === 1 ? '' : 's'} still open (you can come back to ${openQuestions === 1 ? 'it' : 'them'})` : null} />
   );
   const notices = (
     <>
@@ -75,7 +78,8 @@ export function RunScreen({ run, imageUrl, onBack }: { run: RunRecord; imageUrl:
     </>
   );
 
-  return stage === 'current'
-    ? <ReviewScreen run={run} imageUrl={imageUrl} review={review} setReview={setReview} top={top} notices={notices} />
-    : <SimplifyScreen run={run} imageUrl={imageUrl} review={review} setReview={setReview} top={top} notices={notices} openQuestions={openQuestions} onOpenCurrent={() => setStage('current')} />;
+  return step === 'check'
+    ? <ReviewScreen run={run} imageUrl={imageUrl} review={review} setReview={setReview} top={top} notices={<>{notices}<div className="mb-3">{checkBar}</div></>} />
+    : <SimplifyScreen run={run} imageUrl={imageUrl} review={review} setReview={setReview} top={top} notices={notices} openQuestions={openQuestions}
+        step={step} onStep={setStep} />;
 }

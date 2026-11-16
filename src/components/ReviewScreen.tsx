@@ -7,8 +7,8 @@
  *  - The extraction is never altered. Each answer or fix adds to a list of changes saved with the run;
  *    what is drawn is the extraction with that list applied, and any change can be undone.
  *  - Everything else (question list, flags, run details) sits in one closed panel under the picture.
- *  - This screen shows and edits only the corrections (answers and fixes by hand). Simplification changes in
- *    the same list are left as they are; they are shown on the Simplified stage.
+ *  - This is the Check step. It shows and edits only the corrections (answers and fixes by hand). Simplification
+ *    changes in the same list are left as they are; they are shown in the simplification steps.
  */
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { RunRecord } from '../api.ts';
@@ -387,7 +387,7 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
                 </ul>
               )}
               {changeList.length > 1 && <button className="mt-2 text-xs underline text-red-700 dark:text-red-400" onClick={() => { setReview((r) => ({ ...r, edits: r.edits.filter((e) => !isCorrection(e.source)), answers: {} })); close(); }}>Undo every correction</button>}
-              {nSteps > 0 && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Plus {nSteps} simplification change{nSteps === 1 ? '' : 's'}, listed on the Simplified stage.</p>}
+              {nSteps > 0 && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Plus {nSteps} simplification change{nSteps === 1 ? '' : 's'}, listed in the simplification steps.</p>}
             </div>
           )}
         </div>
@@ -417,7 +417,7 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
                       className={`rounded-md px-2 py-0.5 text-sm ${drawHead === h ? 'bg-white font-semibold text-blue-700' : 'bg-blue-500/40 hover:bg-blue-500/70'}`}>{label}</button>
                   ))}
                 </span>
-                Drag from the shape where it starts to where it ends (a shape, or an empty spot). Draw as many as you like.
+                Drag from the shape where it starts to where it ends (a shape, or an empty spot). For a whole cluster, use its grey “cluster” tab.
               </>}
             </span>
             <button className="underline" onClick={() => setMode(null)}>{mode === 'draw' ? 'Done (Esc)' : 'Cancel (Esc)'}</button>

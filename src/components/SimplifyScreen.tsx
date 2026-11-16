@@ -1,5 +1,5 @@
 /**
- * The Simplified stage: five steps in a fixed order (Issues, Focus, Repeats, Clusters, Layout), each skippable.
+ * The simplification steps, after Check: five steps in a fixed order (Issues, Focus, Repeats, Clusters, Layout), each skippable.
  *
  *  - Left view: the figure after every earlier step (and every correction). Right view: the same with this
  *    step's choices applied, with whatever it leaves out drawn faintly so it can be clicked back in.
@@ -7,8 +7,9 @@
  *  - The original figure opens in a small floating window.
  *  - Every choice is a change in the run's one change list, tagged with its step, applied after the corrections
  *    in step order, listed in plain words and undoable. A choice that no longer applies (say, its shape was
- *    removed in Current) is reported in its step, never dropped silently.
+ *    removed in Check) is reported in its step, never dropped silently.
  *  - Steps 3–5 arrive in later updates; for now they can only be skipped.
+ *  - Which step is open is held by RunScreen, so the step bar here and on Check is one journey.
  */
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { RunRecord } from '../api.ts';
@@ -23,7 +24,7 @@ import { EMPTY_SIMPLIFY, STEPS, type AppliedEdit, type Edit, type Review, type S
 import { FloatingOriginal } from './FloatingOriginal.tsx';
 import { PairedViewer, type ViewerHandle } from './PairedViewer.tsx';
 import { MarkerDefs, SceneSvg, type Mark, type SceneUi } from './SceneSvg.tsx';
-import { STEP_INFO, StepBar } from './StepBar.tsx';
+import { STEP_INFO, StepBar, stepTitle, type JourneyStep } from './StepBar.tsx';
 import { FocusStep } from './steps/FocusStep.tsx';
 import { IssuesStep } from './steps/IssuesStep.tsx';
 
@@ -47,18 +48,19 @@ function withGhosts(after: Scene, before: Scene): { scene: Scene; ghosts: Set<st
   };
 }
 
-export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices, openQuestions, onOpenCurrent }: {
+export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices, openQuestions, step, onStep }: {
   run: RunRecord; imageUrl: string;
   review: Review; setReview: Dispatch<SetStateAction<Review>>;
   top: ReactNode; notices: ReactNode;
-  /** Questions not yet answered in Current: said, but not blocking. */
+  /** Questions not yet answered in Check: said, but not blocking. */
   openQuestions: number;
-  onOpenCurrent: () => void;
+  /** The open step, and moving to another (including back to Check). */
+  step: StepId; onStep: (s: JourneyStep) => void;
 }) {
+  const backToCheck = () => onStep('check');
   const base = run.extraction;
   const W = run.image.width, H = run.image.height;
   const s = review.simplify ?? EMPTY_SIMPLIFY;
-  const [step, setStep] = useState<StepId>(() => STEPS.find((k) => !s.steps[k] && BUILT.includes(k)) ?? 'issues');
   const [hoverIds, setHoverIds] = useState<string[] | null>(null);
   const [hot, setHot] = useState<string | null>(null);
   const [activeIssue, setActiveIssue] = useState<string | null>(null);
@@ -136,12 +138,12 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   });
 
   // Step 2's changes are rebuilt only when its choices change. If the figure under it changed since (a correction
-  // in Current, a step 1 choice), they may no longer match: say so and offer to update, rather than change them unasked.
+  // in Check, a step 1 choice), they may no longer match: say so and offer to update, rather than change them unasked.
   const focusEdits = ordered.filter((e) => stepOf(e.source) === 'focus');
   const focusStale = focusEdits.length !== hidden.size || focusEdits.some((e) => hidden.get(e.id) !== e.value);
 
   const choices = step === 'issues' ? stepEdits.length + Object.keys(s.issues).length : step === 'focus' ? hidden.size : stepEdits.length;
-  const go = (k: StepId) => { setStep(k); setHoverIds(null); setActiveIssue(null); setShowChanges(false); };
+  const go = (k: JourneyStep) => { onStep(k); setHoverIds(null); setActiveIssue(null); setShowChanges(false); };
   const next = () => {
     if (BUILT.includes(step)) setSimplify((v) => ({ ...v, steps: { ...v.steps, [step]: 'done' } }));
     if (at < STEPS.length - 1) go(STEPS[at + 1]);
@@ -208,7 +210,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
           {showChanges && (
             <div className="absolute right-0 z-20 mt-1 max-h-[60vh] w-96 overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 text-sm shadow-xl dark:border-slate-600 dark:bg-slate-800">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Built on {corrections} correction{corrections === 1 ? '' : 's'} made in Current. <button className="underline" onClick={onOpenCurrent}>Go to Current</button>
+                Built on {corrections} correction{corrections === 1 ? '' : 's'} made in Check. <button className="underline" onClick={backToCheck}>Back to Check</button>
               </p>
               {simplifications === 0 && <p className="mt-2 text-slate-500 dark:text-slate-400">No simplifications yet. The figure is exactly the corrected reconstruction.</p>}
               {STEPS.map((k) => {
@@ -216,7 +218,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
                 if (!list.length) return null;
                 return (
                   <section key={k} className="mt-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{STEP_INFO[k].n} {STEP_INFO[k].name}</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{stepTitle(k)}</h3>
                     <ul className="mt-1 space-y-1">
                       {list.map(({ e, text }) => (
                         <li key={e.key} className="flex items-start justify-between gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700"
@@ -239,21 +241,21 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
       {notices}
       {openQuestions > 0 && (
         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-          <span>{openQuestions} question{openQuestions === 1 ? ' is' : 's are'} still open in Current. You can carry on: answers given there will show up here.</span>
-          <button className="ml-3 shrink-0 underline" onClick={onOpenCurrent}>Go to Current</button>
+          <span>{openQuestions} question{openQuestions === 1 ? ' is' : 's are'} still open in Check. You can carry on: answers given there will show up here.</span>
+          <button className="ml-3 shrink-0 underline" onClick={backToCheck}>Back to Check</button>
         </div>
       )}
 
-      <StepBar current={step} status={s.steps} choices={choices} onJump={go} onBack={() => at > 0 && go(STEPS[at - 1])}
+      <StepBar current={step} status={s.steps} choices={choices} onJump={go} onBack={() => go(at > 0 ? STEPS[at - 1] : 'check')}
         onSkip={() => { clearStep(step, 'skipped'); if (at < STEPS.length - 1) go(STEPS[at + 1]); }} onNext={next} onReset={() => clearStep(step, null)} />
 
       <div className="mt-3 flex flex-col gap-4 lg:flex-row">
         <aside className="w-full shrink-0 lg:max-h-[78vh] lg:w-[340px] lg:overflow-y-auto lg:pr-1">
-          <h2 className="text-base font-semibold">{info.n} {info.name}</h2>
+          <h2 className="text-base font-semibold">{stepTitle(step)}</h2>
           <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">{info.what}</p>
           {stepFailures.length > 0 && (
             <div className="mb-3 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-              {stepFailures.length} choice{stepFailures.length === 1 ? '' : 's'} in this step no longer appl{stepFailures.length === 1 ? 'ies' : 'y'}, usually because something changed in Current:
+              {stepFailures.length} choice{stepFailures.length === 1 ? '' : 's'} in this step no longer appl{stepFailures.length === 1 ? 'ies' : 'y'}, usually because something changed in Check:
               <ul className="mt-1 list-disc pl-5">{stepFailures.map((e) => <li key={e.key}>{described.find((d) => d.e.key === e.key)?.text}: {failed.get(e.key)}</li>)}</ul>
             </div>
           )}
@@ -263,7 +265,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
           )}
           {step === 'focus' && focusStale && (
             <div className="mb-3 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-              The figure changed since these choices were made (in Current, or in an earlier step). They now leave out {hidden.size} shape{hidden.size === 1 ? '' : 's'}; the picture still shows the {focusEdits.length} left out before.
+              The figure changed since these choices were made (in Check, or in an earlier step). They now leave out {hidden.size} shape{hidden.size === 1 ? '' : 's'}; the picture still shows the {focusEdits.length} left out before.
               <button className="ml-1 font-semibold underline" onClick={() => setFocus(s.focus)}>Update</button>
             </div>
           )}
@@ -283,7 +285,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
             width={W}
             height={H}
             leftTitle="Before this step"
-            rightTitle={`After ${info.n} ${info.name}`}
+            rightTitle={`After ${stepTitle(step)}`}
             hint={hint}
             help={step === 'focus' ? 'Scroll to zoom · drag to pan · click a shape to leave it out or bring it back' : 'Scroll to zoom · drag to pan · faded = left out by this step'}
             left={(unit) => <><MarkerDefs /><SceneSvg scene={beforeScene} ui={ui(unit)} /></>}

@@ -1,5 +1,5 @@
 /**
- * The uploaded figure in a small window over the page, for the Simplified stage, where both views show the
+ * The uploaded figure in a small window over the page, for the simplification steps, where both views show the
  * reconstruction. Move it by its title bar, resize it from its corner, close it with ×.
  */
 import { useRef, useState } from 'react';

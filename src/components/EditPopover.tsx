@@ -231,6 +231,15 @@ export function EditPopover({ x, scene, id, add, startPick, onFreeEnd, onFreeArr
         {header(nameOf(x, id), 'cluster of touching shapes')}
         <Row label="Name as written"><TextCommit value={gr.label ?? ''} placeholder="(the figure gives it no name)" onCommit={(v) => add(E('set_label', id, null, v || null))} /></Row>
         <Row label="Shapes in it"><span className="text-sm">{gr.members.map((m) => nameOf(x, m)).join(', ')}</span></Row>
+        <Row label="Arrows">
+          <div className="flex gap-1.5">
+            <button className={btn} onClick={() => toggle('arrow')}>Arrow from here to…</button>
+            <button className={btn} onClick={() => toggle('bar')}>Bar from here to…</button>
+          </div>
+          {(open === 'arrow' || open === 'bar') && <Targets x={x} scene={scene} from={id} exclude={[id, ...gr.members]} groups prompt="Click where the new arrow ends: a shape, or an empty spot"
+            onPick={(to) => { add(E('add_arrow', id, to, open === 'bar' ? 'bar' : 'arrow')); setOpen(null); }} onPoint={(at) => onFreeArrow(id, at)} startPick={startPick} />}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Or drag from one of the blue dots on the cluster's outline.</p>
+        </Row>
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">To add or take out a shape, click that shape.</p>
       </div>
     );

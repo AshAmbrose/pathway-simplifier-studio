@@ -31,16 +31,16 @@ export function issueStatus(x: Extraction, i: Issue, edits: AppliedEdit[], decis
   if (i.kind === 'typo') {
     if (edit) return `Changed to "${edit.value}"`;
     if (dec?.kind === 'kept') return 'Kept as written';
-    if (!now.exists) return 'Removed in Current';
-    if (i.asWritten && now.text !== i.asWritten) return `Already changed in Current to "${now.text ?? ''}"`;
+    if (!now.exists) return 'Removed in Check';
+    if (i.asWritten && now.text !== i.asWritten) return `Already changed in Check to "${now.text ?? ''}"`;
     return null;
   }
   if (i.kind === 'unlabelled') {
     if (edit?.op === 'hide') return 'Left out of the simplified figure';
     if (edit) return `Named "${edit.value}"`;
     if (dec?.kind === 'kept') return 'Kept unlabelled';
-    if (!now.exists) return 'Removed in Current';
-    if (now.text) return `Named in Current: "${now.text}"`;
+    if (!now.exists) return 'Removed in Check';
+    if (now.text) return `Named in Check: "${now.text}"`;
     return null;
   }
   if (dec?.kind === 'seen') return dec.note ? `Seen: ${dec.note}` : 'Seen';

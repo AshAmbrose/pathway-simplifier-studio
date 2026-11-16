@@ -6,8 +6,8 @@ Read this first in every session.
 A local web app that turns a published pathway figure into an editable diagram.
 1. **Upload:** you upload a figure.
 2. **Extract:** one model call reads what is drawn.
-3. **Review:** you check the result side by side with the original, answer the model's questions, and fix or add anything it got wrong.
-4. **Simplify:** five ordered, skippable steps (Issues, Focus, Repeats, Clusters, Layout), each shown before → after. Steps 1–2 are built; 3–5 are next.
+3. **Check:** you check the result side by side with the original, answer the model's questions, and fix or add anything it got wrong.
+4. **Simplify:** "Continue to simplify →" leads into five ordered, skippable steps (Issues, Focus, Repeats, Clusters, Layout), each shown before → after. Steps 1–2 are built; 3–5 are next.
 
 Design decisions and their reasons are in [docs/design.md](docs/design.md).
 
@@ -45,8 +45,9 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 | `src/edit/` | Applying the list of changes to the extraction, the order they apply in (`order.ts`), and describing each in plain words. |
 | `src/simplify/` | The simplification steps' logic, without any screen: step 1's issues, step 2's route tracing. |
 | `src/render/` | Turning an extraction into shapes and arrows at their original positions. |
-| `src/components/RunScreen.tsx` | One run: holds and saves the change list, and switches between Current and Simplified. |
-| `src/components/ReviewScreen.tsx` | Current: the two views, pins, pop-ups, adding shapes and arrows, the change list. |
-| `src/components/SimplifyScreen.tsx`, `StepBar.tsx`, `steps/` | Simplified: the step bar, the before → after views, and one panel per step. |
+| `src/components/RunScreen.tsx` | One run: holds and saves the change list, and which step of the journey is open (Check, then ①–⑤). |
+| `src/components/StepBar.tsx` | The step bar across the top: the whole journey, with Back, Skip and Next. |
+| `src/components/ReviewScreen.tsx` | Check: the two views, pins, pop-ups, adding shapes and arrows, the change list. |
+| `src/components/SimplifyScreen.tsx`, `steps/` | The simplification steps: the before → after views, and one panel per step. |
 | `src/components/SceneSvg.tsx` | Drawing the reconstruction and the marks on top of it (pins, outlines, handles). |
 | `scripts/` | Offline checks, practice runs, spend, and the paid re-test of the prompt. |
