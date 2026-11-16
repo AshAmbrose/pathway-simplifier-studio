@@ -25,6 +25,15 @@ type Active = { kind: 'q'; i: number } | { kind: 'sel'; id: string } | null;
 let counter = 0;
 const newKey = () => `${Date.now().toString(36)}${(counter++).toString(36)}`;
 const src = (i: number) => `q${i}`;
+/**
+ * The order changes are applied in: answers first (they are written against the model's own reading), in
+ * question order, then fixes made by hand. So an answer still applies after a hand fix to the same item;
+ * if the two disagree, the hand fix is the one reported as no longer applicable.
+ */
+function inOrder<T extends { source: string }>(edits: T[]): T[] {
+  const n = (e: T) => Number(e.source.slice(1));
+  return [...edits.filter((e) => e.source !== 'manual').sort((a, b) => n(a) - n(b)), ...edits.filter((e) => e.source === 'manual')];
+}
 
 export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageUrl: string; onBack: () => void }) {
   const base = run.extraction;
@@ -46,14 +55,18 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     saveReview(run.id, review).then(() => setSaveError(null)).catch((e) => setSaveError((e as Error).message));
   }, [review, run.id]);
 
+  /** The change list as it would be with this answer given to question i (in place of any answer it has now). */
+  const withAnswer = (edits: AppliedEdit[], i: number, answer: Edit[]): (Edit & { key?: string; source: string })[] =>
+    inOrder([...edits.filter((e) => e.source !== src(i)), ...answer.map((e, k) => ({ ...e, key: `pv${k}`, source: src(i) }))]);
+
   const qi = active?.kind === 'q' ? active.i : null;
   const question = qi !== null ? base.clarify[qi] : null;
 
   // What is drawn: the extraction plus the changes; while an answer is hovered, a preview of that answer.
   const editsNow = useMemo<(Edit & { key?: string })[]>(() => {
     if (asExtracted) return [];
-    if (question && qi !== null && hoverOpt !== null) return [...review.edits.filter((e) => e.source !== src(qi)), ...question.options[hoverOpt].edits];
-    return review.edits;
+    if (question && qi !== null && hoverOpt !== null) return withAnswer(review.edits, qi, question.options[hoverOpt].edits);
+    return inOrder(review.edits);
   }, [asExtracted, question, qi, hoverOpt, review.edits]);
   const applied = useMemo(() => applyEdits(base, editsNow), [base, editsNow]);
   const x = applied.extraction;
@@ -63,11 +76,14 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   // The change list in plain words, each described against the picture just before it.
   const changeList = useMemo(() => {
     let cur = base;
-    return review.edits.map((e) => {
+    return inOrder(review.edits).map((e) => {
       const text = describeEdit(cur, e);
       const r = applyEdits(cur, [e]);
+      // Reasons name things by id; show the name as written instead.
+      const before = cur;
+      const failed = r.failed[0]?.reason.replace(/"([^"]+)"/g, (m, id: string) => (nameOf(before, id) !== id ? `"${nameOf(before, id)}"` : m)) ?? null;
       cur = r.extraction;
-      return { edit: e, text, failed: r.failed[0]?.reason ?? null };
+      return { edit: e, text, failed };
     });
   }, [base, review.edits]);
 
@@ -140,7 +156,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const choose = (i: number, oi: number) => {
     const c = base.clarify[i], o = c.options[oi];
     const others = review.edits.filter((e) => e.source !== src(i));
-    if (optionState(applyEdits(base, others).extraction, o) === 'manual') return fixByHand(i, o.shape);
+    if (optionState(applyEdits(base, inOrder(others.filter((e) => e.source !== 'manual'))).extraction, o) === 'manual') return fixByHand(i, o.shape);
     setReview({ edits: [...others, ...o.edits.map(stamp(src(i)))], answers: { ...review.answers, [String(i)]: oi } });
     setHoverOpt(null);
     const n = base.clarify.length;
@@ -191,11 +207,15 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   // The answers, in the order their shapes sit in the figure (top to bottom, then left to right). No answer is put first on merit.
   const choices: Choice[] = useMemo(() => {
     if (!question || qi === null) return [];
-    const others = applyEdits(base, review.edits.filter((e) => e.source !== src(qi))).extraction;
-    const chosen = review.answers[String(qi)];
+    // Answers are judged against the model's reading plus the other answers, never against hand fixes.
+    const answersOnly = applyEdits(base, inOrder(review.edits.filter((e) => e.source !== 'manual' && e.source !== src(qi)))).extraction;
+    // "Shown now" is a fact about the screen: giving this answer would leave the picture exactly as it is.
+    const now = JSON.stringify(applyEdits(base, inOrder(review.edits)).extraction);
+    const same = question.options.map((o) => JSON.stringify(applyEdits(base, withAnswer(review.edits, qi, o.edits)).extraction) === now);
+    const several = same.filter(Boolean).length > 1;
     const pos = (shape: string | null) => { const b = shape ? boxOf(baseScene, shape) : null; return b ? [Math.round(b.y / (H / 40)), b.x] : [Infinity, Infinity]; };
     return question.options
-      .map((o, index) => ({ index, label: o.label, byHand: optionState(others, o) === 'manual', shownNow: chosen === undefined ? o.asRead : chosen === index, at: pos(o.shape) }))
+      .map((o, index) => ({ index, label: o.label, byHand: optionState(answersOnly, o) === 'manual', shownNow: same[index] && !(several && o.asRead), at: pos(o.shape) }))
       .sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1]);
   }, [question, qi, base, baseScene, review, H]);
 
