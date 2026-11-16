@@ -29,6 +29,7 @@ import { findRepeats } from '../src/simplify/repeats.ts';
 import { collapseEdit } from '../src/simplify/clusters.ts';
 import { layOut, RULES } from '../src/layout/adapt.ts';
 import { TIDY_RULES } from '../src/layout/tidy.ts';
+import { COMPACT_RULES } from '../src/layout/compact.ts';
 import { measure } from '../src/layout/measures.ts';
 import { DEFAULT_LAYOUT } from '../src/layout/value.ts';
 import { STYLE_RED } from '../src/edit/applyEdits.ts';
@@ -286,6 +287,13 @@ else {
     check(!tbad.length && typical < width && tm.crossings <= before.crossings && tm.behind <= before.behind,
       `${r.id}, tidy: with all ${TIDY_RULES.length} rules and with each switched off, applies cleanly, on its canvas, no overlapping shapes, the same every time; shapes stay put (typical move ${typical.toFixed(0)} px, a shape is ${width.toFixed(0)}); crossings ${before.crossings} → ${tm.crossings}, behind a shape ${before.behind} → ${tm.behind}${tbad.length ? ': ' + [...new Set(tbad)].slice(0, 6).join('; ') : ''}`);
 
+    // Compact (the default): every rule on, and each switched off; adds no crossings.
+    const compact = { ...DEFAULT_LAYOUT, mode: 'compact' as const };
+    const kbad = [compact, ...COMPACT_RULES.map((rule) => ({ ...compact, off: [rule.key] }))].flatMap((o) => problems(x, W, H, o, 0.15, o.off[0] ?? 'all rules on').bad);
+    const km = measure(toScene(applyEdits(x, [layEdit(x, W, H, compact)]).extraction, W, H));
+    check(!kbad.length && km.behind <= before.behind,
+      `${r.id}, compact: with all ${COMPACT_RULES.length} rules and with each switched off, applies cleanly, on its canvas, no overlapping shapes, the same every time (crossings ${before.crossings} → ${km.crossings}, behind a shape ${before.behind} → ${km.behind}, pointing up ${before.up} → ${km.up})${kbad.length ? ': ' + [...new Set(kbad)].slice(0, 6).join('; ') : ''}`);
+
     // Redraw as a cell: every rule on, and each switched off.
     const cell = { ...DEFAULT_LAYOUT, mode: 'cell' as const };
     const cbad = [cell, ...RULES.map((rule) => ({ ...cell, off: [rule.key] }))].flatMap((o) => problems(x, W, H, o, 0.05, o.off[0] ?? 'all rules on').bad);
@@ -314,6 +322,13 @@ else {
       const ratio = Math.max(...['CYLD', 'LUBAC'].map((l) => near(fy, l) / near(focused, l)));
       // The shared DNA strand and the second outcome box stay (step 2 keeps them: both routes reach them), so
       // the width is held by them; the height and the empty margins are what crop can take.
+      // Compacted: NEMO, where every route meets, sits in the middle of its routes, with IκB straight below it.
+      const cy2 = applyEdits(focused, [layEdit(focused, W, H, compact)]).extraction;
+      const nemo = centreOf(cy2, W, H, (e) => e.label === 'NEMO'), ikbC = centreOf(cy2, W, H, (e) => e.label === 'IκB');
+      const recs = ['BCR', 'TNFR'].map((l) => centreOf(cy2, W, H, (e) => e.label === l).x);
+      const cm = measure(toScene(cy2, W, H));
+      check(Math.abs(ikbC.x - nemo.x) < 2 && Math.abs(nemo.x - (recs[0] + recs[1]) / 2) < 0.15 * Math.abs(recs[1] - recs[0]) && cm.crossings === 0,
+        `Guo, canonical only, compacted: NEMO in the middle of its routes (between BCR and TNFR), IκB straight below it, no crossings (behind a shape ${cm.behind})`);
       check(nonItems.length > 0 && !!fy.canvas && fy.canvas[0] <= W && fy.canvas[1] <= H && ratio < 1.25,
         `Guo, canonical only, tidied: cropped (${fy.canvas?.[0]} × ${fy.canvas?.[1]} of ${W} × ${H} px), with CYLD and LUBAC still beside NEMO (distance × ${ratio.toFixed(2)})`);
     }

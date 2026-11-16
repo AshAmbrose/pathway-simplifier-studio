@@ -1,7 +1,9 @@
 /**
- * Step 5 panel: lay the figure out again, and see whether it reads better. Two ways (src/layout/):
- *  - "Tidy the original" (the default): keeps the authors' arrangement and scale; lines up, closes gaps, crops,
- *    moves overlapping shapes clear, bows arrows around shapes;
+ * Step 5 panel: lay the figure out again, and see whether it reads better. Three ways (src/layout/):
+ *  - "Compact" (the default): the original's rows and columns, re-spaced evenly; compartments fit their contents;
+ *    the shape most routes lead into goes in the middle;
+ *  - "Tidy as drawn": keeps the authors' arrangement and scale; lines up, closes gaps, crops, moves overlapping
+ *    shapes clear, bows arrows around shapes;
  *  - "Redraw as a cell": BioPathway Studio's Organize Layout, read top to bottom. Made for figures drawn from
  *    scratch, so on a published figure it often reads worse; the numbers say so.
  *  - The main button stores the new positions as one change; nothing moves until it is pressed.
@@ -14,6 +16,7 @@
 import { nameOf } from '../../edit/describe.ts';
 import { RULES } from '../../layout/adapt.ts';
 import type { Measures } from '../../layout/measures.ts';
+import { COMPACT_RULES } from '../../layout/compact.ts';
 import { TIDY_RULES } from '../../layout/tidy.ts';
 import type { LayoutMode, LayoutNotes, LayoutOptions } from '../../layout/value.ts';
 import type { Extraction } from '../../types/extraction.ts';
@@ -71,26 +74,28 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
       ))}
     </li>
   );
-  const mode: LayoutMode = opts.mode ?? 'tidy';
-  const rules: readonly { key: string; name: string; why: string }[] = mode === 'tidy' ? TIDY_RULES : RULES;
+  const mode: LayoutMode = opts.mode ?? 'compact';
+  const rules: readonly { key: string; name: string; why: string }[] = mode === 'compact' ? COMPACT_RULES : mode === 'tidy' ? TIDY_RULES : RULES;
+  const verb = mode === 'compact' ? 'Compact' : mode === 'tidy' ? 'Tidy' : 'Redraw';
   const offHere = opts.off.filter((k) => rules.some((r) => r.key === k)).length;
   const anyNotes = notes.beside.length + notes.emptyRegions.length + notes.behind.length + notes.textClashes.length > 0;
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-300 bg-white p-1 dark:border-slate-600 dark:bg-slate-800" role="radiogroup" aria-label="How to lay out">
-        {([['tidy', 'Tidy the original'], ['cell', 'Redraw as a cell']] as const).map(([m, label]) => (
+      <div className="grid grid-cols-3 gap-1 rounded-lg border border-slate-300 bg-white p-1 dark:border-slate-600 dark:bg-slate-800" role="radiogroup" aria-label="How to lay out">
+        {([['compact', 'Compact'], ['tidy', 'Tidy as drawn'], ['cell', 'Redraw as a cell']] as const).map(([m, label]) => (
           <button key={m} role="radio" aria-checked={mode === m} onClick={() => mode !== m && onMode(m)}
             className={`rounded-md px-2 py-1.5 text-sm font-semibold ${mode === m ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700'}`}>{label}</button>
         ))}
       </div>
       <section className={laidOut && !stale ? `${box} border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30` : 'rounded-lg border-2 border-blue-400 bg-blue-50 p-2.5 text-sm dark:border-blue-700 dark:bg-blue-950/40'}>
+        {!laidOut && mode === 'compact' && <p className="mb-2">Keeps the figure's arrangement (what sits left of, above or beside what) but re-spaces it on an even grid: empty space goes, compartments fit what is in them, shapes of one kind share one size, and the shape most routes lead into goes in the middle with its routes either side.</p>}
         {!laidOut && mode === 'tidy' && <p className="mb-2">Keeps the figure as its authors drew it, at the same size, and tidies it: shapes nearly in line are lined up, space left by what earlier steps took out is closed and cropped, overlapping shapes are moved clear, and arrows bow around shapes.</p>}
         {!laidOut && mode === 'cell' && <p className="mb-2">Redraws the figure from scratch as a cell, read top to bottom: compartments as rows, each part of the figure as a column, the main route into the nucleus as a straight line, regulators beside what they act on, outcomes underneath. Made for figures drawn from scratch, so a published figure often reads worse this way: check the numbers.</p>}
         {laidOut && !stale && <p className="font-medium text-green-800 dark:text-green-300">✓ Laid out. Click a shape on the right, then drag it to fine-tune.</p>}
         {laidOut && stale && <p className="mb-2 text-amber-900 dark:text-amber-200">The figure or the switches below changed since this layout was made, so it may not match.</p>}
         {(!laidOut || stale) && (
           <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700" onClick={onLayout}>
-            {laidOut ? (mode === 'tidy' ? 'Tidy again' : 'Redraw again') : mode === 'tidy' ? 'Tidy the figure' : 'Redraw as a cell'}
+            {laidOut ? `${verb} again` : mode === 'compact' ? 'Compact the figure' : mode === 'tidy' ? 'Tidy the figure' : 'Redraw as a cell'}
           </button>
         )}
         {moves > 0 && (
@@ -136,8 +141,8 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
       </section>
 
       <details className={box}>
-        <summary className="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-100">{mode === 'tidy' ? 'Tidying rules' : 'Layout rules'} ({rules.length - offHere} of {rules.length} on)</summary>
-        <p className={`mt-1 ${small}`}>{mode === 'tidy' ? "Switch off a rule that doesn't help this figure. Always on: shapes drawn together move together." : "Switch off a rule that doesn't help this figure. Always on: one reading direction, compartments as rows, regulators beside what they act on."}</p>
+        <summary className="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-100">{mode === 'cell' ? 'Layout rules' : mode === 'tidy' ? 'Tidying rules' : 'Compacting rules'} ({rules.length - offHere} of {rules.length} on)</summary>
+        <p className={`mt-1 ${small}`}>{mode !== 'cell' ? "Switch off a rule that doesn't help this figure. Always on: shapes drawn together move together." : "Switch off a rule that doesn't help this figure. Always on: one reading direction, compartments as rows, regulators beside what they act on."}</p>
         <ul className="mt-1.5 space-y-1.5">
           {rules.map((r) => (
             <li key={r.key}>

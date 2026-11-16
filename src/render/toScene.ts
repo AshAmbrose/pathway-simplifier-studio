@@ -5,7 +5,7 @@
  */
 import type { Extraction } from '../types/extraction.ts';
 import type { BoxPx } from './edgePorts.ts';
-import { edgeGeometry } from './edgeGeometry.ts';
+import { boxExit, edgeGeometry, type Side } from './edgeGeometry.ts';
 import { badgeText } from '../edit/applyEdits.ts';
 
 export interface SceneNode extends BoxPx {
@@ -89,15 +89,41 @@ export function toScene(x: Extraction, imageW: number, imageH: number): Scene {
     groups.push({ id: g.id, label: g.label, members: g.members, ...u });
   }
   for (const g of groups) byId.set(g.id, g);
-  const arrows: SceneArrow[] = [];
+  // Each arrow's ends first: where its line leaves each shape. Then arrows meeting the same side of one shape are
+  // spread along it, ordered by where their other end is, so arrows joining one shape stay apart.
+  const at = (p: number[] | null | undefined): BoxPx | undefined => (p ? { x: (p[0] / 100) * width, y: (p[1] / 100) * height, width: 0, height: 0 } : undefined);
+  const placed: { a: Extraction['arrows'][number]; s: BoxPx; t: BoxPx; freeFrom: boolean; freeTo: boolean; p1: { x: number; y: number; side: Side }; p2: { x: number; y: number; side: Side } }[] = [];
   for (const a of x.arrows) {
     // An end in open space is a point; everything else is the box of its shape or group.
-    const at = (p: number[] | null | undefined): BoxPx | undefined => (p ? { x: (p[0] / 100) * width, y: (p[1] / 100) * height, width: 0, height: 0 } : undefined);
     const freeFrom = !!a.ends?.from, freeTo = !!a.ends?.to;
     const s = freeFrom ? at(a.ends!.from) : byId.get(a.from), t = freeTo ? at(a.ends!.to) : byId.get(a.to);
     if (!s || !t) { skipped.push(`arrow ${a.id}: ${!s ? a.from : a.to} could not be placed`); continue; }
+    const c = (b: BoxPx) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+    placed.push({ a, s, t, freeFrom, freeTo, p1: boxExit(s, c(t)), p2: boxExit(t, c(s)) });
+  }
+  const sides = new Map<string, { box: BoxPx; ends: { p: { x: number; y: number; side: Side }; other: { x: number; y: number } }[] }>();
+  for (const v of placed) {
+    if (v.a.from === v.a.to) continue;
+    for (const [id, box, p, other] of [[v.a.from, v.s, v.p1, v.p2], [v.a.to, v.t, v.p2, v.p1]] as const) {
+      if (!box.width || !box.height) continue;
+      const k = `${id}|${p.side}`;
+      if (!sides.has(k)) sides.set(k, { box, ends: [] });
+      sides.get(k)!.ends.push({ p, other });
+    }
+  }
+  for (const { box, ends } of sides.values()) {
+    if (ends.length < 2) continue;
+    const across = ends[0].p.side === 'top' || ends[0].p.side === 'bottom';
+    ends.sort((m, n) => (across ? m.other.x - n.other.x : m.other.y - n.other.y));
+    ends.forEach((e, i) => {
+      const f = 0.2 + (0.6 * (i + 0.5)) / ends.length;
+      if (across) e.p.x = box.x + box.width * f; else e.p.y = box.y + box.height * f;
+    });
+  }
+  const arrows: SceneArrow[] = [];
+  for (const { a, s, t, freeFrom, freeTo, p1, p2 } of placed) {
     // Step 5's layout may bow an arrow around a shape, and place its text clear of other lines.
-    const geo = edgeGeometry(s, t, a.from === a.to, ((a.bend ?? 0) / 100) * width);
+    const geo = edgeGeometry(s, t, a.from === a.to, ((a.bend ?? 0) / 100) * width, { p1, p2 });
     const text = a.textAt ? { x: (a.textAt[0] / 100) * width, y: (a.textAt[1] / 100) * height } : { x: geo.midX, y: geo.midY };
     const pts = Array.from({ length: 17 }, (_, i) => cubic(geo, i / 16));
     arrows.push({ id: a.id, from: a.from, to: a.to, d: geo.d, midX: text.x, midY: text.y, x1: geo.p1.x, y1: geo.p1.y, x2: geo.p2.x, y2: geo.p2.y, head: a.head, line: a.line,

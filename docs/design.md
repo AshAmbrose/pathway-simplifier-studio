@@ -66,7 +66,7 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 **Why:** a test run lost its changes. The page reloaded from an older copy during development and saved it over newer work. The same could happen with two tabs open on one run.
 
 ## 6. How it's tested
-- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, step 2's routes on the saved test figures (untick → left out → tick back → restored), steps 3–4, and step 5 both ways on each test figure, with every rule on and with each switched off: applies cleanly, no overlapping shapes, the same every time. Tidy keeps shapes in place and adds no crossings.
+- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, step 2's routes on the saved test figures (untick → left out → tick back → restored), steps 3–4, and step 5 all three ways on each test figure, with every rule on and with each switched off: applies cleanly, no overlapping shapes, the same every time. Tidy keeps shapes in place and adds no crossings; Compact puts Guo's hub in the middle with no crossings.
 - **Practice runs:** a copy of a real extraction with shapes taken out, and a checker that says whether each was put back with the right name, place and arrows.
 - **Browser tests at human pace,** only on throwaway copies. A test that clicks instantly once missed a real fault: a pop-up that moved while the pointer hovered.
 
@@ -120,11 +120,23 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **Tidy-up after merging or collapsing,** limited to what the change touched: arrows that became identical are drawn once (BioPathway Studio's rule), an arrow from a shape to itself is dropped, clusters holding the same shapes become one, and a cluster left with one shape stops being a cluster.
 - **Until step 5,** a collapsed shape keeps the members' area, so shapes that weren't collapsed may overlap it.
 
-**Step 5, Layout: tidy the original by default; redrawing as a cell is an option.**
-- **Why tidy is the default:**
-  - The first version redrew every figure with BioPathway Studio's Organize Layout. On Guo kept to its canonical routes, the result read worse than the original: a sparse cell with tiny shapes, long diagonal regulator arrows, and the wrong main line.
-  - Organize Layout is made for figures drawn from scratch. A published figure is usually laid out with care, and redrawing it throws that away.
-- **Tidy the original** (`src/layout/tidy.ts`) keeps the authors' arrangement and scale. Shapes that travel together (a cluster, shapes drawn touching) move as one. Each rule can be switched off:
+**Step 5, Layout: three ways. Compact is the default; tidy as drawn and redraw as a cell are options.**
+- **How we got here:**
+  - The first version redrew every figure with BioPathway Studio's Organize Layout. On Guo kept to its canonical routes, it read worse than the original: tiny shapes, long diagonal arrows, and the wrong main line. Organize Layout is made for figures drawn from scratch.
+  - The second version only tidied the original. On Guo almost nothing changed, and on Yu the empty space, the oversized nucleus and the curly arrows stayed.
+  - So a middle ground, **Compact**, became the default.
+- **Compact** (`src/layout/compact.ts`) keeps the arrangement (what sits left of, above or beside what) but rebuilds the spacing. Shapes that travel together stay together, keeping their rows as drawn.
+  - **Rows and columns from the original:** shapes whose heights overlap by at least 40% share a row, and likewise widths for columns. They are then laid out with even gaps, so empty space disappears, and a staggered drawing doesn't become a staircase.
+  - **Hub in the middle** (your request): the first shape, going down, that nearly all routes lead into (NEMO in Guo) goes to the middle of those routes. What follows it runs straight down below it, and where that line splits (Guo's two outcomes), the shapes spread evenly below.
+    - Left-to-right order is kept, so this adds no crossings. An earlier attempt that moved whole routes to either side created up to 10.
+  - **One size per kind,** names fit their shapes.
+  - **Compartments and panels fit what's in them:** the nucleus shrinks to its contents, a band spans its panel, and the membrane stays a thin band through its receptors. Empty ones are left out and listed.
+  - **A DNA strand spans what its arrows join.**
+  - **Arrows:** bowed around shapes only if that adds no crossings, and arrow text kept clear.
+  - **On the test figures:** no new crossings on Yu, Guo or Wnt; arrows behind shapes go down on all four; on Guo kept to its canonical routes, NEMO sits between BCR and TNFR with IκB straight below.
+- **Arrows everywhere are straight lines** (`src/render/edgeGeometry.ts`). BioPathway Studio's port-to-port curves made arrows in published figures look curly. Where several arrows meet one side of a shape, their ends are spread along it in the order of their other ends, so they can be told apart.
+- **In step 5 the two views zoom separately,** each fitting its own picture. The zoom menu and "Reset view" apply to both. Every step opens with the whole picture in view.
+- **Tidy as drawn** (`src/layout/tidy.ts`) keeps the authors' arrangement and scale. Shapes that travel together (a cluster, shapes drawn touching) move as one. Each rule can be switched off:
   - **Line up:** shapes nearly in one row or column are put exactly in line (small moves only).
   - **No overlaps:** a shape covering another, from a different cluster, is moved the shortest way clear (on Guo, TRAF6 under cIAP2, and Proteasome over p50).
   - **Close gaps:** empty space wider than two shapes, left where step 2 took out a route, shrinks to that width.

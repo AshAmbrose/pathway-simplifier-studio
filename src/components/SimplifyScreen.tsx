@@ -103,12 +103,9 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const afterScene = useMemo(() => toScene(after.extraction, W, H), [after, W, H]);
   // Nothing is left out by the layout, and its picture has its own size, so it shows no faded copies.
   const right = useMemo(() => (afterScene.width === W && afterScene.height === H ? withGhosts(afterScene, beforeScene) : { scene: afterScene, ghosts: new Set<string>() }), [afterScene, beforeScene, W, H]);
-  // A laid-out picture (step 5) has its own size: it is shrunk or grown to fit the original's frame, centred,
-  // so both views still share one zoom. `fit` maps its coordinates into the frame.
-  const fit = useMemo(() => {
-    const k = Math.min(W / right.scene.width, H / right.scene.height);
-    return { k, ox: (W - right.scene.width * k) / 2, oy: (H - right.scene.height * k) / 2 };
-  }, [right, W, H]);
+  // A laid-out picture (step 5) has its own size: the right view then zooms and pans on its own, fitting it.
+  const ownSize = right.scene.width !== W || right.scene.height !== H;
+  const fit = { k: 1, ox: 0, oy: 0 };
   const toFrame = (b: BoxPx): BoxPx => ({ x: fit.ox + b.x * fit.k, y: fit.oy + b.y * fit.k, width: b.width * fit.k, height: b.height * fit.k });
 
   // Changes that can't be applied, from the whole list, by key: each is reported in its own step.
@@ -424,8 +421,11 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
           {!BUILT.includes(step) && <p className="text-sm text-slate-600 dark:text-slate-300">This step comes in a later update. Skip it, or press Next: nothing changes.</p>}
         </aside>
         <div className="min-w-0 flex-1">
+          {/* A new step starts with the whole picture in view (keyed by step, so zoom and pan reset). */}
           <PairedViewer
+            key={step}
             ref={viewer}
+            rightSize={ownSize ? { width: right.scene.width, height: right.scene.height } : undefined}
             width={W}
             height={H}
             leftTitle={step === 'issues' ? 'Original' : 'Before this step'}

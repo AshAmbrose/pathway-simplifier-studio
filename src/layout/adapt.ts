@@ -27,12 +27,14 @@ import type { Tracing } from '../simplify/routes.ts';
 import type { Element, Extraction, Region } from '../types/extraction.ts';
 import { layoutCell, neighbourMap, placeByPartner, BAND_NAME, type CompartmentType, type LEdge, type LNode } from './cellLayout.ts';
 import { bendArrows, endBoxes, placeArrowText } from './arrows.ts';
+import { compactFigure } from './compact.ts';
 import { tidyFigure } from './tidy.ts';
+import { arrangeRows, FONT, median, nameWidth, sizeOf, UNIT_H } from './shapes.ts';
 import type { LayoutNotes, LayoutOptions, LayoutValue } from './value.ts';
 
-/** Step 5's layout, in the chosen way: tidy the original (tidy.ts, the default) or redraw it as a cell (below). */
+/** Step 5's layout, in the chosen way: compact (compact.ts, the default), tidy as drawn (tidy.ts), or redraw as a cell (below). */
 export const layOut = (x: Extraction, W: number, H: number, t: Tracing, opts: LayoutOptions): LayoutValue =>
-  (opts.mode === 'cell' ? layoutFigure : tidyFigure)(x, W, H, t, opts);
+  (opts.mode === 'cell' ? layoutFigure : opts.mode === 'tidy' ? tidyFigure : compactFigure)(x, W, H, t, opts);
 
 export const RULES = [
   { key: 'blocks', name: 'Keep clusters and touching shapes together', why: 'A cluster, or a ligand on its receptor, moves as one block, its rows kept as drawn.' },
@@ -53,40 +55,9 @@ const TO_CELL: Record<Region['kind'], CompartmentType> = {
 };
 const FROM_CELL = Object.fromEntries(Object.entries(TO_CELL).map(([k, v]) => [v, k])) as Record<CompartmentType, Region['kind']>;
 
-/** Layout units: the height a protein gets, and the font a name is set at (about what the renderer uses at that height). */
-const UNIT_H = 40;
-const FONT = 16;
 const GRID = 12;
 /** Share of BioPathway Studio's gaps used here: published figures are dense, and the result must fit the original's frame. */
 const SPACING = 0.45;
-/** Gap between shapes inside one block (they are drawn touching, or nearly). */
-const BLOCK_GAP = 4;
-
-/** One height per kind (rule "sizes"), and the narrowest a shape of that kind may be. */
-function kindSize(e: Element): { w: number; h: number } {
-  if (e.outline === 'text only') return { w: 60, h: 28 };
-  switch (e.kind) {
-    case 'receptor': return e.outline === 'other' ? { w: 48, h: 90 } : { w: 72, h: 40 };
-    case 'dna': return { w: 160, h: 28 };
-    case 'gene': return { w: 80, h: 36 };
-    case 'process': case 'phenotype': return { w: 120, h: 44 };
-    case 'small molecule': case 'ligand': return e.outline === 'circle' || e.outline === 'oval' ? { w: 44, h: 36 } : { w: 56, h: 32 };
-    case 'symbol': return { w: 28, h: 28 };
-    case 'complex': return { w: 90, h: 48 };
-    default: return { w: 72, h: UNIT_H };
-  }
-}
-
-/** The width a name needs at a readable size, on at most two lines (rule "fit"). */
-function nameWidth(label: string | null): { w: number; lines: number } {
-  if (!label) return { w: 0, lines: 1 };
-  const longest = Math.max(...label.split(/\s+/).map((v) => v.length));
-  const lines = label.length > 16 && label.includes(' ') ? 2 : 1;
-  const w = Math.max(longest * 0.62 * FONT, (label.length * 0.58 * FONT) / lines);
-  return { w: Math.min(260, w) + 14, lines };
-}
-
-const median = (v: number[]) => { const s = [...v].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 1; };
 
 /**
  * Lays out `x` (the figure just before step 5) and returns the new positions, in percent of a W × H picture.
@@ -113,19 +84,7 @@ export function layoutFigure(x: Extraction, W: number, H: number, t: Tracing, op
   const cellOf = new Map<string, CompartmentType | null>(els.map((e) => { const r = regionOf(e); return [e.id, r ? TO_CELL[r.kind] : null]; }));
 
   // --- each shape's size, in layout units ---
-  const sizeOf = (e: Element) => {
-    const p = px(e);
-    let { w, h } = on('sizes') ? kindSize(e) : { w: p.w * s, h: p.h * s };
-    const glyph = e.kind === 'receptor' && e.outline === 'other' && h > w * 0.6;
-    if (on('fit') && e.label) {
-      const need = nameWidth(e.label);
-      if (glyph) { w = Math.max(w, Math.min(80, need.w / 2)); h = Math.max(h, w * 1.8); }
-      else { w = Math.max(w, need.w); if (need.lines > 1) h = Math.max(h, 2 * FONT * 1.15 + 10); }
-    }
-    if (opts.sublabels && e.sublabel) { h += 16; if (on('fit')) w = Math.max(w, Math.min(260, e.sublabel.length * 0.36 * FONT + 14)); }
-    return { w: Math.round(w), h: Math.round(h) };
-  };
-  const size = new Map(els.map((e) => [e.id, sizeOf(e)]));
+  const size = new Map(els.map((e) => { const p = px(e); return [e.id, sizeOf(e, p, s, { sizes: on('sizes'), fit: on('fit'), sublabels: opts.sublabels })]; }));
 
   // --- blocks: shapes that travel together (rule "blocks"), split by compartment; a ligand or a docked protein
   //     joins its receptor's block at the membrane ---
@@ -143,31 +102,14 @@ export function layoutFigure(x: Extraction, W: number, H: number, t: Tracing, op
   const blocks = new Map<string, string[]>();
   for (const e of els) { const k = blockKey.get(e.id)!; blocks.set(k, [...(blocks.get(k) ?? []), e.id]); }
 
-  // Inside a block, shapes keep their rows as drawn: rows by height in the original, each row left to right, touching.
+  // Inside a block, shapes keep their rows as drawn (shapes.ts).
   const offset = new Map<string, { dx: number; dy: number }>();
   const nodes: LNode[] = [];
   const blockCell = new Map<string, CompartmentType | null>();
   for (const [k, ids] of blocks) {
-    const sorted = [...ids].sort((a, b) => px(byId.get(a)!).y + px(byId.get(a)!).h / 2 - (px(byId.get(b)!).y + px(byId.get(b)!).h / 2));
-    const tol = 0.5 * median(ids.map((id) => px(byId.get(id)!).h));
-    const rows: string[][] = [];
-    for (const id of sorted) {
-      const cy = px(byId.get(id)!).y + px(byId.get(id)!).h / 2;
-      const row = rows[rows.length - 1];
-      const rowCy = row && px(byId.get(row[0])!).y + px(byId.get(row[0])!).h / 2;
-      if (row && Math.abs(cy - rowCy!) <= tol) row.push(id); else rows.push([id]);
-    }
-    const rowW = rows.map((r) => r.reduce((sum, id) => sum + size.get(id)!.w, 0) + (r.length - 1) * BLOCK_GAP);
-    const width = Math.max(...rowW);
-    let y = 0;
-    rows.forEach((r, i) => {
-      r.sort((a, b) => px(byId.get(a)!).x - px(byId.get(b)!).x);
-      const rowH = Math.max(...r.map((id) => size.get(id)!.h));
-      let xx = (width - rowW[i]) / 2;
-      for (const id of r) { offset.set(id, { dx: xx, dy: y + (rowH - size.get(id)!.h) / 2 }); xx += size.get(id)!.w + BLOCK_GAP; }
-      y += rowH + BLOCK_GAP;
-    });
-    nodes.push({ id: k, label: ids.map((id) => byId.get(id)!.label ?? '').join(' + '), x: 0, y: 0, width, height: y - BLOCK_GAP });
+    const r = arrangeRows(ids, (id) => px(byId.get(id)!), (id) => size.get(id)!);
+    for (const [id, o] of r.offset) offset.set(id, o);
+    nodes.push({ id: k, label: ids.map((id) => byId.get(id)!.label ?? '').join(' + '), x: 0, y: 0, width: r.width, height: r.height });
     const side = k.slice(k.lastIndexOf('|') + 1);
     blockCell.set(k, side === 'none' ? null : (side as CompartmentType));
   }
