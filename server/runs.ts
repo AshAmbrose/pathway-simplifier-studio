@@ -34,6 +34,7 @@ function stamp(d = new Date()) {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
+/** Saves a new run (the image and the model's result) under a new id made from the time and the file name. */
 export function saveRun(name: string, mimeType: string, image: Buffer, size: { width: number; height: number }, result: ExtractResult): RunRecord {
   const slug = name.toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'figure';
   const id = `${stamp()}-${slug}`;
@@ -44,6 +45,7 @@ export function saveRun(name: string, mimeType: string, image: Buffer, size: { w
   return rec;
 }
 
+/** All saved runs, newest first, with a few counts for the list on the upload screen. */
 export function listRuns(): RunSummary[] {
   if (!existsSync(ROOT)) return [];
   return readdirSync(ROOT)
@@ -57,6 +59,7 @@ export function listRuns(): RunSummary[] {
     });
 }
 
+/** One saved run, read in the current shape even if it was saved by an older version of the app. */
 export function getRun(id: string): RunRecord | null {
   if (!ID.test(id)) return null;
   const f = new URL('run.json', dir(id));
@@ -99,6 +102,7 @@ export function saveReview(id: string, review: unknown, baseVersion: number): Sa
   return { kind: 'saved', review: parsed, version: r.reviewVersion };
 }
 
+/** The uploaded image of a run, for the left-hand view. */
 export function runImage(id: string): { mimeType: string; data: Buffer } | null {
   const r = getRun(id);
   if (!r) return null;

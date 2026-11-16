@@ -41,6 +41,7 @@ function readJson(req: IncomingMessage, maxBytes: number): Promise<any> {
   });
 }
 
+/** Adds the /api routes listed above to the dev server. Reads the key and settings from .env.local. */
 export function apiPlugin(): Plugin {
   let key = '';
   let model = '';

@@ -33,6 +33,7 @@ export function parsePoint(value: string | null): number[] | null {
 /** The id an arrow end holds when it sits in open space outside every compartment. */
 export const OPEN = 'open';
 
+/** "x,y,width,height" in percent → four numbers, or null if it isn't a usable box. */
 export function parseBox(value: string | null): number[] | null {
   const n = (value ?? '').split(',').map(Number);
   return n.length === 4 && n.every(Number.isFinite) && n[2] > 0 && n[3] > 0 ? n : null;
@@ -197,6 +198,10 @@ function applyOne(x: Extraction, e: Edit, key: string, touched: Set<string>): st
   }
 }
 
+/**
+ * The extraction with a list of changes applied, in order, on a copy. Also returns the changes that could
+ * not be applied (and why), and which items differ from the model's reading, for marking on the picture.
+ */
 export function applyEdits(x: Extraction, edits: (Edit & { key?: string })[]): Applied {
   const out = structuredClone(x);
   const failed: Applied['failed'] = [];

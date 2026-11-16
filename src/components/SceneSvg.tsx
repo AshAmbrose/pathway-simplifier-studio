@@ -52,6 +52,7 @@ export interface SceneUi {
   onMoveNode: (id: string, box: BoxPx) => void;
 }
 
+/** The arrowhead shapes (arrow, bar, open), shared by every arrow; each takes its line's colour. */
 export function MarkerDefs() {
   return (
     <defs>
@@ -265,6 +266,11 @@ function PlaceLayer({ scene, ui }: { scene: Scene; ui: SceneUi }) {
   );
 }
 
+/**
+ * The reconstruction: compartments, clusters, arrows and shapes, then the review marks on top
+ * (outlines, pins, the selected item's handles). Every drag here is a shortcut for a change that can
+ * also be made by clicking.
+ */
 export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
   const sw = Math.max(1.2, scene.width / 650);
   const u = ui.unit;

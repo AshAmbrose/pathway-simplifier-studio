@@ -41,6 +41,12 @@ export interface ExtractResult {
 
 const RETRYABLE = /fetch failed|ECONNRESET|socket|503|UNAVAILABLE/i;
 
+/**
+ * Sends one image to the model with the extraction prompt, and returns the checked result.
+ * Network hiccups are retried twice. The call is logged (with its cost) before the reply is checked, so
+ * spend is never missed. A reply in the wrong shape is an error; references that don't match up are
+ * returned as `problems`, so they can be shown instead of hidden.
+ */
 export async function extractFigure(opts: { apiKey: string; model: string; mimeType: string; dataBase64: string; route?: string }): Promise<ExtractResult> {
   const { apiKey, model, mimeType, dataBase64 } = opts;
   if (!apiKey) throw new ExtractError('No GEMINI_API_KEY in .env.local.', 400);

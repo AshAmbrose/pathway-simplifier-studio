@@ -1,3 +1,7 @@
+/**
+ * The app's two screens: upload a figure, or review one. The open run's id is kept in the address
+ * (?run=<id>), so a review can be reloaded or bookmarked.
+ */
 import { useEffect, useState } from 'react';
 import { getRun, runImageUrl, type RunRecord } from './api.ts';
 import { ReviewScreen } from './components/ReviewScreen.tsx';

@@ -1,12 +1,13 @@
 // Copied from BioPathway Studio (src/utils/edgeGeometry.ts); takes plain boxes. Label wrapping removed (not used).
 /**
- * Pure geometry for reaction lines: bezier paths between automatically chosen ports,
- * and label text wrapping. Shared by the canvas renderer and the layout check script.
+ * The shape of each arrow: a smooth curve between the two shapes it joins, leaving and arriving at the
+ * clearest side of each (see edgePorts.ts). Pure geometry, no drawing.
  */
 
 import type { BoxPx, PortDirection } from './edgePorts.ts';
 import { getPortCoordinate, resolveEdgePorts } from './edgePorts.ts';
 
+/** The curve between two points, leaving and arriving along the given sides; also its midpoint, for labels. */
 export function computeBezierPath(
   p1: { x: number; y: number },
   p2: { x: number; y: number },

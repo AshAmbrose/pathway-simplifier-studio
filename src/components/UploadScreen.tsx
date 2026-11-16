@@ -1,3 +1,7 @@
+/**
+ * The first screen: choose or drop a figure, extract it with one model call, or reopen an earlier run.
+ * Says plainly when the key or model isn't set, and shows each run's time and cost.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { extract, getStatus, listRuns, type RunRecord, type RunSummary, type Status } from '../api.ts';
 
