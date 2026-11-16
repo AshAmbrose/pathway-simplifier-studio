@@ -97,11 +97,24 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const [hot, setHot] = useState<string | null>(null);
   const viewer = useRef<ViewerHandle>(null);
 
-  // Save after every change (not on first show).
-  const first = useRef(true);
+  // Save after every real change. Three guards so newer work is never overwritten:
+  //  - only a change list that differs from the last one saved (or loaded) is sent, so a re-run of this effect
+  //    (a code reload while developing, React re-running effects) never saves anything by itself;
+  //  - each save names the version it was built on, and the server refuses it if the run moved on since;
+  //  - when refused, the screen takes the newer copy and says so, instead of overwriting it.
+  const version = useRef(run.reviewVersion ?? 0);
+  const lastSaved = useRef(JSON.stringify(run.review ?? EMPTY_REVIEW));
+  const [reloaded, setReloaded] = useState(false);
   useEffect(() => {
-    if (first.current) { first.current = false; return; }
-    saveReview(run.id, review).then(() => setSaveError(null)).catch((e) => setSaveError((e as Error).message));
+    const json = JSON.stringify(review);
+    if (json === lastSaved.current) return;
+    saveReview(run.id, review, version.current).then((r) => {
+      if (r.kind === 'saved') { version.current = r.version; lastSaved.current = json; setSaveError(null); return; }
+      version.current = r.version;
+      lastSaved.current = JSON.stringify(r.review);
+      setReview(r.review);
+      setReloaded(true);
+    }).catch((e) => setSaveError((e as Error).message));
   }, [review, run.id]);
 
   /** The change list as it would be with this answer given to question i (in place of any answer it has now). */
@@ -400,6 +413,12 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
         </div>
       </header>
       {saveError && <div className="mb-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">Your last change was not saved: {saveError}</div>}
+      {reloaded && (
+        <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          <span>This run was changed somewhere else (another tab, or an older copy of this page). The newer changes are now shown, and your last change was not applied over them.</span>
+          <button className="ml-3 shrink-0 underline" onClick={() => setReloaded(false)}>OK</button>
+        </div>
+      )}
 
       <PairedViewer
         ref={viewer}

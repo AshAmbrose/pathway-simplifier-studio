@@ -6,7 +6,8 @@
  *   GET  /api/runs              -> RunSummary[] (newest first)
  *   GET  /api/runs/<id>         -> RunRecord
  *   GET  /api/runs/<id>/image   -> the uploaded image
- *   PUT  /api/runs/<id>/review  -> Review      (the user's answers and fixes; the extraction is not altered)
+ *   PUT  /api/runs/<id>/review  -> { review, version }   body { review, version }: the user's answers and fixes;
+ *                                  409 with the newer review if the run was saved elsewhere since `version`
  *
  * Keys are read on the server from .env.local and never sent to the browser.
  */
@@ -79,9 +80,13 @@ export function apiPlugin(): Plugin {
           if (url === '/api/runs' && req.method === 'GET') return json(200, listRuns());
           const rv = url.match(/^\/api\/runs\/([^/]+)\/review$/);
           if (rv && req.method === 'PUT') {
-            let saved;
-            try { saved = saveReview(rv[1], await readJson(req, 2_000_000)); } catch { throw new ExtractError('The changes could not be saved (unexpected format).', 400); }
-            return saved ? json(200, saved) : json(404, { error: 'Not found.' });
+            // Body: { review, version } where version is the one the changes were built on.
+            const body = await readJson(req, 2_000_000);
+            let result;
+            try { result = saveReview(rv[1], body.review, Number(body.version)); } catch { throw new ExtractError('The changes could not be saved (unexpected format).', 400); }
+            if (result.kind === 'missing') return json(404, { error: 'Not found.' });
+            if (result.kind === 'stale') return json(409, { error: 'This run was changed somewhere else since it was opened.', review: result.review, version: result.version });
+            return json(200, { review: result.review, version: result.version });
           }
           const m = url.match(/^\/api\/runs\/([^/]+)(\/image)?$/);
           if (m && req.method === 'GET') {
