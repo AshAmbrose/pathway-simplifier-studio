@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems } from '../src/types/extraction.ts';
 import { toScene } from '../src/render/toScene.ts';
 import { v1ToV2 } from './v1ToV2.ts';
-import { applyEdits, optionProblems, optionState } from '../src/edit/applyEdits.ts';
+import { applyEdits, dependents, optionProblems, optionState } from '../src/edit/applyEdits.ts';
 import { describeEdit } from '../src/edit/describe.ts';
 import { EDIT_OPS, type Edit } from '../src/types/extraction.ts';
 import { getRun, listRuns } from '../server/runs.ts';
@@ -95,6 +95,7 @@ const cases: [Edit, (x: typeof base) => boolean][] = [
   [E('add_to_group', 'e1', 'g1'), (x) => x.groups[0].members.length === 3],
   [E('remove_from_group', 'e3', 'g1'), (x) => x.groups[0].members.join() === 'e4'],
   [E('set_box', 'e1', null, '40,40,12,6'), (x) => x.elements[0].box.join() === '40,40,12,6'],
+  [E('add_element', 'new-k1', null, JSON.stringify({ box: [70, 70, 8, 4], fill: '#aabbcc' })), (x) => x.elements.length === 5 && x.elements[4].fill === '#aabbcc' && x.elements[4].label === null],
 ];
 check(cases.length === EDIT_OPS.length && new Set(cases.map(([e]) => e.op)).size === EDIT_OPS.length, `every kind of change has a test (${EDIT_OPS.length})`);
 for (const [e, ok] of cases) {
@@ -108,6 +109,21 @@ check(free.failed.length === 0 && free.extraction.arrows[0].to === 'r1' && free.
 const back = applyEdits(free.extraction, [E('set_arrow_to', 'a1', 'e2')]);
 check(back.extraction.arrows[0].to === 'e2' && !back.extraction.arrows[0].ends?.to, 'pointing it back at a shape clears the open-space end');
 check(!JSON.stringify(extractionJsonSchema()).includes('"ends"'), 'the model is never asked for open-space arrow ends');
+// An added shape, named, with an arrow to it and one onward from that arrow's end; undo takes them all.
+const K = (e: Edit, key: string) => ({ ...e, key, source: 'manual', at: '' });
+const added = [
+  K(E('add_element', 'new-s1', null, JSON.stringify({ box: [70, 70, 8, 4], fill: null })), 's1'),
+  K(E('set_label', 'new-s1', null, 'Z'), 'l1'),
+  K(E('add_arrow', 'e1', 'new-s1', 'arrow'), 'a9'),
+  K(E('set_arrow_head', 'new-a9', null, 'bar'), 'h1'),
+  K(E('set_label', 'e2', null, 'B2'), 'u1'),
+];
+const withAdded = applyEdits(base, added);
+check(withAdded.failed.length === 0 && withAdded.extraction.elements.some((e) => e.id === 'new-s1' && e.label === 'Z')
+  && withAdded.extraction.arrows.some((a) => a.id === 'new-a9' && a.to === 'new-s1' && a.head === 'bar'), 'an added shape can be named and given arrows');
+const deps = dependents(added, 's1').map((e) => e.key);
+check(deps.join() === 'l1,a9,h1', `undoing an added shape also undoes what depends on it (${deps.join(', ')}), and nothing else`);
+check(applyEdits(base, [added[0], added[0]]).failed.length === 1, 'adding a shape whose id already exists is reported');
 check(JSON.stringify(base) === snapshot, 'applying changes never alters the extraction itself');
 check(JSON.stringify(applyEdits(base, []).extraction) === snapshot, 'with every change undone, the result is the extraction exactly');
 const bad = applyEdits(base, [E('move_badge', 'e1', 'e9', 'Ub×3'), E('set_arrow_head', 'a1', null, 'bar')]);

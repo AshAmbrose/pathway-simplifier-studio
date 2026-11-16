@@ -23,5 +23,15 @@ export const getRun = (id: string) => call<RunRecord>(`/api/runs/${id}`);
 export const runImageUrl = (id: string) => `/api/runs/${id}/image`;
 export const extract = (body: { name: string; mimeType: string; data: string; width: number; height: number }) =>
   call<RunRecord>('/api/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-export const saveReview = (id: string, review: Review) =>
-  call<Review>(`/api/runs/${id}/review`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(review) });
+/**
+ * Saves the change list, naming the version it was built on. If the run was saved somewhere else since,
+ * nothing is written and the newer review comes back as `stale`.
+ */
+export async function saveReview(id: string, review: Review, version: number):
+  Promise<{ kind: 'saved'; version: number } | { kind: 'stale'; review: Review; version: number }> {
+  const res = await fetch(`/api/runs/${id}/review`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review, version }) });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 409) return { kind: 'stale', review: body.review, version: body.version };
+  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status}).`);
+  return { kind: 'saved', version: body.version };
+}

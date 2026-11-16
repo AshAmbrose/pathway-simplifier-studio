@@ -2,7 +2,7 @@
  * Saved extraction runs, so reopening a figure never pays for a second call.
  * data/runs/<id>/  image.<ext>  run.json   (data/ is gitignored: uploads may be confidential)
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { ExtractResult } from './extract.ts';
 import { EMPTY_REVIEW, ReviewSchema, type Review } from '../src/types/extraction.ts';
 
@@ -18,6 +18,8 @@ export interface RunRecord extends ExtractResult {
   image: { width: number; height: number };
   /** The user's answers and fixes. The extraction above is never altered; these are applied on top of it. */
   review: Review;
+  /** Goes up by one on every saved review. A save must name the version it started from (see saveReview). */
+  reviewVersion: number;
 }
 
 export interface RunSummary {
@@ -37,7 +39,7 @@ export function saveRun(name: string, mimeType: string, image: Buffer, size: { w
   const id = `${stamp()}-${slug}`;
   mkdirSync(dir(id), { recursive: true });
   writeFileSync(new URL(`image.${EXT[mimeType] ?? 'bin'}`, dir(id)), image);
-  const rec: RunRecord = { id, name, at: new Date().toISOString(), mimeType, image: size, ...result, review: EMPTY_REVIEW };
+  const rec: RunRecord = { id, name, at: new Date().toISOString(), mimeType, image: size, ...result, review: EMPTY_REVIEW, reviewVersion: 0 };
   writeFileSync(new URL('run.json', dir(id)), JSON.stringify(rec, null, 1));
   return rec;
 }
@@ -65,19 +67,36 @@ export function getRun(id: string): RunRecord | null {
     c.options = (c.options ?? []).map((o: unknown) => (typeof o === 'string' ? { label: o, shape: null, asRead: false, edits: [] } : o));
   }
   r.review ??= EMPTY_REVIEW;
+  r.reviewVersion ??= 0;
   return r;
 }
 
-/** Saves the user's answers and fixes with the run. The extraction itself is left as the model returned it. */
-export function saveReview(id: string, review: unknown): Review | null {
-  if (!ID.test(id)) return null;
+export type SaveResult =
+  | { kind: 'saved'; review: Review; version: number }
+  /** The run was saved from somewhere else since this copy was loaded: nothing is written; here is the newer one. */
+  | { kind: 'stale'; review: Review; version: number }
+  | { kind: 'missing' };
+
+/**
+ * Saves the user's answers and fixes with the run. The extraction itself is left as the model returned it.
+ *
+ * `baseVersion` is the version the change list was built on. If the run has been saved since (another tab, or
+ * a screen that restarted from an old copy), the save is refused instead of overwriting newer work.
+ * Every saved review is also appended to review-history.jsonl beside the run, so no version is ever lost.
+ */
+export function saveReview(id: string, review: unknown, baseVersion: number): SaveResult {
+  if (!ID.test(id)) return { kind: 'missing' };
   const f = new URL('run.json', dir(id));
-  if (!existsSync(f)) return null;
+  if (!existsSync(f)) return { kind: 'missing' };
   const parsed = ReviewSchema.parse(review);
   const r = JSON.parse(readFileSync(f, 'utf8'));
+  const current: number = r.reviewVersion ?? 0;
+  if (baseVersion !== current) return { kind: 'stale', review: r.review ?? EMPTY_REVIEW, version: current };
   r.review = parsed;
+  r.reviewVersion = current + 1;
   writeFileSync(f, JSON.stringify(r, null, 1));
-  return parsed;
+  appendFileSync(new URL('review-history.jsonl', dir(id)), JSON.stringify({ at: new Date().toISOString(), version: r.reviewVersion, review: parsed }) + '\n');
+  return { kind: 'saved', review: parsed, version: r.reviewVersion };
 }
 
 export function runImage(id: string): { mimeType: string; data: Buffer } | null {
