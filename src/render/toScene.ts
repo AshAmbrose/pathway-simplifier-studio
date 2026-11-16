@@ -1,5 +1,6 @@
 /**
- * Extraction → scene: everything placed at its original position (percent boxes → pixels of the image).
+ * Extraction → scene: everything placed at its original position (percent boxes → pixels of the image, or of
+ * step 5's canvas once the figure has been laid out again).
  * Only what was extracted is drawn; nothing is added, inferred or tidied. What can't be placed is listed in `skipped`.
  */
 import type { Extraction } from '../types/extraction.ts';
@@ -22,6 +23,8 @@ export interface SceneArrow {
   head: string; line: string; colour: string; text: string | null; meaning: string;
   /** This end is not on a shape: it sits in open space or on a compartment (a user's change). */
   freeFrom: boolean; freeTo: boolean;
+  /** Points along the drawn line, start to end, for measuring crossings (src/layout/measures.ts). */
+  pts: { x: number; y: number }[];
 }
 export interface SceneText extends BoxPx { id: string; text: string }
 export interface Scene {
@@ -55,11 +58,22 @@ export function union(boxes: BoxPx[], pad: number): BoxPx {
   return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 }
 
+/** A point on an arrow's curve at t (0–1). */
+function cubic(g: { p1: { x: number; y: number }; cp1: { x: number; y: number }; cp2: { x: number; y: number }; p2: { x: number; y: number } }, t: number) {
+  const u = 1 - t;
+  return {
+    x: u * u * u * g.p1.x + 3 * u * u * t * g.cp1.x + 3 * u * t * t * g.cp2.x + t * t * t * g.p2.x,
+    y: u * u * u * g.p1.y + 3 * u * u * t * g.cp1.y + 3 * u * t * t * g.cp2.y + t * t * t * g.p2.y,
+  };
+}
+
 /**
  * Turns an extraction into what gets drawn: every shape, cluster, compartment and arrow in pixels of the
  * original image, at the positions the model gave. Anything that can't be placed is listed in `skipped`.
  */
-export function toScene(x: Extraction, width: number, height: number): Scene {
+export function toScene(x: Extraction, imageW: number, imageH: number): Scene {
+  // After step 5's layout the figure has its own canvas; before, positions are in percent of the original image.
+  const [width, height] = x.canvas ?? [imageW, imageH];
   const skipped: string[] = [];
   const nodes: SceneNode[] = x.elements.map((e) => ({
     id: e.id, label: e.label, kind: e.kind, outline: e.outline, fill: e.fill, textColour: e.textColour, sublabel: e.sublabel ?? null,
@@ -82,9 +96,12 @@ export function toScene(x: Extraction, width: number, height: number): Scene {
     const freeFrom = !!a.ends?.from, freeTo = !!a.ends?.to;
     const s = freeFrom ? at(a.ends!.from) : byId.get(a.from), t = freeTo ? at(a.ends!.to) : byId.get(a.to);
     if (!s || !t) { skipped.push(`arrow ${a.id}: ${!s ? a.from : a.to} could not be placed`); continue; }
-    const geo = edgeGeometry(s, t, a.from === a.to);
-    arrows.push({ id: a.id, from: a.from, to: a.to, d: geo.d, midX: geo.midX, midY: geo.midY, x1: geo.p1.x, y1: geo.p1.y, x2: geo.p2.x, y2: geo.p2.y, head: a.head, line: a.line,
-      colour: colour(a.colour, '#1e293b'), text: a.text, meaning: a.meaning, freeFrom, freeTo });
+    // Step 5's layout may bow an arrow around a shape, and place its text clear of other lines.
+    const geo = edgeGeometry(s, t, a.from === a.to, ((a.bend ?? 0) / 100) * width);
+    const text = a.textAt ? { x: (a.textAt[0] / 100) * width, y: (a.textAt[1] / 100) * height } : { x: geo.midX, y: geo.midY };
+    const pts = Array.from({ length: 17 }, (_, i) => cubic(geo, i / 16));
+    arrows.push({ id: a.id, from: a.from, to: a.to, d: geo.d, midX: text.x, midY: text.y, x1: geo.p1.x, y1: geo.p1.y, x2: geo.p2.x, y2: geo.p2.y, head: a.head, line: a.line,
+      colour: colour(a.colour, '#1e293b'), text: a.text, meaning: a.meaning, freeFrom, freeTo, pts });
   }
   return {
     width, height,

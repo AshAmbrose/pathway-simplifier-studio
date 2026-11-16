@@ -15,7 +15,7 @@ export const STEP_INFO: Record<JourneyStep, { n: string; name: string; what: str
   focus: { n: '②', name: 'Focus', what: 'What do you want to show? Choose the routes to keep.' },
   repeats: { n: '③', name: 'Repeats', what: 'One copy of each plain repeat.' },
   clusters: { n: '④', name: 'Clusters', what: 'Collapse the clusters you choose into one shape.' },
-  layout: { n: '⑤', name: 'Layout', what: 'Reorganise for readability.' },
+  layout: { n: '⑤', name: 'Layout', what: 'Lay the figure out again as a cell, read top to bottom.' },
 };
 export const stepTitle = (s: JourneyStep) => `${STEP_INFO[s].n ? STEP_INFO[s].n + ' ' : ''}${STEP_INFO[s].name}`;
 

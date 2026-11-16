@@ -66,7 +66,7 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 **Why:** a test run lost its changes. The page reloaded from an older copy during development and saved it over newer work. The same could happen with two tabs open on one run.
 
 ## 6. How it's tested
-- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, and step 2's routes on the saved test figures (untick → left out → tick back → restored).
+- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, step 2's routes on the saved test figures (untick → left out → tick back → restored), steps 3–4, and step 5's layout of each test figure with every rule on and with each switched off (applies cleanly, no overlapping shapes, the same every time).
 - **Practice runs:** a copy of a real extraction with shapes taken out, and a checker that says whether each was put back with the right name, place and arrows.
 - **Browser tests at human pace,** only on throwaway copies. A test that clicks instantly once missed a real fault: a pop-up that moved while the pointer hovered.
 
@@ -120,7 +120,32 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **Tidy-up after merging or collapsing,** limited to what the change touched: arrows that became identical are drawn once (BioPathway Studio's rule), an arrow from a shape to itself is dropped, clusters holding the same shapes become one, and a cluster left with one shape stops being a cluster.
 - **Until step 5,** a collapsed shape keeps the members' area, so shapes that weren't collapsed may overlap it.
 
-**Next:** step 5 (reorganise the layout, reusing BioPathway Studio's Organize Layout, with locations taken only from the original figure). Suggestions from prior knowledge may come later, always labelled with their source.
+**Step 5, Layout: BioPathway Studio's Organize Layout, fed only from the figure.**
+- **The engine is copied, marked and adapted,** not rewritten (`src/layout/cellLayout.ts`, `edgeLabelLayout.ts`): compartments as rows, top-to-bottom flow, one straight main line per column, regulators beside what they act on, outcomes underneath, ordering that cuts crossings, arrows bowed around shapes.
+- **Where things go comes only from the figure** (`src/layout/adapt.ts`):
+  - a shape's compartment is the one it is drawn in;
+  - a shape with none is placed beside its most-connected partner, and listed;
+  - compartments keep the figure's own names, and an empty one isn't drawn (also listed).
+- **Rules added on top, each can be switched off in the step:**
+  - clusters and touching shapes move as one block, keeping their rows as drawn;
+  - left to right starts from the original's order;
+  - panels (or the areas under headings) become columns;
+  - step 2's routes are preferred for the straight lines, and regulators go in the column of the routes they act on;
+  - names fit their shapes, with one size per kind and an even grid;
+  - arrow text is kept clear of shapes, lines and other text.
+- **A tidy-up after the engine:** columns never overlap, shapes never overlap across blocks, and the cell widens to fit.
+- **Spacing is 45% of BioPathway Studio's,** because published figures are denser than its own.
+- **The laid-out picture has its own size** (a protein is 40 units high), shrunk to fit beside the original. Shrinking it beforehand instead made every shape tiny, so names were pushed outside their shapes.
+- **One stored change (`set_layout`)** holds the new positions, so the picture stays exactly as laid out. If the figure or the switches change, the step says it's out of date and offers "Lay out again". Moves by hand are `set_box` changes on top. Undoing the layout takes them with it.
+- **Before → after numbers,** measured the way Organize Layout scores itself: arrows crossing, arrows behind a shape, and arrows pointing up (feedback counted apart).
+- **One consistent style (`restyle`), off by default:**
+  - five fills by kind, black arrows, red for inhibition;
+  - before you switch it on, it says what it replaces, including the colour meanings you noted in step 1.
+
+**What the numbers showed on the test figures:**
+- **Wnt:** now has no arrow pointing up.
+- **Yu, Guo and Hu:** the layout adds a few crossings that the published figures avoid, at the cost of their compactness. A published figure is usually already laid out with care.
+- **So the numbers are shown, not hidden,** and each rule can be switched off. Suggestions from prior knowledge may come later, always labelled with their source.
 
 ## 8. Internal ids stay off the screen
 **Decision:** the model's ids for shapes and arrows ("e5", "a_tx_1") are never shown. The model sometimes writes them into its questions and reasons ("drawn twice (e19 and e26)"). A bracketed list of ids is dropped; any other id is replaced by the item's name as written.

@@ -53,6 +53,8 @@ export interface SceneUi {
   onMoveNode: (id: string, box: BoxPx) => void;
   /** Drawn faintly: what a simplification step leaves out, shown so it can be clicked back in. */
   faded?: Set<string>;
+  /** The selected shape can be dragged to a new place, without the other editing handles (step 5's result). */
+  movable?: boolean;
 }
 
 /** The arrowhead shapes (arrow, bar, open), shared by every arrow; each takes its line's colour. */
@@ -243,10 +245,10 @@ function usePointerDrag<D>() {
   const [drag, setDrag] = useState<D | null>(null);
   const start = useRef<{ cx: number; cy: number; px: number; py: number; moved: boolean } | null>(null);
 
-  /** Pointer position in picture coordinates. */
+  /** Pointer position in picture coordinates (the scene's own: a laid-out picture is drawn scaled inside the view). */
   const at = (e: RPointerEvent<SVGElement>) => {
-    const svg = e.currentTarget.ownerSVGElement!;
-    return new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM()!.inverse());
+    const root = (e.currentTarget.closest('[data-scene]') as SVGGraphicsElement | null) ?? e.currentTarget.ownerSVGElement!;
+    return new DOMPoint(e.clientX, e.clientY).matrixTransform(root.getScreenCTM()!.inverse());
   };
   const begin = (e: RPointerEvent<SVGElement>) => {
     e.stopPropagation();
@@ -352,7 +354,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
   const selGroup = ui.editable && !ui.drawing && !ui.picking ? scene.groups.find((g) => g.id === ui.selected) : undefined;
 
   return (
-    <g style={ui.picking ? { cursor: 'crosshair' } : undefined}>
+    <g data-scene="" style={ui.picking ? { cursor: 'crosshair' } : undefined}>
       {scene.regions.map((r) => (
         <g key={r.id} style={{ pointerEvents: 'none' }}>
           <rect x={r.x} y={r.y} width={r.width} height={r.height} rx={r.kind === 'nucleus' ? 24 : 6}
@@ -390,7 +392,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
           on a bigger one (a ligand on its receptor) stays on top. */}
       {[...scene.nodes].sort((a, b) => Number(!!ui.faded?.has(b.id)) - Number(!!ui.faded?.has(a.id)) || b.width * b.height - a.width * a.height).map((n) => {
         const drawFrom = ui.drawing && !ui.picking;
-        const movable = !drawFrom && ui.editable && !ui.picking && ui.selected === n.id;
+        const movable = !drawFrom && (ui.editable || !!ui.movable) && !ui.picking && ui.selected === n.id;
         const off = drag?.kind === 'node' && drag.id === n.id ? drag : { dx: 0, dy: 0 };
         return (
           <g key={n.id} opacity={ui.faded?.has(n.id) ? FADED : 1} transform={`translate(${n.x + off.dx},${n.y + off.dy})`} style={{ cursor: drawFrom ? 'crosshair' : movable ? 'move' : 'pointer' }}

@@ -10,6 +10,9 @@
  *     test figures (local data/, if present), with untick → left out → tick back → restored exactly;
  *  8. steps 3–4: repeats found on the test figures, merging leaves no duplicate arrows, self-loops or clusters,
  *     and collapsing part of a cluster re-points its arrows.
+ *  9. step 5: the layout of each test figure, with every rule on and with each switched off, applies cleanly,
+ *     keeps every shape on its canvas, overlaps no shapes from different blocks, and is the same every time;
+ *     panels become columns (Wnt OFF | ON, Guo canonical | non-canonical, with its regulators on the canonical side).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems } from '../src/types/extraction.ts';
@@ -23,6 +26,10 @@ import { findIssues } from '../src/simplify/issues.ts';
 import { focusHidden, setItem, toggleShape, traceRoutes } from '../src/simplify/routes.ts';
 import { findRepeats } from '../src/simplify/repeats.ts';
 import { collapseEdit } from '../src/simplify/clusters.ts';
+import { layoutFigure, RULES } from '../src/layout/adapt.ts';
+import { measure } from '../src/layout/measures.ts';
+import { DEFAULT_LAYOUT } from '../src/layout/value.ts';
+import { STYLE_RED } from '../src/edit/applyEdits.ts';
 import { getRun, listRuns } from '../server/runs.ts';
 
 let failed = 0;
@@ -31,6 +38,7 @@ const check = (ok: boolean, what: string) => { console.log(`${ok ? 'ok  ' : 'FAI
 const js = extractionJsonSchema() as { properties?: Record<string, unknown>; required?: string[] };
 check(!!js.properties && ['elements', 'arrows', 'groups', 'regions', 'flags', 'clarify'].every((k) => k in js.properties!), 'JSON Schema for Gemini has the top-level fields');
 check(!JSON.stringify(js).includes('prefixItems'), 'JSON Schema uses no tuple (prefixItems) constructs');
+check(!['"canvas"', '"bend"', '"textAt"', '"sublabel"', '"ends"'].some((k) => JSON.stringify(js).includes(k)), "JSON Schema never asks the model for the user's or the layout's own fields");
 
 const SIZES: Record<string, [number, number]> = { F1: [1964, 1380], F2: [1826, 1232], F3: [698, 416], F4: [718, 454], F5: [700, 628], F6: [718, 500] };
 const dir = new URL('../local/extraction-tests/clean/Hydrogen4/', import.meta.url);
@@ -111,6 +119,10 @@ const cases: [Edit, (x: typeof base) => boolean][] = [
   // C and D collapsed: their cluster goes, and the arrow to it points at the new shape, which keeps "C + D" under its name.
   [E('collapse', 'col-k', null, JSON.stringify({ members: ['e3', 'e4'], label: 'CD', sub: 'C + D' })),
     (x) => x.elements.length === 3 && x.groups.length === 0 && x.arrows.some((a) => a.to === 'col-k') && x.elements.some((e) => e.id === 'col-k' && e.sublabel === 'C + D')],
+  // Step 5: the tiny figure laid out on its own canvas; every shape placed on it.
+  [E('set_layout', 'layout', null, JSON.stringify(layoutFigure(base, 1000, 800, traceRoutes(base), DEFAULT_LAYOUT))),
+    (x) => x.canvas?.length === 2 && x.elements.every((e) => e.box[0] >= 0 && e.box[1] >= 0 && e.box[0] + e.box[2] <= 100.01 && e.box[1] + e.box[3] <= 100.01)],
+  [E('restyle', 'style'), (x) => x.elements.every((e) => e.fill === '#bfdbfe') && x.arrows.every((a) => a.colour === (a.head === 'bar' ? STYLE_RED : null))],
 ];
 check(cases.length === EDIT_OPS.length && new Set(cases.map(([e]) => e.op)).size === EDIT_OPS.length, `every kind of change has a test (${EDIT_OPS.length})`);
 for (const [e, ok] of cases) {
@@ -166,8 +178,9 @@ else {
   check(all.every((r) => r.review && Array.isArray(r.review.edits) && ExtractionSchema.safeParse(r.extraction).success), `${all.length} saved run(s) load in the current shape, including any saved before prompt v3`);
   // Answered runs look exactly as before: corrections still apply in the old order (answers by question, then by hand).
   const oldOrder = <T extends { source: string }>(es: T[]) => [...es.filter((e) => e.source !== 'manual').sort((a, b) => Number(a.source.slice(1)) - Number(b.source.slice(1))), ...es.filter((e) => e.source === 'manual')];
-  check(all.every((r) => JSON.stringify(applyEdits(r.extraction, inOrder(r.review.edits)).extraction) === JSON.stringify(applyEdits(r.extraction, oldOrder(r.review.edits)).extraction)),
-    'every saved review gives the same picture as before simplification was added');
+  const corrections = (r: (typeof all)[number]) => r.review.edits.filter((e) => !e.source.startsWith('step:'));
+  check(all.every((r) => JSON.stringify(applyEdits(r.extraction, inOrder(corrections(r))).extraction) === JSON.stringify(applyEdits(r.extraction, oldOrder(corrections(r))).extraction)),
+    "every saved review's corrections give the same picture as before simplification was added");
 
   // Step 2 on the test figures: routes grouped the way each figure groups them.
   const find = (part: string) => all.find((r) => r.id.includes(part));
@@ -232,6 +245,42 @@ else {
   if (hu) {
     const kinds = findIssues(hu.extraction).map((i) => i.kind);
     check(kinds.includes('typo') && kinds.includes('unlabelled') && kinds.includes('meaning'), `Hu: step 1 lists typos, unlabelled parts and colour meanings (${kinds.length} issues)`);
+  }
+  // Step 5 on the test figures.
+  const overlap = (a: number[], b: number[]) => Math.max(0, Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]));
+  for (const r of all.filter((v) => /(yu2020-nfkb|wnt-liu2022|guo2024-nfkb|hu2021-jak-stat)-v3$/.test(v.id))) {
+    const x = r.extraction, t = traceRoutes(x), W = r.image.width, H = r.image.height;
+    const variants = [DEFAULT_LAYOUT, ...RULES.map((rule) => ({ ...DEFAULT_LAYOUT, off: [rule.key] }))];
+    const bad: string[] = [];
+    for (const o of variants) {
+      const value = JSON.stringify(layoutFigure(x, W, H, t, o));
+      const out = applyEdits(x, [E('set_layout', 'layout', null, value)]);
+      const y = out.extraction, label = o.off[0] ?? 'all rules on';
+      if (out.failed.length || referenceProblems(y).length > referenceProblems(x).length) bad.push(`${label}: does not apply cleanly`);
+      if (value !== JSON.stringify(layoutFigure(x, W, H, t, o))) bad.push(`${label}: differs between two runs`);
+      if (!y.elements.every((e) => e.box[0] >= -0.01 && e.box[1] >= -0.01 && e.box[0] + e.box[2] <= 100.01 && e.box[1] + e.box[3] <= 100.01)) bad.push(`${label}: a shape is off the canvas`);
+      // Shapes from different blocks never overlap (inside a block they touch, as drawn).
+      const same = (a: string, b: string) => !o.off.includes('blocks') && t.unitOf.get(a)?.includes(b);
+      const els = y.elements.filter((e) => e.kind !== 'heading');
+      for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++)
+        if (!same(els[i].id, els[j].id) && overlap(els[i].box, els[j].box) > 0.05 * Math.min(els[i].box[2] * els[i].box[3], els[j].box[2] * els[j].box[3]))
+          bad.push(`${label}: ${els[i].label} overlaps ${els[j].label}`);
+    }
+    const laid = applyEdits(x, [E('set_layout', 'layout', null, JSON.stringify(layoutFigure(x, W, H, t, DEFAULT_LAYOUT)))]).extraction;
+    const m = measure(toScene(laid, W, H));
+    check(!bad.length, `${r.id}: laid out with all ${RULES.length} rules and with each switched off: applies cleanly, on its canvas, no overlapping shapes, the same every time (after: ${m.crossings} crossing(s), ${m.behind} behind a shape, ${m.up} pointing up)${bad.length ? ': ' + [...new Set(bad)].slice(0, 6).join('; ') : ''}`);
+    const centre = (id: string) => { const e = laid.elements.find((v) => v.id === id)!; return e.box[0] + e.box[2] / 2; };
+    const panel = (label: string) => laid.panels.find((p) => p.label === label);
+    if (/wnt/.test(r.id)) {
+      const off = panel('WNT OFF'), on = panel('WNT ON');
+      const inside = (p: typeof off, part: string) => !!p && laid.elements.filter((e) => e.kind !== 'heading' && t.partOf.get(e.id) === part).every((e) => centre(e.id) >= p.box[0] - 0.5 && centre(e.id) <= p.box[0] + p.box[2] + 0.5);
+      check(inside(off, 'panel:p1') && inside(on, 'panel:p2') && m.up === 0, 'Wnt: OFF and ON become side-by-side columns, nothing crosses between them, and no arrow points up');
+    }
+    if (/guo/.test(r.id)) {
+      const non = panel('Non-canonical pathway');
+      const regs = ['A20', 'CYLD', 'LUBAC'].map((l) => laid.elements.find((e) => e.label === l)!);
+      check(!!panel('Canonical pathway') && !!non && regs.every((e) => centre(e.id) < non.box[0]), 'Guo: canonical and non-canonical as columns, with A20, CYLD and LUBAC on the canonical side');
+    }
   }
 }
 

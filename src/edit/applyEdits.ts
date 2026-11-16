@@ -3,6 +3,7 @@
  * A change that can't be applied (its shape is gone, the badge isn't there, …) is skipped and reported,
  * never silently dropped, and the changes after it still run.
  */
+import type { LayoutValue } from '../layout/value.ts';
 import { HEADS, LINES, MEANINGS, type Edit, type Extraction, type Option } from '../types/extraction.ts';
 
 export interface Applied {
@@ -37,6 +38,23 @@ export const OPEN = 'open';
 export function parseBox(value: string | null): number[] | null {
   const n = (value ?? '').split(',').map(Number);
   return n.length === 4 && n.every(Number.isFinite) && n[2] > 0 && n[3] > 0 ? n : null;
+}
+
+/**
+ * Step 5's one consistent style (the restyle change): at most five fills, one per family of kinds; headings and
+ * text-only shapes stay unfilled. Arrows are black, except bars (inhibition), which are red.
+ */
+export const STYLE_FILLS: { kinds: string[]; fill: string; name: string }[] = [
+  { kinds: ['receptor', 'ligand'], fill: '#fde68a', name: 'receptors and ligands' },
+  { kinds: ['protein', 'protein family', 'complex', 'other'], fill: '#bfdbfe', name: 'proteins and complexes' },
+  { kinds: ['gene', 'dna'], fill: '#ddd6fe', name: 'genes and DNA' },
+  { kinds: ['small molecule', 'stimulus', 'symbol'], fill: '#bbf7d0', name: 'small molecules and stimuli' },
+  { kinds: ['process', 'phenotype'], fill: '#e5e7eb', name: 'processes and outcomes' },
+];
+export const STYLE_RED = '#c0392b';
+export function styleFill(e: { kind: string; outline: string }): string | null {
+  if (e.kind === 'heading' || e.outline === 'text only') return null;
+  return STYLE_FILLS.find((f) => f.kinds.includes(e.kind))?.fill ?? STYLE_FILLS[1].fill;
 }
 
 /**
@@ -298,6 +316,35 @@ function applyOne(x: Extraction, e: Edit, key: string, touched: Set<string>): st
       x.elements = x.elements.filter((v) => !inner.has(v.id));
       tidy(x, before, new Set([e.id]));
       touched.add(e.id);
+      return null;
+    }
+    case 'set_layout': {
+      let v: LayoutValue;
+      try { v = JSON.parse(e.value ?? ''); } catch { return 'the layout could not be read'; }
+      if (!v?.boxes || !Array.isArray(v.regions) || v.canvas?.length !== 2) return 'the layout could not be read';
+      // Shapes added since the layout was worked out keep their place; the step says the layout is out of date.
+      for (const s of x.elements) {
+        if (v.boxes[s.id]) s.box = v.boxes[s.id];
+        if (s.id in v.region) s.region = v.region[s.id];
+        if (!v.opts?.sublabels) s.sublabel = null;
+      }
+      x.canvas = v.canvas;
+      x.regions = structuredClone(v.regions);
+      x.panels = structuredClone(v.panels);
+      // A shape keeps its panel only if that panel is still drawn (a figure's single frame isn't).
+      for (const s of x.elements) if (s.panel && !x.panels.some((p) => p.id === s.panel)) s.panel = null;
+      for (const a of x.arrows) {
+        const r = v.arrows[a.id];
+        if (!r) continue;
+        a.bend = r.bend;
+        a.textAt = r.textAt;
+        if (r.ends) a.ends = r.ends;
+      }
+      return null;
+    }
+    case 'restyle': {
+      for (const s of x.elements) { s.fill = styleFill(s); s.textColour = null; }
+      for (const a of x.arrows) a.colour = a.head === 'bar' ? STYLE_RED : null;
       return null;
     }
     case 'set_box': {
