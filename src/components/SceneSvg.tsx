@@ -36,6 +36,8 @@ export interface SceneUi {
   editable: boolean;
   /** "+ Arrow" mode: pressing any shape starts a new arrow. */
   drawing: boolean;
+  /** The head new arrows get in "+ Arrow" mode. */
+  drawHead?: 'arrow' | 'bar';
   /** "+ Shape" mode: a click (or a dragged-out box) on either view places a new shape there. */
   placing: boolean;
   onPlace: (box: BoxPx | { x: number; y: number }) => void;
@@ -360,7 +362,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
         const b = n && badgeLayout(n)[drag.index];
         return b && <g transform={`translate(${drag.x},${drag.y})`} style={{ pointerEvents: 'none' }}><BadgePill b={b} stroke={SEL} /></g>;
       })()}
-      {drag?.kind === 'new' && <line x1={drag.sx} y1={drag.sy} x2={drag.x} y2={drag.y} stroke={SEL} strokeWidth={2 * u} strokeDasharray={`${5 * u} ${4 * u}`} markerEnd="url(#m-arrow)" style={{ pointerEvents: 'none' }} />}
+      {drag?.kind === 'new' && <line x1={drag.sx} y1={drag.sy} x2={drag.x} y2={drag.y} stroke={SEL} strokeWidth={2 * u} strokeDasharray={`${5 * u} ${4 * u}`} markerEnd={ui.drawing && ui.drawHead === 'bar' ? 'url(#m-bar)' : 'url(#m-arrow)'} style={{ pointerEvents: 'none' }} />}
       {selNode && (() => {
         // The selected shape's tools: four connector dots to draw an arrow from, and a corner handle to resize.
         const r = drag?.kind === 'resize' && drag.id === selNode.id

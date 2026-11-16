@@ -2,7 +2,7 @@
  * Fixing one shape, arrow or group by hand. Every fix can be done by clicking: a target is chosen from the
  * shapes drawn nearest (by position only) or by clicking any other shape on the picture.
  */
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { badgeText } from '../edit/applyEdits.ts';
 import { nameOf } from '../edit/describe.ts';
 import { boxOf, nearest, type Scene } from '../render/toScene.ts';
@@ -29,6 +29,59 @@ function TextCommit({ value, placeholder, onCommit, autoFocus }: { value: string
     <input key={value} defaultValue={value} placeholder={placeholder} className={input} autoFocus={autoFocus}
       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); e.stopPropagation(); }}
       onBlur={(e) => { if (e.currentTarget.value.trim() !== value) onCommit(e.currentTarget.value.trim()); }} />
+  );
+}
+
+/** Greek letters as the Latin letter people type for them, and no case or spacing: "B-Catenin" finds "β-catenin". */
+const GREEK: Record<string, string> = { α: 'a', β: 'b', γ: 'g', δ: 'd', ε: 'e', ζ: 'z', η: 'h', θ: 'th', ι: 'i', κ: 'k', λ: 'l', μ: 'm', ν: 'n', ξ: 'x', π: 'p', ρ: 'r', σ: 's', τ: 't', φ: 'ph', χ: 'ch', ψ: 'ps', ω: 'o' };
+const fold = (t: string) => t.toLowerCase().replace(/[α-ω]/g, (c) => GREEK[c] ?? c).replace(/[\s\-_/]+/g, '');
+
+/**
+ * The name box for a shape. While you type, it suggests names already written in this figure that match
+ * (Greek letters can be typed as Latin ones). Suggestions are only text from the figure itself, so a name
+ * can be copied exactly as written; anything else can still be typed in full.
+ */
+function NameField({ value, placeholder, autoFocus, names, onCommit }: {
+  value: string; placeholder: string; autoFocus?: boolean; names: string[]; onCommit: (v: string) => void;
+}) {
+  const [text, setText] = useState(value);
+  const [hi, setHi] = useState(0);
+  const [open, setOpen] = useState(false);
+  const q = fold(text);
+  const matches = q ? names.filter((n) => fold(n).includes(q) && n !== text).slice(0, 5) : [];
+  // The last name saved, so the blur that follows Enter or a click on a suggestion doesn't save the typed text over it.
+  const saved = useRef(value);
+  const justChose = useRef(false);
+  const commit = (v: string) => {
+    setText(v); setOpen(false);
+    justChose.current = true;
+    setTimeout(() => { justChose.current = false; }, 0);
+    if (v.trim() !== saved.current) { saved.current = v.trim(); onCommit(v.trim()); }
+  };
+  return (
+    <div className="relative">
+      <input value={text} placeholder={placeholder} autoFocus={autoFocus} className={input} role="combobox" aria-expanded={open && matches.length > 0} aria-autocomplete="list"
+        onChange={(e) => { setText(e.target.value); setHi(0); setOpen(true); }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (open && matches.length && e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(h + 1, matches.length - 1)); }
+          else if (open && matches.length && e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+          else if (e.key === 'Enter') { e.preventDefault(); commit(open && matches.length ? matches[hi] : text); e.currentTarget.blur(); }
+          else if (e.key === 'Escape') { setOpen(false); }
+        }}
+        onBlur={() => { setTimeout(() => setOpen(false), 120); if (!justChose.current && text.trim() !== saved.current) commit(text); }} />
+      {open && matches.length > 0 && (
+        <ul role="listbox" className="absolute left-0 right-0 z-10 mt-1 overflow-hidden rounded-md border border-slate-300 bg-white text-sm shadow-lg dark:border-slate-600 dark:bg-slate-800">
+          <li className="px-2 pt-1 text-[11px] uppercase tracking-wide text-slate-400">Written in this figure</li>
+          {matches.map((m, i) => (
+            <li key={m} role="option" aria-selected={i === hi}>
+              <button type="button" className={`w-full px-2 py-1 text-left ${i === hi ? 'bg-blue-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                onMouseDown={(e) => { e.preventDefault(); commit(m); }} onMouseEnter={() => setHi(i)}>{m}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -74,13 +127,16 @@ export function EditPopover({ x, scene, id, add, startPick, onFreeEnd, onFreeArr
   );
 
   const el = x.elements.find((v) => v.id === id);
+  // Every name written in the figure, once each, for the name box's suggestions.
+  const figureNames = [...new Set([...x.elements, ...x.groups].map((v) => v.label).filter((l): l is string => !!l && l.length > 1))].sort((a, b) => a.localeCompare(b));
   if (el) {
     const inGroups = x.groups.filter((g) => g.members.includes(el.id));
     const otherGroups = x.groups.filter((g) => !g.members.includes(el.id));
     return (
       <div>
         {header(nameOf(x, id), el.kind)}
-        <Row label="Name as written"><TextCommit value={el.label ?? ''} placeholder={focusName ? 'Type the name as written…' : '(no label)'} autoFocus={focusName} onCommit={(v) => add(E('set_label', id, null, v || null))} /></Row>
+        <Row label="Name as written"><NameField value={el.label ?? ''} placeholder={focusName ? 'Type the name as written…' : '(no label)'} autoFocus={focusName} names={figureNames}
+          onCommit={(v) => add(E('set_label', id, null, v || null))} /></Row>
         <Row label="Badges">
           {el.modifications.length === 0 && <span className="text-xs text-slate-500 dark:text-slate-400">None.</span>}
           {el.modifications.map((m, i) => {

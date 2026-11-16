@@ -87,6 +87,8 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const [pick, setPick] = useState<PickRequest | null>(null);
   const [check, setCheck] = useState<FreeEnd | null>(null);
   const [mode, setMode] = useState<Mode>(null);
+  /** The head drawn in "+ Arrow" mode, chosen in the banner. */
+  const [drawHead, setDrawHead] = useState<'arrow' | 'bar'>('arrow');
   const [focusName, setFocusName] = useState<string | null>(null);
   // The uploaded image, read once, for taking a new shape's colour from the figure.
   const img = useRef<HTMLImageElement | null>(null);
@@ -122,7 +124,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     const point = { to: regionAt(settledScene, c.x, c.y)?.id ?? null, value: `${Math.round((c.x / W) * 1e4) / 100},${Math.round((c.y / H) * 1e4) / 100}` };
     if (c.arrow) return [{ op: c.end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: c.arrow, ...point, key }];
     const from = c.from!;
-    return [{ op: 'add_arrow', id: from, to: from, value: 'arrow', key }, { op: 'set_arrow_to', id: `new-${key}`, ...point, key: key + 'e' }];
+    return [{ op: 'add_arrow', id: from, to: from, value: mode === 'draw' ? drawHead : 'arrow', key }, { op: 'set_arrow_to', id: `new-${key}`, ...point, key: key + 'e' }];
   };
 
   // What is drawn: the model's own reading, or the settled picture, or a preview of a hovered answer / a pending check.
@@ -242,8 +244,10 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   };
 
   /** A new arrow drawn from a shape. Onto a shape or cluster it is added; onto an empty spot it goes to the check. */
+  /** A new arrow drawn from a shape. In "+ Arrow" mode it gets the head chosen in the banner; from a connector dot, an ordinary arrow. */
   const newArrow = (from: string, to: string | null, at: { x: number; y: number }) => {
-    if (to) { add({ op: 'add_arrow', id: from, to, value: 'arrow' }); return; }
+    const head = mode === 'draw' ? drawHead : 'arrow';
+    if (to) { add({ op: 'add_arrow', id: from, to, value: head }); return; }
     setCheck({ arrow: null, end: 'to', from, ...at });
   };
 
@@ -317,7 +321,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const ui = (unit: number): SceneUi => ({
     unit, hot, onHover: setHot, marks, selected: pick ? null : selId, touched: asExtracted ? new Set() : applied.touched, pins,
     quiet: !!question || !!pick || !!check || !!mode, picking: !!pick, editable: !asExtracted && !check,
-    drawing: mode === 'draw' && !check, placing: mode === 'place', onPlace: place, onNewArrow: newArrow,
+    drawing: mode === 'draw' && !check, drawHead, placing: mode === 'place', onPlace: place, onNewArrow: newArrow,
     onSelect: select, onPin: (n) => openQuestion(n - 1),
     onMoveBadge: (from, badge, to) => add({ op: 'move_badge', id: from, to, value: badge }),
     onArrowEnd: (arrow, end, to) => add({ op: end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: arrow, to, value: null }),
@@ -412,7 +416,17 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
         }}
         banner={mode && !check ? (
           <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white">
-            <span>{mode === 'place' ? 'Click where the new shape goes, on either picture (or drag out a box to size it).' : 'Drag from the shape where the arrow starts to where it ends (a shape, or an empty spot). Draw as many as you like.'}</span>
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {mode === 'place' ? 'Click where the new shape goes, on either picture (or drag out a box to size it).' : <>
+                <span className="flex items-center gap-1" role="group" aria-label="Head of the arrows you draw">
+                  {([['arrow', '→ Arrow', 'Activates, leads to'], ['bar', '⊣ Bar', 'Inhibits']] as const).map(([h, label, title]) => (
+                    <button key={h} title={title} aria-pressed={drawHead === h} onClick={() => setDrawHead(h)}
+                      className={`rounded-md px-2 py-0.5 text-sm ${drawHead === h ? 'bg-white font-semibold text-blue-700' : 'bg-blue-500/40 hover:bg-blue-500/70'}`}>{label}</button>
+                  ))}
+                </span>
+                Drag from the shape where it starts to where it ends (a shape, or an empty spot). Draw as many as you like.
+              </>}
+            </span>
             <button className="underline" onClick={() => setMode(null)}>{mode === 'draw' ? 'Done (Esc)' : 'Cancel (Esc)'}</button>
           </div>
         ) : pick ? (
@@ -434,7 +448,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
                 onAccept={() => { addAll(freeEdits(check, newKey())); setCheck(null); }}
                 onNear={(id) => {
                   if (check.arrow) add({ op: check.end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: check.arrow, to: id, value: null });
-                  else add({ op: 'add_arrow', id: check.from!, to: id, value: 'arrow' });
+                  else add({ op: 'add_arrow', id: check.from!, to: id, value: mode === 'draw' ? drawHead : 'arrow' });
                   setCheck(null);
                 }}
                 onCancel={() => setCheck(null)} />
