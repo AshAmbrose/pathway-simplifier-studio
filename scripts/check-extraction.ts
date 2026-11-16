@@ -165,7 +165,14 @@ else {
   const wnt = groupsOf('wnt-liu2022-v3'), guo = groupsOf('guo2024-nfkb-v3'), yu = groupsOf('yu2020-nfkb-v3');
   if (wnt) check(wnt.join() === 'WNT OFF,WNT ON', `Wnt: routes grouped by panel (${wnt.join(' | ')})`);
   if (guo) check(guo.join() === 'Canonical pathway,Non-canonical pathway', `Guo: routes grouped under its headings (${guo.join(' | ')})`);
-  if (yu) check(yu.join() === 'a,b,c,d', `Yu: routes grouped under its branch labels a–d (${yu.join(' | ')})`);
+  // Branch d has no route of its own (the model read no arrows from TLR4 onward), so only a–c are groups.
+  if (yu) check(yu.join() === 'a,b,c', `Yu: routes grouped under its branch labels (${yu.join(' | ')})`);
+  const guoRun = find('guo2024-nfkb-v3');
+  if (guoRun) {
+    const canon = traceRoutes(guoRun.extraction).groups.find((g) => g.label === 'Canonical pathway');
+    const regs = canon?.regulators.map((r) => r.name).join() ?? '';
+    check(['A20', 'CYLD', 'LUBAC'].every((n) => regs.includes(n)), `Guo: regulators sit with the routes they act on (Canonical: ${regs})`);
+  }
 
   for (const r of all.filter((v) => /v3$/.test(v.id))) {
     const x = r.extraction, t = traceRoutes(x);
