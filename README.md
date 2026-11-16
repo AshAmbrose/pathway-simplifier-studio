@@ -22,7 +22,12 @@ A step bar across the top walks you through: **Check**, then **① Issues → �
    - **② Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
    - **③ Repeats:** merge copies of a molecule drawn more than once in the same place and state. If the figure has panels, say first whether they are different conditions (copies stay apart) or one picture.
    - **④ Clusters:** open a cluster, tick the shapes that should become one, name it and press Collapse. Its members' names stay small under the new name.
-   - **⑤ Layout:** press **Lay out the figure** to redraw it as a cell, read top to bottom: compartments as rows, panels as columns, the main routes as straight lines. A table shows before → after: arrows crossing, behind a shape, and pointing up. Optional: one consistent style, and hiding the member names under collapsed shapes. Under "Layout rules", switch off any rule that doesn't help. Afterwards, click a shape on the right and drag it to fine-tune.
+   - **⑤ Layout:** two ways, chosen at the top of the step.
+     - **Tidy the original** (the default) keeps the figure as drawn, at the same size. It lines up shapes that are nearly in line, closes and crops the space earlier steps left, moves overlapping shapes clear, and bows arrows around shapes.
+     - **Redraw as a cell** rebuilds it top to bottom: compartments as rows, panels as columns, and the route into the nucleus as a straight line.
+     - A table shows before → after: arrows crossing, behind a shape, and pointing up.
+     - Optional: one consistent style, and hiding the member names under collapsed shapes. Any rule that doesn't help can be switched off.
+     - Afterwards, click a shape on the right and drag it to fine-tune.
 
 ## Scripts
 | Command | What it does |

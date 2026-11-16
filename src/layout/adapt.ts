@@ -1,5 +1,5 @@
 /**
- * Step 5 (Layout): lays the figure out again with BioPathway Studio's cell layout (cellLayout.ts), and turns the
+ * Step 5 (Layout), "Redraw as a cell": lays the figure out again with BioPathway Studio's cell layout (cellLayout.ts), and turns the
  * result into new positions for the figure (the set_layout change, see value.ts).
  *
  * Where things go comes only from the figure itself:
@@ -25,10 +25,14 @@
  */
 import type { Tracing } from '../simplify/routes.ts';
 import type { Element, Extraction, Region } from '../types/extraction.ts';
-import { edgeGeometry } from '../render/edgeGeometry.ts';
 import { layoutCell, neighbourMap, placeByPartner, BAND_NAME, type CompartmentType, type LEdge, type LNode } from './cellLayout.ts';
-import { layoutEdgeLabels } from './edgeLabelLayout.ts';
+import { bendArrows, endBoxes, placeArrowText } from './arrows.ts';
+import { tidyFigure } from './tidy.ts';
 import type { LayoutNotes, LayoutOptions, LayoutValue } from './value.ts';
+
+/** Step 5's layout, in the chosen way: tidy the original (tidy.ts, the default) or redraw it as a cell (below). */
+export const layOut = (x: Extraction, W: number, H: number, t: Tracing, opts: LayoutOptions): LayoutValue =>
+  (opts.mode === 'cell' ? layoutFigure : tidyFigure)(x, W, H, t, opts);
 
 export const RULES = [
   { key: 'blocks', name: 'Keep clusters and touching shapes together', why: 'A cluster, or a ligand on its receptor, moves as one block, its rows kept as drawn.' },
@@ -219,6 +223,16 @@ export function layoutFigure(x: Extraction, W: number, H: number, t: Tracing, op
   const notes: LayoutNotes = { beside: [], emptyRegions: [], behind: [], textClashes: [] };
   for (const k of cellNodeIds) if (!blockCell.get(k)) for (const id of membersOf(k)) notes.beside.push({ id, partner: partnerOf.has(k) ? membersOf(partnerOf.get(k)!)[0] : null });
 
+  // The main line: blocks on a route that lead on, along forward arrows, to the nucleus or an outcome. A branch
+  // that ends to one side (IκB → Proteasome → Degradation) is not preferred over the route into the nucleus.
+  const goal = (k: string) => isOutput(k) || membersOf(k).some((id) => cellOf.get(id) === 'nucleus');
+  const leadsOn = new Set<string>(nodes.map((n) => n.id).filter(goal));
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const e of edges)
+      if (!leadsOn.has(e.sourceNodeId) && leadsOn.has(e.targetNodeId) && !isRegulator(e.sourceNodeId) && arrowOf.get(e.id)?.head !== 'bar') { leadsOn.add(e.sourceNodeId); grew = true; }
+  }
+  for (const k of [...leadsOn]) if (!membersOf(k).some((id) => onRoute.has(id)) && !goal(k)) leadsOn.delete(k);
   const bandName: Partial<Record<CompartmentType, string>> = {};
   for (const r of x.regions) if (r.label && !bandName[TO_CELL[r.kind]]) bandName[TO_CELL[r.kind]] = r.label;
   const original = (k: string) => Math.min(...membersOf(k).map((id) => px(byId.get(id)!).x));
@@ -232,7 +246,7 @@ export function layoutFigure(x: Extraction, W: number, H: number, t: Tracing, op
     orderHint: (k) => (on('order') ? original(k) : index.get(k)!),
     formsComplex: (e) => ['joins', 'binds', 'recruited'].includes(arrowOf.get(e.id)?.meaning ?? ''),
     isExpression: (e) => arrowOf.get(e.id)?.meaning === 'transcribes',
-    mainPath: on('spines') ? (k) => membersOf(k).some((id) => onRoute.has(id)) : undefined,
+    mainPath: on('spines') ? (k) => leadsOn.has(k) : undefined,
     bandName,
     spacing: SPACING,
   });
@@ -315,47 +329,11 @@ export function layoutFigure(x: Extraction, W: number, H: number, t: Tracing, op
   let hx = Math.min(...[...box.values()].map((b) => b.x), ...compartments.map((c) => c.x));
   for (const h of headingRow) { box.set(h.id, { x: hx, y: top - HEAD_H - 12, width: headW(h), height: HEAD_H }); hx += headW(h) + 16; }
 
-  // --- arrows between shapes: bow around what they would pass behind (BioPathway Studio's rule, applied to
-  //     the shapes themselves rather than their blocks) ---
-  const groupBox = (id: string) => {
-    const g = x.groups.find((v) => v.id === id);
-    const bs = (g?.members ?? []).map((m) => box.get(m)).filter((b): b is NonNullable<typeof b> => !!b);
-    if (!bs.length) return null;
-    const x0 = Math.min(...bs.map((b) => b.x)) - 4, y0 = Math.min(...bs.map((b) => b.y)) - 4;
-    return { x: x0, y: y0, width: Math.max(...bs.map((b) => b.x + b.width)) + 4 - x0, height: Math.max(...bs.map((b) => b.y + b.height)) + 4 - y0 };
-  };
-  const endBox = (id: string) => box.get(id) ?? groupBox(id);
-  const inside = (id: string) => new Set([id, ...(x.groups.find((g) => g.id === id)?.members ?? [])]);
-  const shapes = els.map((e) => ({ id: e.id, b: box.get(e.id)! }));
-  const passesBehind = (a: Extraction['arrows'][number], bend: number) => {
-    const s1 = endBox(a.from), s2 = endBox(a.to);
-    if (!s1 || !s2 || a.from === a.to) return [];
-    const g = edgeGeometry(s1, s2, false, bend);
-    const skip = new Set([...inside(a.from), ...inside(a.to)]);
-    const hit: string[] = [];
-    for (const { id, b } of shapes) {
-      if (skip.has(id)) continue;
-      for (let i = 1; i < 30; i++) {
-        const p = bezier(g, i / 30);
-        if (p.x > b.x + 4 && p.x < b.x + b.width - 4 && p.y > b.y + 4 && p.y < b.y + b.height - 4) { hit.push(id); break; }
-      }
-    }
-    return hit;
-  };
-  const CURVES = [70, -70, 120, -120, 180, -180, 250, -250, 330, -330];
-  const bendOf = new Map<string, number>();
-  const drawn = x.arrows.filter((a) => !a.ends?.from && !a.ends?.to && endBox(a.from) && endBox(a.to));
-  for (const a of drawn) {
-    if (!passesBehind(a, 0).length) { bendOf.set(a.id, 0); continue; }
-    const c = CURVES.find((v) => !passesBehind(a, v).length);
-    bendOf.set(a.id, c ?? 0);
-    if (c === undefined) notes.behind.push(a.id);
-  }
-  // Two-way pairs would draw on top of each other: each bows to its own side.
-  for (const a of drawn) {
-    const back = drawn.find((b) => b !== a && b.from === a.to && b.to === a.from);
-    if (back && !bendOf.get(a.id) && !bendOf.get(back.id)) { bendOf.set(a.id, 40); bendOf.set(back.id, 40); }
-  }
+  // --- arrows between shapes: bow around what they would pass behind (see arrows.ts) ---
+  const { endBox } = endBoxes(x, box);
+  const bows = bendArrows(x, box, 1);
+  const bendOf = bows.bend;
+  notes.behind.push(...bows.behind);
 
   // --- the canvas: everything drawn, with a margin; positions become percent of it ---
   const all = [...box.values(), ...compartments, ...modulePanels];
@@ -368,20 +346,10 @@ export function layoutFigure(x: Extraction, W: number, H: number, t: Tracing, op
   // --- arrow text (rule "labels"): clear of shapes, lines and other text, at the size it will be drawn ---
   const textAt = new Map<string, number[]>();
   if (on('labels')) {
-    const lnodes: LNode[] = [...shapes.map(({ id, b }) => ({ id, label: byId.get(id)!.label, ...b })),
-      ...x.groups.map((g) => ({ id: g.id, label: g.label, ...(groupBox(g.id) ?? { x: 0, y: 0, width: 0, height: 0 }) }))];
-    const ledges: LEdge[] = drawn.filter((a) => a.text).map((a) => ({ id: a.id, sourceNodeId: a.from, targetNodeId: a.to, curvature: bendOf.get(a.id) ?? 0, label: a.text }));
-    // The renderer draws arrow text at the canvas width / 90 (8 to 14); labelSize assumes 11.
-    const scale = Math.min(Math.max(cw / 90, 8), 14) / 11;
-    // Clusters are only outlines: text may sit inside one, just not on its shapes.
-    const placed = layoutEdgeLabels(ledges, lnodes.filter((n) => byId.has(n.id) || ledges.some((e) => e.sourceNodeId === n.id || e.targetNodeId === n.id)), 'below', scale);
-    const rects = [...placed].map(([id, b]) => ({ id, x1: b.x - b.width / 2, y1: b.y - b.height / 2, x2: b.x + b.width / 2, y2: b.y + b.height / 2 }));
-    for (const r of rects) {
-      textAt.set(r.id, point({ x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2 }));
-      const clash = shapes.some(({ b }) => r.x1 < b.x + b.width && b.x < r.x2 && r.y1 < b.y + b.height && b.y < r.y2)
-        || rects.some((o) => o !== r && r.x1 < o.x2 && o.x1 < r.x2 && r.y1 < o.y2 && o.y1 < r.y2);
-      if (clash) notes.textClashes.push(r.id);
-    }
+    // The renderer draws arrow text at the canvas width / 90 (8 to 14); the placement assumes 11.
+    const placed = placeArrowText(x, box, bendOf, Math.min(Math.max(cw / 90, 8), 14) / 11, false);
+    for (const [id, c] of placed.at) textAt.set(id, point(c));
+    notes.textClashes.push(...placed.clashes);
   }
 
   // --- back into the figure's terms ---
@@ -428,13 +396,4 @@ export function layoutFigure(x: Extraction, W: number, H: number, t: Tracing, op
     arrows[a.id] = entry;
   }
   return { opts, canvas: [cw, ch], boxes, region, regions, panels, arrows, notes };
-}
-
-/** A point on a cubic curve at t (0–1). */
-export function bezier(g: { p1: { x: number; y: number }; cp1: { x: number; y: number }; cp2: { x: number; y: number }; p2: { x: number; y: number } }, t: number) {
-  const u = 1 - t;
-  return {
-    x: u * u * u * g.p1.x + 3 * u * u * t * g.cp1.x + 3 * u * t * t * g.cp2.x + t * t * t * g.p2.x,
-    y: u * u * u * g.p1.y + 3 * u * u * t * g.cp1.y + 3 * u * t * t * g.cp2.y + t * t * t * g.p2.y,
-  };
 }

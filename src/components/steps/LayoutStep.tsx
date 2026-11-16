@@ -1,7 +1,10 @@
 /**
- * Step 5 panel: lay the figure out again as a cell, read top to bottom (BioPathway Studio's Organize Layout,
- * src/layout/), and see whether it reads better.
- *  - "Lay out the figure" stores the new positions as one change; nothing moves until it is pressed.
+ * Step 5 panel: lay the figure out again, and see whether it reads better. Two ways (src/layout/):
+ *  - "Tidy the original" (the default): keeps the authors' arrangement and scale; lines up, closes gaps, crops,
+ *    moves overlapping shapes clear, bows arrows around shapes;
+ *  - "Redraw as a cell": BioPathway Studio's Organize Layout, read top to bottom. Made for figures drawn from
+ *    scratch, so on a published figure it often reads worse; the numbers say so.
+ *  - The main button stores the new positions as one change; nothing moves until it is pressed.
  *  - The numbers show before → after: crossings, arrows behind shapes, arrows pointing up (feedback apart).
  *  - Switches: one consistent style (listing what it replaces), member names under collapsed shapes, and each
  *    layout rule, so a rule that doesn't help this figure can be switched off.
@@ -9,9 +12,10 @@
  *  - After the layout, a shape can be selected and dragged; laying out again clears those moves.
  */
 import { nameOf } from '../../edit/describe.ts';
-import { RULES, type RuleKey } from '../../layout/adapt.ts';
+import { RULES } from '../../layout/adapt.ts';
 import type { Measures } from '../../layout/measures.ts';
-import type { LayoutNotes, LayoutOptions } from '../../layout/value.ts';
+import { TIDY_RULES } from '../../layout/tidy.ts';
+import type { LayoutMode, LayoutNotes, LayoutOptions } from '../../layout/value.ts';
 import type { Extraction } from '../../types/extraction.ts';
 
 const small = 'text-xs text-slate-600 dark:text-slate-300';
@@ -31,7 +35,7 @@ function Row({ label, before, after, hint }: { label: string; before: number; af
   );
 }
 
-export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, restyled, replaces, hasSublabels, moves, onLayout, onRule, onSublabels, onRestyle, onUndoMoves, onHover, onShow }: {
+export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, restyled, replaces, hasSublabels, moves, onLayout, onRule, onSublabels, onMode, onRestyle, onUndoMoves, onHover, onShow }: {
   /** The figure before this step (for names). */
   x: Extraction;
   laidOut: boolean;
@@ -48,8 +52,9 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
   /** Shapes moved by hand since the layout. */
   moves: number;
   onLayout: () => void;
-  onRule: (k: RuleKey, on: boolean) => void;
+  onRule: (k: string, on: boolean) => void;
   onSublabels: (on: boolean) => void;
+  onMode: (m: LayoutMode) => void;
   onRestyle: (on: boolean) => void;
   onUndoMoves: () => void;
   onHover: (ids: string[] | null) => void;
@@ -66,16 +71,26 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
       ))}
     </li>
   );
+  const mode: LayoutMode = opts.mode ?? 'tidy';
+  const rules: readonly { key: string; name: string; why: string }[] = mode === 'tidy' ? TIDY_RULES : RULES;
+  const offHere = opts.off.filter((k) => rules.some((r) => r.key === k)).length;
   const anyNotes = notes.beside.length + notes.emptyRegions.length + notes.behind.length + notes.textClashes.length > 0;
   return (
     <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-300 bg-white p-1 dark:border-slate-600 dark:bg-slate-800" role="radiogroup" aria-label="How to lay out">
+        {([['tidy', 'Tidy the original'], ['cell', 'Redraw as a cell']] as const).map(([m, label]) => (
+          <button key={m} role="radio" aria-checked={mode === m} onClick={() => mode !== m && onMode(m)}
+            className={`rounded-md px-2 py-1.5 text-sm font-semibold ${mode === m ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700'}`}>{label}</button>
+        ))}
+      </div>
       <section className={laidOut && !stale ? `${box} border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30` : 'rounded-lg border-2 border-blue-400 bg-blue-50 p-2.5 text-sm dark:border-blue-700 dark:bg-blue-950/40'}>
-        {!laidOut && <p className="mb-2">Lays the figure out again as a cell, read top to bottom: compartments as rows, each part of the figure as a column, the main routes as straight lines, regulators beside what they act on, outcomes underneath. Where each shape goes comes only from the figure.</p>}
+        {!laidOut && mode === 'tidy' && <p className="mb-2">Keeps the figure as its authors drew it, at the same size, and tidies it: shapes nearly in line are lined up, space left by what earlier steps took out is closed and cropped, overlapping shapes are moved clear, and arrows bow around shapes.</p>}
+        {!laidOut && mode === 'cell' && <p className="mb-2">Redraws the figure from scratch as a cell, read top to bottom: compartments as rows, each part of the figure as a column, the main route into the nucleus as a straight line, regulators beside what they act on, outcomes underneath. Made for figures drawn from scratch, so a published figure often reads worse this way: check the numbers.</p>}
         {laidOut && !stale && <p className="font-medium text-green-800 dark:text-green-300">✓ Laid out. Click a shape on the right, then drag it to fine-tune.</p>}
         {laidOut && stale && <p className="mb-2 text-amber-900 dark:text-amber-200">The figure or the switches below changed since this layout was made, so it may not match.</p>}
         {(!laidOut || stale) && (
           <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700" onClick={onLayout}>
-            {laidOut ? 'Lay out again' : 'Lay out the figure'}
+            {laidOut ? (mode === 'tidy' ? 'Tidy again' : 'Redraw again') : mode === 'tidy' ? 'Tidy the figure' : 'Redraw as a cell'}
           </button>
         )}
         {moves > 0 && (
@@ -121,10 +136,10 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
       </section>
 
       <details className={box}>
-        <summary className="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-100">Layout rules ({RULES.length - opts.off.length} of {RULES.length} on)</summary>
-        <p className={`mt-1 ${small}`}>Switch off a rule that doesn't help this figure, then lay out again. Always on: one reading direction, compartments as rows, regulators beside what they act on.</p>
+        <summary className="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-100">{mode === 'tidy' ? 'Tidying rules' : 'Layout rules'} ({rules.length - offHere} of {rules.length} on)</summary>
+        <p className={`mt-1 ${small}`}>{mode === 'tidy' ? "Switch off a rule that doesn't help this figure. Always on: shapes drawn together move together." : "Switch off a rule that doesn't help this figure. Always on: one reading direction, compartments as rows, regulators beside what they act on."}</p>
         <ul className="mt-1.5 space-y-1.5">
-          {RULES.map((r) => (
+          {rules.map((r) => (
             <li key={r.key}>
               <label className="flex cursor-pointer items-start gap-2">
                 <input type="checkbox" className="mt-0.5" checked={!opts.off.includes(r.key)} onChange={(e) => onRule(r.key, e.target.checked)} />

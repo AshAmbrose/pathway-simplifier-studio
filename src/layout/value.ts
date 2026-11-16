@@ -6,9 +6,13 @@
  */
 import type { Extraction } from '../types/extraction.ts';
 
-/** Step 5's switches: layout rules switched off (all are on by default), and whether member names show under collapsed shapes. */
-export interface LayoutOptions { off: string[]; sublabels: boolean }
-export const DEFAULT_LAYOUT: LayoutOptions = { off: [], sublabels: true };
+/**
+ * Step 5's switches: how to lay out (tidy the original, the default, or redraw it as a cell), the rules switched
+ * off (all are on by default), and whether member names show under collapsed shapes.
+ */
+export type LayoutMode = 'tidy' | 'cell';
+export interface LayoutOptions { mode?: LayoutMode; off: string[]; sublabels: boolean }
+export const DEFAULT_LAYOUT: LayoutOptions = { mode: 'tidy', off: [], sublabels: true };
 
 export interface LayoutNotes {
   /** Shapes the figure gives no compartment: placed beside their most-connected partner (or, with none, in the cytoplasm). */
