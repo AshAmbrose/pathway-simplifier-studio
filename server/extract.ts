@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { GoogleGenAI } from '@google/genai';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems, type Extraction } from '../src/types/extraction.ts';
+import { optionProblems } from '../src/edit/applyEdits.ts';
 import { recordCall } from './aiLedger.ts';
 
 export const PROMPT_VERSION = 'v2';
@@ -97,5 +98,5 @@ export async function extractFigure(opts: { apiKey: string; model: string; mimeT
   if (!parsed.success) {
     throw new ExtractError('The reply did not match the extraction format.', 502, parsed.error.issues.slice(0, 10));
   }
-  return { extraction: parsed.data, problems: referenceProblems(parsed.data), model, promptVersion: PROMPT_VERSION, seconds, usage, costUsd, priceKnown: !!price };
+  return { extraction: parsed.data, problems: [...referenceProblems(parsed.data), ...optionProblems(parsed.data)], model, promptVersion: PROMPT_VERSION, seconds, usage, costUsd, priceKnown: !!price };
 }

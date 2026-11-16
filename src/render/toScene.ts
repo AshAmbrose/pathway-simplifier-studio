@@ -5,6 +5,7 @@
 import type { Extraction } from '../types/extraction.ts';
 import type { BoxPx } from './edgePorts.ts';
 import { edgeGeometry } from './edgeGeometry.ts';
+import { badgeText } from '../edit/applyEdits.ts';
 
 export interface SceneNode extends BoxPx {
   id: string; label: string | null; kind: string; outline: string; fill: string | null; textColour: string | null;
@@ -49,7 +50,7 @@ export function toScene(x: Extraction, width: number, height: number): Scene {
   const skipped: string[] = [];
   const nodes: SceneNode[] = x.elements.map((e) => ({
     id: e.id, label: e.label, kind: e.kind, outline: e.outline, fill: e.fill, textColour: e.textColour,
-    mods: e.modifications.map((m) => ({ text: m.type + (m.site ? ` ${m.site}` : '') + (m.count && m.count > 1 ? `×${m.count}` : '') })),
+    mods: e.modifications.map((m) => ({ text: badgeText(m) })),
     ...px(e.box, width, height),
   }));
   const byId = new Map<string, BoxPx>(nodes.map((n) => [n.id, n]));

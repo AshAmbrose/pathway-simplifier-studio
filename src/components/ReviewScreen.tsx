@@ -69,7 +69,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
               {x.clarify.map((c, i) => (
                 <li key={i} className="rounded border border-slate-200 p-2 dark:border-slate-700" onMouseEnter={() => setHot(c.about[0] ?? null)} onMouseLeave={() => setHot(null)}>
                   <div>{c.question}</div>
-                  {c.options.length > 0 && <div className="mt-1 text-slate-500 dark:text-slate-400">Options: {c.options.join(' · ')}</div>}
+                  {c.options.length > 0 && <div className="mt-1 text-slate-500 dark:text-slate-400">Options: {c.options.map((o) => o.label).join(' · ')}</div>}
                   {c.about.length > 0 && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">About: {c.about.map(name).join('; ')}</div>}
                 </li>
               ))}

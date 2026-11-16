@@ -4,6 +4,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { ExtractResult } from './extract.ts';
+import { EMPTY_REVIEW, ReviewSchema, type Review } from '../src/types/extraction.ts';
 
 const ROOT = new URL('../data/runs/', import.meta.url);
 const ID = /^[0-9]{8}-[0-9]{6}-[a-z0-9-]{1,40}$/;
@@ -15,6 +16,8 @@ export interface RunRecord extends ExtractResult {
   at: string;
   mimeType: string;
   image: { width: number; height: number };
+  /** The user's answers and fixes. The extraction above is never altered; these are applied on top of it. */
+  review: Review;
 }
 
 export interface RunSummary {
@@ -34,7 +37,7 @@ export function saveRun(name: string, mimeType: string, image: Buffer, size: { w
   const id = `${stamp()}-${slug}`;
   mkdirSync(dir(id), { recursive: true });
   writeFileSync(new URL(`image.${EXT[mimeType] ?? 'bin'}`, dir(id)), image);
-  const rec: RunRecord = { id, name, at: new Date().toISOString(), mimeType, image: size, ...result };
+  const rec: RunRecord = { id, name, at: new Date().toISOString(), mimeType, image: size, ...result, review: EMPTY_REVIEW };
   writeFileSync(new URL('run.json', dir(id)), JSON.stringify(rec, null, 1));
   return rec;
 }
@@ -55,7 +58,26 @@ export function listRuns(): RunSummary[] {
 export function getRun(id: string): RunRecord | null {
   if (!ID.test(id)) return null;
   const f = new URL('run.json', dir(id));
-  return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null;
+  if (!existsSync(f)) return null;
+  const r = JSON.parse(readFileSync(f, 'utf8'));
+  // Runs saved before prompt v3 have answers as plain text and no review: read them in the current shape.
+  for (const c of r.extraction?.clarify ?? []) {
+    c.options = (c.options ?? []).map((o: unknown) => (typeof o === 'string' ? { label: o, shape: null, asRead: false, edits: [] } : o));
+  }
+  r.review ??= EMPTY_REVIEW;
+  return r;
+}
+
+/** Saves the user's answers and fixes with the run. The extraction itself is left as the model returned it. */
+export function saveReview(id: string, review: unknown): Review | null {
+  if (!ID.test(id)) return null;
+  const f = new URL('run.json', dir(id));
+  if (!existsSync(f)) return null;
+  const parsed = ReviewSchema.parse(review);
+  const r = JSON.parse(readFileSync(f, 'utf8'));
+  r.review = parsed;
+  writeFileSync(f, JSON.stringify(r, null, 1));
+  return parsed;
 }
 
 export function runImage(id: string): { mimeType: string; data: Buffer } | null {
