@@ -32,7 +32,7 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 - **Never name the confidential test material** in committed files, issues or pull requests.
 - **Push only to the private GitHub repo,** after checking it's still private.
 - **One branch per feature,** with a pull request. Merge only when the user says.
-- **Update with each feature:** `README.md` and `docs/design.md`.
+- **Keep the docs current with every commit.** Before each commit, check whether `README.md`, `docs/design.md` or this file need updating, and include those updates in the same commit. Keep them short, clear and in plain language.
 - **Model calls:** a free-tier key may let the provider use what is sent, so send only open-licence figures on it. Ask before any paid run (`scripts/run-figures.ts` refuses without `--yes`).
 
 ## Map of the code
