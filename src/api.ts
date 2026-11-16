@@ -1,4 +1,7 @@
-/** Browser-side calls to the local /api routes. Types come from the server modules (type-only imports). */
+/**
+ * The browser's calls to the local API (server/plugin.ts): status, extract a figure, list and open runs,
+ * and save the review. Types are shared with the server, so both sides agree on the shape of a run.
+ */
 import type { RunRecord, RunSummary } from '../server/runs.ts';
 import type { Review } from './types/extraction.ts';
 
@@ -17,10 +20,12 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+/** Whether the key and model are set, and today's spend against the budget. */
 export const getStatus = () => call<Status>('/api/status');
 export const listRuns = () => call<RunSummary[]>('/api/runs');
 export const getRun = (id: string) => call<RunRecord>(`/api/runs/${id}`);
 export const runImageUrl = (id: string) => `/api/runs/${id}/image`;
+/** Sends an image for extraction (one model call); the saved run comes back. */
 export const extract = (body: { name: string; mimeType: string; data: string; width: number; height: number }) =>
   call<RunRecord>('/api/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 /**

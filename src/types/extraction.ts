@@ -1,5 +1,8 @@
 /**
- * The extraction format (prompt v2): what the model returns for one figure.
+ * The data formats everything else is built on:
+ *  - the extraction: what the model returns for one figure (prompt v3);
+ *  - an edit: one change on top of it (an answer, a fix by hand, an added shape);
+ *  - the review: the list of edits a user has made to a run.
  *
  * One zod schema serves three jobs:
  *  - its JSON Schema is sent to Gemini as `responseJsonSchema` (structured output);

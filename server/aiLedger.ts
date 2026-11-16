@@ -1,4 +1,4 @@
-// Copied from BioPathway Studio (server/aiLedger.ts), unchanged.
+// Copied from BioPathway Studio (server/aiLedger.ts); only comments added.
 /**
  * Every AI call the app makes, one JSON line each, in data/ai-ledger.jsonl (local only, gitignored with data/).
  * The daily budget and the totals shown in the app are summed from this file, so a run that fails halfway
@@ -43,6 +43,7 @@ function localIso(d = new Date()) {
 
 let cache: LedgerEntry[] | null = null;
 
+/** Every logged AI call, oldest first. Lines that can't be read are skipped. */
 export function readLedger(file: URL | string = FILE): LedgerEntry[] {
   if (file === FILE && cache) return cache;
   const rows: LedgerEntry[] = [];
@@ -73,10 +74,12 @@ export function recordCall(entry: Omit<LedgerEntry, 'at' | 'day'>, file: URL | s
   return row;
 }
 
+/** Dollars spent on one local day (YYYY-MM-DD): checked against the daily budget before each call. */
 export function spentOn(day: string, rows = readLedger()): number {
   return rows.filter((r) => r.day === day).reduce((s, r) => s + r.costUsd, 0);
 }
 
+/** Dollars spent in one month (YYYY-MM). */
 export function spentInMonth(month: string, rows = readLedger()): number {
   return rows.filter((r) => r.day.startsWith(month)).reduce((s, r) => s + r.costUsd, 0);
 }

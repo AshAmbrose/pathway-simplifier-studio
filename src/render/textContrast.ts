@@ -1,4 +1,4 @@
-// Copied from BioPathway Studio (src/utils/textContrast.ts), unchanged.
+// Copied from BioPathway Studio (src/utils/textContrast.ts); only comments added.
 /**
  * Picks legible text colours for a node label drawn on top of the node's fill.
  *
@@ -27,6 +27,7 @@ function luminance(color: string): number | null {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/** How readable one colour is on another (1 = invisible, 21 = black on white); null if either isn't a colour. */
 export function contrastRatio(a: string, b: string): number | null {
   const la = luminance(a);
   const lb = luminance(b);
@@ -40,6 +41,7 @@ export interface NodeTextColors {
   halo: string;
 }
 
+/** The text and outline colours to use for a label on this fill. */
 export function readableTextColors(fill: string, preferred?: string): NodeTextColors {
   if (preferred && (contrastRatio(preferred, fill) ?? 0) >= 4.5) {
     const preferredIsLight = (luminance(preferred) ?? 0) > 0.5;

@@ -29,6 +29,7 @@ const NORMAL: Record<FixedPort, { x: number; y: number }> = {
 
 const isCorner = (p: FixedPort) => p.includes('-');
 
+/** Where one of a box's attachment points sits, in picture coordinates. */
 export function getPortCoordinate(node: BoxPx, port: PortDirection): { x: number; y: number } {
   const { x, y, width, height } = node;
   switch (port) {

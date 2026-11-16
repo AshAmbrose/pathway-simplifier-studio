@@ -1,4 +1,4 @@
-/** Spend by day from data/ai-ledger.jsonl: `npm run spend` */
+/** Shows AI spend by day, from the call log in data/ai-ledger.jsonl: `npm run spend` */
 import { readLedger } from '../server/aiLedger.ts';
 
 const byDay = new Map<string, { calls: number; usd: number; tokensIn: number; tokensOut: number }>();

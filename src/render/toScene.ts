@@ -31,6 +31,7 @@ export interface Scene {
 // The leading # is optional: models sometimes leave it off.
 const HEX = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i;
 const NAMED: Record<string, string> = { black: '#1e293b', red: '#c0392b', blue: '#2563eb', green: '#15803d', grey: '#94a3b8', gray: '#94a3b8', purple: '#7e22ce', orange: '#ea580c', pink: '#db2777' };
+/** A colour the model wrote (hex, with or without #, or a plain name like "red") → hex; otherwise the fallback. */
 export function colour(c: string | null | undefined, fallback: string): string {
   if (!c) return fallback;
   const t = c.trim().toLowerCase();
@@ -45,12 +46,17 @@ function px(box: number[], w: number, h: number): BoxPx {
   return { x: (cx / 100) * w, y: (cy / 100) * h, width: (Math.max(0.3, Math.min(bw, 100 - cx)) / 100) * w, height: (Math.max(0.3, Math.min(bh, 100 - cy)) / 100) * h };
 }
 
+/** The smallest box around several boxes, with a margin. */
 export function union(boxes: BoxPx[], pad: number): BoxPx {
   const x0 = Math.min(...boxes.map((b) => b.x)) - pad, y0 = Math.min(...boxes.map((b) => b.y)) - pad;
   const x1 = Math.max(...boxes.map((b) => b.x + b.width)) + pad, y1 = Math.max(...boxes.map((b) => b.y + b.height)) + pad;
   return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 }
 
+/**
+ * Turns an extraction into what gets drawn: every shape, cluster, compartment and arrow in pixels of the
+ * original image, at the positions the model gave. Anything that can't be placed is listed in `skipped`.
+ */
 export function toScene(x: Extraction, width: number, height: number): Scene {
   const skipped: string[] = [];
   const nodes: SceneNode[] = x.elements.map((e) => ({
