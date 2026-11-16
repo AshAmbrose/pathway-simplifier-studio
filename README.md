@@ -2,7 +2,7 @@
 
 Turns a published pathway figure into an editable diagram, copied faithfully first.
 
-You check the copy beside the original and fix anything the model got wrong. Every change you make is listed and can be undone. Next: making the figure clearer, with every difference from the original listed.
+You check the copy beside the original and fix anything the model got wrong. Then you simplify it, step by step. Every change you make is listed and can be undone.
 
 ## Setup
 1. `npm install`
@@ -10,11 +10,17 @@ You check the copy beside the original and fix anything the model got wrong. Eve
 3. `npm run dev`, then open the address it prints.
 
 ## Using it
+A step bar across the top walks you through: **Check**, then **① Issues → ② Focus → ③ Repeats → ④ Clusters → ⑤ Layout**. Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures.
+
 1. **Upload** a PNG, JPEG or WebP figure. One model call reads it, and the result is saved, so reopening it is free.
 2. **Answer the questions.** Numbered pins mark where the model wasn't sure. Pick an answer, and both views move on to the next question.
 3. **Fix** anything else: click a shape or arrow to rename it, re-point it, change it or remove it.
-4. **Add** what's missing: use "+ Shape" and "+ Arrow". A new shape takes its colour from the figure.
+4. **Add** what's missing: use "+ Shape" and "+ Arrow". A new shape takes its colour from the figure. To draw an arrow from or to a whole cluster, use its grey "cluster" tab, or select the cluster and drag from its blue dots.
 5. **Review your changes:** the list at the top shows each one in plain words, with undo, and "Show as extracted" shows the model's own reading.
+6. **Simplify:** press **Continue to simplify →**. Five steps follow in order, and any can be skipped. Each shows the figure before the step on the left and after it on the right. "Original" opens the uploaded figure in a small window. "← Back" from step ① returns to Check.
+   - **① Issues:** shown beside the original. Click a card to outline its item on both pictures. Fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.
+   - **② Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
+   - **③ Repeats, ④ Clusters, ⑤ Layout:** coming in later updates.
 
 ## Scripts
 | Command | What it does |

@@ -45,5 +45,27 @@ export function describeEdit(before: Extraction, e: Edit): string {
     case 'remove_from_group': return `${n(e.id)} taken out of group ${n(e.to)}`;
     case 'set_box': return `${n(e.id)} moved or resized`;
     case 'add_element': return `Shape added${e.to ? ` in ${n(e.to).replace('open space in the ', 'the ')}` : ''}`;
+    case 'hide': return `${n(e.id)} left out${e.value ? `: ${e.value}` : ''}`;
   }
+}
+
+/**
+ * Text the model wrote (a question, an answer, a flag's reason), made fit to show: the extraction's internal ids
+ * ("e5", "a_tx_1") are never shown on screen. A bracketed list of ids, "(e5, e10, e14)", is dropped; any other id
+ * becomes the item's name as written, or a description if it has none.
+ */
+export function cleanText(x: Extraction, text: string | null | undefined): string {
+  if (!text) return '';
+  const ids = new Set([...x.elements, ...x.groups, ...x.arrows, ...x.regions, ...x.panels].map((v) => v.id));
+  if (!ids.size) return text;
+  const alt = [...ids].sort((a, b) => b.length - a.length).map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const list = new RegExp(`\\s*\\(\\s*(?:${alt})(?:\\s*(?:,|and|/)\\s*(?:${alt}))*\\s*\\)`, 'g');
+  const one = new RegExp(`(?<![\\w-])(?:${alt})(?![\\w-])`, 'g');
+  return text.replace(list, '').replace(one, (id) => {
+    const r = x.regions.find((v) => v.id === id);
+    if (r) return regionName(r);
+    const p = x.panels.find((v) => v.id === id);
+    if (p) return p.label ? `panel ${p.label}` : 'the panel';
+    return nameOf(x, id);
+  });
 }

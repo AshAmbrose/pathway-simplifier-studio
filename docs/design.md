@@ -35,7 +35,7 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 - **Simplification can reuse the same mechanism:** opt-in, reversible, every difference listed.
 - **A change that no longer applies** (for example, its shape was removed) is reported, not silently dropped.
 
-## 3. Review on the canvas
+## 3. Review on the canvas (the Check step)
 **Decision:** the model's questions about ambiguous parts appear as numbered pins on both the original and the reconstruction. Opening one moves both views to the shapes concerned and offers the answers beside them.
 
 **Why answers are the main route:** choosing from a short list is quick and consistent. Fixing by hand (click a shape or arrow for a small form) is the other route, and dragging is only a shortcut for the same fixes.
@@ -53,7 +53,7 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 **Decision:** "+ Shape" and "+ Arrow" buttons.
 - **A new shape takes its colour from the original image** where it's placed.
 - **Its name box suggests names already written in the figure.** Greek letters can be typed as Latin ones.
-- **New arrows** can be drawn from any shape, as an arrow or a bar. An arrow ending where there is no shape is accepted after a check.
+- **New arrows** can be drawn from any shape or cluster, as an arrow or a bar. A cluster's shapes touch, so in "+ Arrow" mode each cluster gets a small tab to drag from or drop on. An arrow ending where there is no shape is accepted after a check.
 
 **Why:** the colour and the name suggestions come from the figure itself, so additions stay faithful without guessing. Undoing an added shape also undoes everything that depends on it (its name, arrows and moves).
 
@@ -66,10 +66,49 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 **Why:** a test run lost its changes. The page reloaded from an older copy during development and saved it over newer work. The same could happen with two tabs open on one run.
 
 ## 6. How it's tested
-- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, and saved runs loading.
+- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, and step 2's routes on the saved test figures (untick → left out → tick back → restored).
 - **Practice runs:** a copy of a real extraction with shapes taken out, and a checker that says whether each was put back with the right name, place and arrows.
 - **Browser tests at human pace,** only on throwaway copies. A test that clicks instantly once missed a real fault: a pop-up that moved while the pointer hovered.
 
-## Next: simplification
-- **Opt-in, reversible simplifications,** listed against the faithful reconstruction. For example: merge repeated copies, collapse a cluster, hide a side branch.
-- **Suggestions from prior knowledge may be allowed here,** unlike in review, but always labelled with their source.
+## 7. Simplification in five steps
+**Decision:** one linear journey in a step bar across the top: **Check** (answer the questions, fix and add), then "Continue to simplify →" into five steps in a fixed order:
+1. Issues
+2. Focus
+3. Repeats
+4. Clusters
+5. Layout
+
+Any step can be skipped, and Back always works, including back to Check. Each simplification step is shown before → after: the left view is the figure after every earlier step, the right view the same with this step's choices. What a step leaves out stays on the right view, faded, so it can be clicked back in. The original opens in a small floating window.
+
+**Why:**
+- **One line to follow:** an early version had a "Current | Simplified" switch in the header. In testing it was confusing, so the whole process became one walk-through.
+- **A fixed order:** each step works on a cleaner figure than the last. For example, a name fixed in step 1 is the name step 2 shows.
+- **Before → after for each step:** the effect of one step is easy to see on its own.
+
+**How it fits the change list** (see 2):
+- **Every choice is a change in the same list, tagged with its step.**
+  - Changes apply as answers, then fixes by hand, then each step in order.
+  - So Check never shows simplifications, and the simplification steps are always built on the corrected figure.
+- **A new change, "leave out" (`hide`),** says why: "not on a chosen pathway", "unlabelled part left out". It is never offered to the model.
+- **A small record is saved with the run:** which steps are done or skipped, the issues settled without a change ("kept as written", "seen"), and step 2's ticks and clicks.
+- **Step 2's changes are rebuilt from its ticks and clicks.** Ticking a route back on restores it exactly. If the figure under it changed since (a correction in Check), the step says so and offers "Update" rather than changing anything unasked.
+
+**Step 1, Issues:**
+- **Shown beside the original,** not the step before: a typo or an unlabelled part is best judged against what was drawn. Clicking a card outlines its item in orange on both pictures.
+- **Lists:** the model's typo flags, every shape with no label, and the colour or styling the model thinks carries meaning.
+- **Colour meanings are only acknowledged,** with an optional note. No key is drawn.
+- **Counts and clusters wait for their own steps.**
+
+**Step 2, Focus: routes are traced from the drawing.** There's no model call and no biology.
+- **Shapes that travel together form one unit:** shapes drawn touching, or drawn in one cluster.
+- **A route** starts where nothing points in and follows the arrows.
+- **Inhibition arrows aren't followed.** What they come from is listed as a regulator.
+- **Routes are grouped as the figure groups them:** by panel, else by the nearest heading.
+- **Everything starts ticked,** so skipping the step changes nothing.
+- **Traced after Check and step 1,** so fixes, names and left-out parts are included.
+- **Every shape can be ticked without a box per item:** a route opens to show its shapes as small chips, one per set of shapes that travel together.
+
+**Next:** step 3 (merge plain repeats), step 4 (collapse chosen clusters), step 5 (reorganise the layout, reusing BioPathway Studio's Organize Layout, with locations taken only from the original figure). Suggestions from prior knowledge may come later, always labelled with their source.
+
+## 8. Internal ids stay off the screen
+**Decision:** the model's ids for shapes and arrows ("e5", "a_tx_1") are never shown. The model sometimes writes them into its questions and reasons ("drawn twice (e19 and e26)"). A bracketed list of ids is dropped; any other id is replaced by the item's name as written.

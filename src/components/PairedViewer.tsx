@@ -28,7 +28,7 @@ export interface ViewerHandle {
 
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 
-export function PairedViewer({ ref, width, height, left, right, leftTitle, rightTitle, overlay, banner, hint, onBackgroundClick }: {
+export function PairedViewer({ ref, width, height, left, right, leftTitle, rightTitle, overlay, banner, hint, help, onBackgroundClick }: {
   ref?: Ref<ViewerHandle>;
   width: number; height: number;
   left: (unit: number) => ReactNode; right: (unit: number) => ReactNode;
@@ -37,6 +37,8 @@ export function PairedViewer({ ref, width, height, left, right, leftTitle, right
   banner?: ReactNode;
   /** The name of whatever is under the pointer; shown in the one line under the views in place of the help text. */
   hint?: string | null;
+  /** The help text under the views when nothing is hovered. */
+  help?: string;
   /** A click on the picture that hit no shape, with where it landed in picture coordinates. */
   onBackgroundClick?: (at: { x: number; y: number }) => void;
 }) {
@@ -78,14 +80,17 @@ export function PairedViewer({ ref, width, height, left, right, leftTitle, right
   }), [width, height]);
 
   // Native, non-passive wheel listener, so zooming doesn't also scroll the page.
+  // The step follows how far the wheel or pinch moved, not one fixed step per event: a trackpad pinch sends many
+  // small events (with ctrlKey set), which a fixed step made far too fast.
   useEffect(() => {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       cancelAnimationFrame(anim.current);
       const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
       const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+      const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+      const f = Math.min(1.2, Math.max(1 / 1.2, Math.exp(dy * (e.ctrlKey ? 0.006 : 0.0015))));
       setView((v) => {
-        const f = e.deltaY < 0 ? 0.88 : 1 / 0.88;
         const w = Math.min(width * 1.5, Math.max(width / 20, v.w * f)), h = (w / v.w) * v.h;
         return { x: v.x + (v.w - w) * fx, y: v.y + (v.h - h) * fy, w, h };
       });
@@ -108,6 +113,15 @@ export function PairedViewer({ ref, width, height, left, right, leftTitle, right
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  /** Zoom to a level (1 = the whole picture fits), keeping the middle of the view where it is. */
+  const zoomTo = (level: number) => {
+    const fit = { w: Math.max(width, height * (pane.w / pane.h)), h: Math.max(height, width * (pane.h / pane.w)) };
+    const w = fit.w / level, h = fit.h / level, cx = view.x + view.w / 2, cy = view.y + view.h / 2;
+    tweenTo(level === 1 ? { x: (width - fit.w) / 2, y: (height - fit.h) / 2, w: fit.w, h: fit.h } : { x: cx - w / 2, y: cy - h / 2, w, h });
+  };
+  const fitW = Math.max(width, height * (pane.w / pane.h));
+  const level = fitW / view.w;
 
   const s = scaleOf(view, pane), unit = 1 / s;
   const ox = (pane.w - view.w * s) / 2, oy = (pane.h - view.h * s) / 2;
@@ -162,8 +176,15 @@ export function PairedViewer({ ref, width, height, left, right, leftTitle, right
       </div>
       <div className="mt-1.5 flex h-5 items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
         {hint ? <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{hint}</span>
-          : <span className="truncate">Scroll to zoom · drag to pan · click a shape or arrow to fix it</span>}
-        <button className="shrink-0 underline hover:text-slate-800 dark:hover:text-slate-200" onClick={() => tweenTo(full)}>Reset view</button>
+          : <span className="truncate">{help ?? 'Scroll to zoom · drag to pan · click a shape or arrow to fix it'}</span>}
+        <span className="flex shrink-0 items-center gap-2">
+          <select aria-label="Zoom" value="" onChange={(e) => e.target.value && zoomTo(Number(e.target.value))}
+            className="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
+            <option value="" disabled>Zoom {Math.round(level * 100)}%</option>
+            {[[1, 'Fit (100%)'], [1.5, '150%'], [2, '200%'], [3, '300%'], [4, '400%']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+          </select>
+          <button className="underline hover:text-slate-800 dark:hover:text-slate-200" onClick={() => tweenTo(full)}>Reset view</button>
+        </span>
       </div>
     </div>
   );

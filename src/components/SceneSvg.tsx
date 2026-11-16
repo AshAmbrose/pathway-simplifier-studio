@@ -15,6 +15,7 @@ import { readableTextColors } from '../render/textContrast.ts';
 
 const HL = '#f97316';
 const SEL = '#2563eb';
+const FADED = 0.2;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 export type Mark = 'about' | 'candidate' | 'hover';
@@ -50,6 +51,8 @@ export interface SceneUi {
   /** An arrow's end was dropped where there is no shape: open space or a compartment. The screen asks before accepting. */
   onArrowEndFree: (arrow: string, end: 'from' | 'to', at: { x: number; y: number }) => void;
   onMoveNode: (id: string, box: BoxPx) => void;
+  /** Drawn faintly: what a simplification step leaves out, shown so it can be clicked back in. */
+  faded?: Set<string>;
 }
 
 /** The arrowhead shapes (arrow, bar, open), shared by every arrow; each takes its line's colour. */
@@ -88,16 +91,45 @@ function NodeShape({ n, hot }: { n: SceneNode; hot: boolean }) {
   }
   if (n.outline === 'oval' || n.outline === 'circle')
     return <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={fill} stroke={stroke} strokeWidth={sw} />;
-  const rx = n.outline === 'rounded box' ? Math.min(h / 2.5, 12) : n.outline === 'box' ? 2 : 4;
+  if (n.kind === 'receptor' && n.outline === 'other' && h > w * 0.6) {
+    // A receptor the model says isn't a plain box: drawn as two chains through the membrane with a cup on top,
+    // inside its box, so a ligand drawn on it stays visible instead of being covered by a block.
+    const cw = w * 0.2, top = h * 0.32;
+    return (
+      <g>
+        <rect width={w} height={h} fill="transparent" stroke={hot ? HL : 'none'} strokeWidth={sw} />
+        <path d={`M ${w * 0.06} ${h * 0.04} Q ${w * 0.08} ${top + h * 0.06} ${w * 0.4} ${top} L ${w * 0.4} ${h * 0.2} Q ${w * 0.22} ${h * 0.2} ${w * 0.22} ${h * 0.04} Z`} fill={fill} stroke={stroke} strokeWidth={sw} />
+        <path d={`M ${w * 0.94} ${h * 0.04} Q ${w * 0.92} ${top + h * 0.06} ${w * 0.6} ${top} L ${w * 0.6} ${h * 0.2} Q ${w * 0.78} ${h * 0.2} ${w * 0.78} ${h * 0.04} Z`} fill={fill} stroke={stroke} strokeWidth={sw} />
+        <rect x={w * 0.5 - cw - w * 0.01} y={top - h * 0.04} width={cw} height={h - top + h * 0.04} rx={cw / 2} fill={fill} stroke={stroke} strokeWidth={sw} />
+        <rect x={w * 0.51} y={top - h * 0.04} width={cw} height={h - top + h * 0.04} rx={cw / 2} fill={fill} stroke={stroke} strokeWidth={sw} />
+      </g>
+    );
+  }
+  const rx = n.outline === 'rounded box' ? Math.min(h / 2.5, 12) : n.outline === 'box' ? 2 : Math.min(h / 4, 8);
   // A text-only shape still needs something to click.
-  return <rect width={w} height={h} rx={rx} fill={fill === 'none' ? 'transparent' : fill} stroke={stroke} strokeWidth={sw} strokeDasharray={n.outline === 'other' ? '3 2' : undefined} />;
+  return <rect width={w} height={h} rx={rx} fill={fill === 'none' ? 'transparent' : fill} stroke={stroke} strokeWidth={sw} />;
 }
 
-function NodeLabel({ n, maxFs }: { n: SceneNode; maxFs: number }) {
+function NodeLabel({ n, maxFs, sceneW }: { n: SceneNode; maxFs: number; sceneW: number }) {
   if (!n.label) return null;
   // Size from the box height, but never wider than the box (longest word) and never large relative to the figure.
   const longest = Math.max(...n.label.split(/\s+/).map((w) => w.length), 1);
-  let fs = clamp(Math.min(n.height * 0.42, n.width / (longest * 0.62)), 6, maxFs);
+  const natural = Math.min(n.height * 0.42, n.width / (longest * 0.62));
+  if (natural < 6.5 && n.label.length > 3 && n.outline !== 'text only') {
+    // Too small to hold its name readably (a small ball for a ligand): write the name just above the shape.
+    const ofs = clamp(maxFs * 0.55, 8, 12);
+    const rows = wrapLabel(n.label, Math.max(n.width * 4, ofs * 10), ofs);
+    // Kept inside the picture: shifted right or left if centring it over the shape would cut it off at an edge.
+    const half = (Math.max(...rows.map((r) => r.length)) * ofs * 0.58) / 2;
+    const cx = Math.min(Math.max(n.width / 2, half + 2 - n.x), sceneW - n.x - half - 2);
+    return (
+      <text x={cx} textAnchor="middle" fontSize={ofs} fontFamily="ui-sans-serif, system-ui, sans-serif" fontWeight={600}
+        fill="#0f172a" stroke="rgba(255,255,255,0.9)" strokeWidth={ofs * 0.22} paintOrder="stroke" style={{ pointerEvents: 'none' }}>
+        {rows.map((l, i) => <tspan key={i} x={cx} y={-3 - (rows.length - 1 - i) * ofs * 1.15}>{l}</tspan>)}
+      </text>
+    );
+  }
+  let fs = clamp(natural, 6, maxFs);
   let lines = wrapLabel(n.label, n.width, fs);
   while (lines.length * fs * 1.15 > n.height * 1.05 && fs > 6) { fs -= 0.5; lines = wrapLabel(n.label, n.width, fs); }
   const fill = colour(n.fill, '#ffffff');
@@ -284,15 +316,22 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
     onPointerUp: (e: RPointerEvent<SVGElement>) => {
       const p = finish(e);
       if (!p) return;
-      const to = hitTest(scene, p.x, p.y, true);
+      const to = endAt(p.x, p.y);
       if (to !== from) ui.onNewArrow(from, to, { x: p.x, y: p.y });
     },
   });
 
+  // In "+ Arrow" mode each cluster gets a small tab above its top-right corner: drag from it to start an arrow
+  // at the cluster, or drop on it to end one there. (Its shapes touch, so there is little else of it to grab.)
+  const tabs = ui.drawing && !ui.picking ? scene.groups.map((g) => ({ id: g.id, x: g.x + g.width - 46 * u, y: g.y - 15 * u, width: 46 * u, height: 13 * u })) : [];
+  const onTab = (x: number, y: number) => tabs.find((t) => x >= t.x && x <= t.x + t.width && y >= t.y && y <= t.y + t.height)?.id ?? null;
+  /** What is under a point, for dropping an arrow end: a cluster's tab, else the smallest shape, else a cluster. */
+  const endAt = (x: number, y: number) => onTab(x, y) ?? hitTest(scene, x, y, true);
   const dropTarget = drag && (drag.kind === 'badge' || drag.kind === 'end' || drag.kind === 'new')
-    ? (() => { const t = hitTest(scene, drag.x, drag.y, drag.kind !== 'badge'); return drag.kind === 'new' && t === drag.from ? null : t; })() : null;
+    ? (() => { const t = drag.kind === 'badge' ? hitTest(scene, drag.x, drag.y, false) : endAt(drag.x, drag.y); return drag.kind === 'new' && t === drag.from ? null : t; })() : null;
   const selArrow = ui.editable ? scene.arrows.find((a) => a.id === ui.selected) : undefined;
   const selNode = ui.editable && !ui.drawing && !ui.picking ? scene.nodes.find((n) => n.id === ui.selected) : undefined;
+  const selGroup = ui.editable && !ui.drawing && !ui.picking ? scene.groups.find((g) => g.id === ui.selected) : undefined;
 
   return (
     <g style={ui.picking ? { cursor: 'crosshair' } : undefined}>
@@ -305,7 +344,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
       ))}
       {scene.panels.map((p) => <rect key={p.id} x={p.x} y={p.y} width={p.width} height={p.height} fill="none" stroke="#cbd5e1" strokeDasharray="2 4" style={{ pointerEvents: 'none' }} />)}
       {scene.groups.map((g) => (
-        <g key={g.id} onMouseEnter={() => ui.onHover(g.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(g.id); }} style={{ cursor: 'pointer' }}>
+        <g key={g.id} opacity={ui.faded?.has(g.id) ? FADED : 1} onMouseEnter={() => ui.onHover(g.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(g.id); }} style={{ cursor: 'pointer' }}>
           {/* Only the outline is clickable, so the shapes inside stay reachable. */}
           <rect x={g.x} y={g.y} width={g.width} height={g.height} rx={8} fill="none" stroke="transparent" strokeWidth={10 * u} pointerEvents="stroke" />
           <rect x={g.x} y={g.y} width={g.width} height={g.height} rx={8} fill="none" stroke={ui.hot === g.id ? HL : '#64748b'} strokeOpacity={ui.hot === g.id ? 1 : 0.55}
@@ -318,7 +357,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
         const dash = a.line === 'dashed' ? '7 5' : a.line === 'dotted' ? '1.5 4' : a.line === 'mixed' ? '8 3 2 3' : undefined;
         const marker = a.head === 'arrow' ? 'url(#m-arrow)' : a.head === 'bar' ? 'url(#m-bar)' : a.head === 'other' ? 'url(#m-other)' : undefined;
         return (
-          <g key={a.id} onMouseEnter={() => ui.onHover(a.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(a.id); }} style={{ cursor: 'pointer' }}>
+          <g key={a.id} opacity={ui.faded?.has(a.id) ? FADED : 1} onMouseEnter={() => ui.onHover(a.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(a.id); }} style={{ cursor: 'pointer' }}>
             <path d={a.d} fill="none" stroke="transparent" strokeWidth={Math.max(14, 14 * u)} />
             <path d={a.d} fill="none" stroke={h ? HL : a.colour} strokeWidth={h ? sw * 2 : sw} strokeDasharray={dash} strokeLinecap="round"
               opacity={a.line === 'faint' && !h ? 0.45 : 1} markerEnd={marker} />
@@ -329,12 +368,13 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
           </g>
         );
       })}
-      {scene.nodes.map((n) => {
+      {/* Bigger shapes first, so a small shape drawn on a bigger one (a ligand on its receptor) stays on top. */}
+      {[...scene.nodes].sort((a, b) => b.width * b.height - a.width * a.height).map((n) => {
         const drawFrom = ui.drawing && !ui.picking;
         const movable = !drawFrom && ui.editable && !ui.picking && ui.selected === n.id;
         const off = drag?.kind === 'node' && drag.id === n.id ? drag : { dx: 0, dy: 0 };
         return (
-          <g key={n.id} transform={`translate(${n.x + off.dx},${n.y + off.dy})`} style={{ cursor: drawFrom ? 'crosshair' : movable ? 'move' : 'pointer' }}
+          <g key={n.id} opacity={ui.faded?.has(n.id) ? FADED : 1} transform={`translate(${n.x + off.dx},${n.y + off.dy})`} style={{ cursor: drawFrom ? 'crosshair' : movable ? 'move' : 'pointer' }}
             onMouseEnter={() => ui.onHover(n.id)} onMouseLeave={() => ui.onHover(null)}
             onClick={(e) => { e.stopPropagation(); if (!drawFrom) ui.onSelect(n.id); }}
             {...(drawFrom ? newArrowHandlers(n.id) : movable ? {
@@ -343,7 +383,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
               onPointerUp: (e: RPointerEvent<SVGElement>) => { const s = start.current; const p = finish(e); if (p && s) ui.onMoveNode(n.id, { x: n.x + p.x - s.px, y: n.y + p.y - s.py, width: n.width, height: n.height }); },
             } : {})}>
             <NodeShape n={n} hot={ui.hot === n.id} />
-            <NodeLabel n={n} maxFs={Math.max(9, scene.width / 55)} />
+            <NodeLabel n={n} maxFs={Math.max(9, scene.width / 55)} sceneW={scene.width} />
             {badgeLayout(n).map((b, i) => {
               const lifted = drag?.kind === 'badge' && drag.node === n.id && drag.index === i;
               const can = ui.editable && !ui.picking && !ui.drawing;
@@ -362,6 +402,19 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
       })}
 
       <Marks scene={scene} ui={ui} arrows="path" />
+      {tabs.map((t) => (
+        <g key={'tab-' + t.id} transform={`translate(${t.x},${t.y})`} style={{ cursor: 'crosshair' }} onClick={(e) => e.stopPropagation()}
+          onMouseEnter={() => ui.onHover(t.id)} onMouseLeave={() => ui.onHover(null)} {...newArrowHandlers(t.id)}>
+          <title>Drag from here to draw an arrow from the whole cluster, or drop an arrow here to end it at the cluster</title>
+          <rect width={t.width} height={t.height} rx={t.height / 2} fill={ui.hot === t.id ? HL : '#475569'} />
+          <text x={t.width / 2} y={t.height * 0.72} textAnchor="middle" fontSize={9 * u} fontWeight={700} fill="#ffffff" fontFamily="ui-sans-serif, system-ui" style={{ pointerEvents: 'none' }}>cluster</text>
+        </g>
+      ))}
+      {selGroup && [[selGroup.x + selGroup.width / 2, selGroup.y], [selGroup.x + selGroup.width, selGroup.y + selGroup.height / 2], [selGroup.x + selGroup.width / 2, selGroup.y + selGroup.height], [selGroup.x, selGroup.y + selGroup.height / 2]].map(([cx, cy], i) => (
+        <circle key={'gd' + i} cx={cx} cy={cy} r={5 * u} fill={SEL} stroke="#ffffff" strokeWidth={1.5 * u} style={{ cursor: 'crosshair' }} onClick={(e) => e.stopPropagation()} {...newArrowHandlers(selGroup.id)}>
+          <title>Drag from here to draw a new arrow from the whole cluster</title>
+        </circle>
+      ))}
       {dropTarget && (() => { const b = boxOf(scene, dropTarget)!; return <rect x={b.x - 3 * u} y={b.y - 3 * u} width={b.width + 6 * u} height={b.height + 6 * u} rx={5 * u} fill="rgba(37,99,235,0.12)" stroke={SEL} strokeWidth={3 * u} style={{ pointerEvents: 'none' }} />; })()}
       {drag?.kind === 'badge' && (() => {
         const n = scene.nodes.find((v) => v.id === drag.node);
@@ -402,7 +455,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
               onClick={(e) => e.stopPropagation()}
               onPointerDown={begin}
               onPointerMove={(e) => { const p = moving(e); if (p) setDrag({ kind: 'end', arrow: selArrow.id, end, x: p.x, y: p.y }); }}
-              onPointerUp={(e) => { const p = finish(e); if (!p) return; const to = hitTest(scene, p.x, p.y, true); if (to) ui.onArrowEnd(selArrow.id, end, to); else ui.onArrowEndFree(selArrow.id, end, { x: p.x, y: p.y }); }}>
+              onPointerUp={(e) => { const p = finish(e); if (!p) return; const to = endAt(p.x, p.y); if (to) ui.onArrowEnd(selArrow.id, end, to); else ui.onArrowEndFree(selArrow.id, end, { x: p.x, y: p.y }); }}>
               <title>{end === 'from' ? 'Start of the arrow: drag onto another shape' : 'End of the arrow: drag onto another shape'}</title>
             </circle>
           </g>

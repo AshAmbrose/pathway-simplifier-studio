@@ -7,14 +7,17 @@
  *  - The extraction is never altered. Each answer or fix adds to a list of changes saved with the run;
  *    what is drawn is the extraction with that list applied, and any change can be undone.
  *  - Everything else (question list, flags, run details) sits in one closed panel under the picture.
+ *  - This is the Check step. It shows and edits only the corrections (answers and fixes by hand). Simplification
+ *    changes in the same list are left as they are; they are shown in the simplification steps.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { saveReview, type RunRecord } from '../api.ts';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import type { RunRecord } from '../api.ts';
 import { applyEdits, dependents, optionState } from '../edit/applyEdits.ts';
-import { describeEdit, nameOf, regionName } from '../edit/describe.ts';
+import { inOrder, isAnswer, isCorrection, newKey } from '../edit/order.ts';
+import { cleanText, describeEdit, nameOf, regionName } from '../edit/describe.ts';
 import type { BoxPx } from '../render/edgePorts.ts';
 import { anchorOf, boxOf, nearest, regionAt, toScene, union } from '../render/toScene.ts';
-import { EMPTY_REVIEW, type AppliedEdit, type Edit, type Review } from '../types/extraction.ts';
+import type { AppliedEdit, Edit, Review } from '../types/extraction.ts';
 import { CheckPopover } from './CheckPopover.tsx';
 import { EditPopover, type PickRequest } from './EditPopover.tsx';
 import { PairedViewer, type ViewerHandle } from './PairedViewer.tsx';
@@ -63,24 +66,20 @@ function sampleColour(img: HTMLImageElement | null, b: BoxPx): string | null {
   }
 }
 
-let counter = 0;
-const newKey = () => `${Date.now().toString(36)}${(counter++).toString(36)}`;
 const src = (i: number) => `q${i}`;
-/**
- * The order changes are applied in: answers first (they are written against the model's own reading), in
- * question order, then fixes made by hand. So an answer still applies after a hand fix to the same item;
- * if the two disagree, the hand fix is the one reported as no longer applicable.
- */
-function inOrder<T extends { source: string }>(edits: T[]): T[] {
-  const n = (e: T) => Number(e.source.slice(1));
-  return [...edits.filter((e) => e.source !== 'manual').sort((a, b) => n(a) - n(b)), ...edits.filter((e) => e.source === 'manual')];
-}
 
-export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageUrl: string; onBack: () => void }) {
+export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top, notices }: {
+  run: RunRecord; imageUrl: string;
+  /** The whole review (corrections and simplification); held and saved by RunScreen. */
+  review: Review; setReview: Dispatch<SetStateAction<Review>>;
+  /** The header's start (back, title, stage switch) and any save notices, from RunScreen. */
+  top: ReactNode; notices: ReactNode;
+}) {
   const base = run.extraction;
   const W = run.image.width, H = run.image.height;
-  const [review, setReview] = useState<Review>(run.review ?? EMPTY_REVIEW);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  // Only the corrections are shown and changed here. Answers are applied first (they are written against the
+  // model's own reading), then fixes by hand; so if the two disagree, the hand fix is the one reported.
+  const review = useMemo(() => ({ ...fullReview, edits: fullReview.edits.filter((e) => isCorrection(e.source)) }), [fullReview]);
   const [asExtracted, setAsExtracted] = useState(false);
   const [active, setActive] = useState<Active>(null);
   const [hoverOpt, setHoverOpt] = useState<number | null>(null);
@@ -96,26 +95,6 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const [showChanges, setShowChanges] = useState(false);
   const [hot, setHot] = useState<string | null>(null);
   const viewer = useRef<ViewerHandle>(null);
-
-  // Save after every real change. Three guards so newer work is never overwritten:
-  //  - only a change list that differs from the last one saved (or loaded) is sent, so a re-run of this effect
-  //    (a code reload while developing, React re-running effects) never saves anything by itself;
-  //  - each save names the version it was built on, and the server refuses it if the run moved on since;
-  //  - when refused, the screen takes the newer copy and says so, instead of overwriting it.
-  const version = useRef(run.reviewVersion ?? 0);
-  const lastSaved = useRef(JSON.stringify(run.review ?? EMPTY_REVIEW));
-  const [reloaded, setReloaded] = useState(false);
-  useEffect(() => {
-    const json = JSON.stringify(review);
-    if (json === lastSaved.current) return;
-    saveReview(run.id, review, version.current).then((r) => {
-      if (r.kind === 'saved') { version.current = r.version; lastSaved.current = json; setSaveError(null); return; }
-      version.current = r.version;
-      lastSaved.current = JSON.stringify(r.review);
-      setReview(r.review);
-      setReloaded(true);
-    }).catch((e) => setSaveError((e as Error).message));
-  }, [review, run.id]);
 
   /** The change list as it would be with this answer given to question i (in place of any answer it has now). */
   const withAnswer = (edits: AppliedEdit[], i: number, answer: Edit[]): (Edit & { key?: string; source: string })[] =>
@@ -178,7 +157,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     if (a === undefined) return { state: 'open', answer: null };
     if (a === -1) return { state: 'byHand', answer: null };
     const o = c.options[a];
-    const answersOnly = applyEdits(base, inOrder(review.edits.filter((e) => e.source !== 'manual' && e.source !== src(i)))).extraction;
+    const answersOnly = applyEdits(base, inOrder(review.edits.filter((e) => isAnswer(e.source) && e.source !== src(i)))).extraction;
     return { state: o && optionState(answersOnly, o) === 'manual' ? 'needsHand' : 'done', answer: o?.label ?? null };
   }), [base, review]);
   const answered = (i: number) => statuses[i].state !== 'open';
@@ -266,12 +245,12 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
 
   const clearAnswer = (i: number) => setReview((r) => {
     const answers = { ...r.answers }; delete answers[String(i)];
-    return { edits: r.edits.filter((e) => e.source !== src(i)), answers };
+    return { ...r, edits: r.edits.filter((e) => e.source !== src(i)), answers };
   });
 
   /** "None of these: fix it myself": the one route that opens the fix form from a question. */
   const fixByHand = (i: number) => {
-    setReview((r) => ({ edits: r.edits.filter((e) => e.source !== src(i)), answers: { ...r.answers, [String(i)]: -1 } }));
+    setReview((r) => ({ ...r, edits: r.edits.filter((e) => e.source !== src(i)), answers: { ...r.answers, [String(i)]: -1 } }));
     setHoverOpt(null);
     const target = base.clarify[i].about.find((id) => boxOf(settledScene, id)) ?? null;
     setActive(target ? { kind: 'sel', id: target } : null);
@@ -281,8 +260,8 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const choose = (i: number, oi: number) => {
     const o = base.clarify[i].options[oi];
     const others = review.edits.filter((e) => e.source !== src(i));
-    const usable = optionState(applyEdits(base, inOrder(others.filter((e) => e.source !== 'manual'))).extraction, o) === 'ready';
-    setReview({ edits: usable ? [...others, ...o.edits.map(stamp(src(i)))] : others, answers: { ...review.answers, [String(i)]: oi } });
+    const usable = optionState(applyEdits(base, inOrder(others.filter((e) => isAnswer(e.source)))).extraction, o) === 'ready';
+    setReview((r) => ({ ...r, edits: [...r.edits.filter((e) => e.source !== src(i)), ...(usable ? o.edits.map(stamp(src(i))) : [])], answers: { ...r.answers, [String(i)]: oi } }));
     setHoverOpt(null);
     const n = base.clarify.length;
     let next: number | null = null;
@@ -292,7 +271,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
 
   /** Undoing a change also undoes the later changes that only exist because of it (an added shape's name, arrows, moves). */
   const undo = (e: AppliedEdit) => {
-    if (e.source !== 'manual') return clearAnswer(Number(e.source.slice(1)));
+    if (isAnswer(e.source)) return clearAnswer(Number(e.source.slice(1)));
     setReview((r) => {
       const gone = new Set([e.key, ...dependents(r.edits, e.key).map((d) => d.key)]);
       return { ...r, edits: r.edits.filter((v) => !gone.has(v.key)) };
@@ -346,14 +325,14 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const choices: Choice[] = useMemo(() => {
     if (!question || qi === null) return [];
     // Answers are judged against the model's reading plus the other answers, never against hand fixes.
-    const answersOnly = applyEdits(base, inOrder(review.edits.filter((e) => e.source !== 'manual' && e.source !== src(qi)))).extraction;
+    const answersOnly = applyEdits(base, inOrder(review.edits.filter((e) => isAnswer(e.source) && e.source !== src(qi)))).extraction;
     // "Shown now" is a fact about the screen: giving this answer would leave the picture exactly as it is.
     const now = JSON.stringify(settled.extraction);
     const same = question.options.map((o) => JSON.stringify(applyEdits(base, withAnswer(review.edits, qi, o.edits)).extraction) === now);
     const several = same.filter(Boolean).length > 1;
     const pos = (shape: string | null) => { const b = shape ? boxOf(baseScene, shape) : null; return b ? [Math.round(b.y / (H / 40)), b.x] : [Infinity, Infinity]; };
     return question.options
-      .map((o, index) => ({ index, label: o.label, byHand: optionState(answersOnly, o) === 'manual', shownNow: same[index] && !(several && o.asRead), at: pos(o.shape) }))
+      .map((o, index) => ({ index, label: cleanText(base, o.label), byHand: optionState(answersOnly, o) === 'manual', shownNow: same[index] && !(several && o.asRead), at: pos(o.shape) }))
       .sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question, qi, base, baseScene, review, settled, H]);
@@ -362,13 +341,13 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const anchorBox = check ? point(check) : question && qi !== null ? boxFor(involved(qi)) : selId ? boxOf(settledScene, selId) ?? boxOf(scene, selId) : null;
   const openCount = base.clarify.length - nAnswered;
   const chip = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800';
+  const nSteps = fullReview.edits.length - review.edits.length;
   const checkRegion = check ? regionAt(settledScene, check.x, check.y) : null;
 
   return (
     <div className="mx-auto max-w-[1800px] px-5 py-4">
       <header className="mb-3 flex flex-wrap items-center gap-3">
-        <button className={chip} onClick={onBack}>← Back</button>
-        <h1 className="text-lg font-semibold tracking-tight">{run.name}</h1>
+        {top}
         <span className="flex-1" />
         {!asExtracted && (
           <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white p-0.5 dark:border-slate-600 dark:bg-slate-900" role="group" aria-label="Add to the reconstruction">
@@ -396,29 +375,24 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
               <label className="flex items-center gap-2"><input type="checkbox" checked={asExtracted} onChange={(e) => { setAsExtracted(e.target.checked); close(); setPick(null); setCheck(null); }} /> Show as extracted (hide my changes)</label>
               {changeList.length === 0 ? <p className="mt-2 text-slate-500 dark:text-slate-400">No changes yet. The reconstruction is exactly what the model read.</p> : (
                 <ul className="mt-2 space-y-1.5">
-                  {changeList.map(({ edit, text, failed }) => { const deps = edit.source === 'manual' ? dependents(review.edits, edit.key).length : 0; return (
+                  {changeList.map(({ edit, text, failed }) => { const deps = !isAnswer(edit.source) ? dependents(review.edits, edit.key).length : 0; return (
                     <li key={edit.key} className="flex items-start justify-between gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700">
                       <div>
                         <div className={failed ? 'text-slate-400 line-through' : ''}>{text}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">{edit.source === 'manual' ? 'by hand' : `answer to question ${Number(edit.source.slice(1)) + 1}`}{failed ? ` · could not be applied: ${failed}` : ''}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">{!isAnswer(edit.source) ? 'by hand' : `answer to question ${Number(edit.source.slice(1)) + 1}`}{failed ? ` · could not be applied: ${failed}` : ''}</div>
                       </div>
-                      <button className="shrink-0 text-xs underline" title={deps ? `Also undoes ${deps} later change${deps === 1 ? '' : 's'} that depend on it` : edit.source === 'manual' ? 'Undo this change' : 'Clear this answer'} onClick={() => undo(edit)}>{deps ? `Undo (+${deps})` : 'Undo'}</button>
+                      <button className="shrink-0 text-xs underline" title={deps ? `Also undoes ${deps} later change${deps === 1 ? '' : 's'} that depend on it` : !isAnswer(edit.source) ? 'Undo this change' : 'Clear this answer'} onClick={() => undo(edit)}>{deps ? `Undo (+${deps})` : 'Undo'}</button>
                     </li>
                   ); })}
                 </ul>
               )}
-              {changeList.length > 1 && <button className="mt-2 text-xs underline text-red-700 dark:text-red-400" onClick={() => { setReview(EMPTY_REVIEW); close(); }}>Undo everything</button>}
+              {changeList.length > 1 && <button className="mt-2 text-xs underline text-red-700 dark:text-red-400" onClick={() => { setReview((r) => ({ ...r, edits: r.edits.filter((e) => !isCorrection(e.source)), answers: {} })); close(); }}>Undo every correction</button>}
+              {nSteps > 0 && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Plus {nSteps} simplification change{nSteps === 1 ? '' : 's'}, listed in the simplification steps.</p>}
             </div>
           )}
         </div>
       </header>
-      {saveError && <div className="mb-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">Your last change was not saved: {saveError}</div>}
-      {reloaded && (
-        <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-          <span>This run was changed somewhere else (another tab, or an older copy of this page). The newer changes are now shown, and your last change was not applied over them.</span>
-          <button className="ml-3 shrink-0 underline" onClick={() => setReloaded(false)}>OK</button>
-        </div>
-      )}
+      {notices}
 
       <PairedViewer
         ref={viewer}
@@ -443,7 +417,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
                       className={`rounded-md px-2 py-0.5 text-sm ${drawHead === h ? 'bg-white font-semibold text-blue-700' : 'bg-blue-500/40 hover:bg-blue-500/70'}`}>{label}</button>
                   ))}
                 </span>
-                Drag from the shape where it starts to where it ends (a shape, or an empty spot). Draw as many as you like.
+                Drag from the shape where it starts to where it ends (a shape, or an empty spot). For a whole cluster, use its grey “cluster” tab.
               </>}
             </span>
             <button className="underline" onClick={() => setMode(null)}>{mode === 'draw' ? 'Done (Esc)' : 'Cancel (Esc)'}</button>
@@ -475,7 +449,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
           );
           if (question && qi !== null) return (
             <Popover anchor={anchorBox} place={place} width={300}>
-              <QuestionPopover n={qi + 1} total={base.clarify.length} question={question.question} choices={choices} answered={answered(qi)}
+              <QuestionPopover n={qi + 1} total={base.clarify.length} question={cleanText(base, question.question)} choices={choices} answered={answered(qi)}
                 onHover={setHoverOpt} onChoose={(oi) => choose(qi, oi)} onManual={() => fixByHand(qi)} onClear={() => clearAnswer(qi)} onClose={close} />
             </Popover>
           );

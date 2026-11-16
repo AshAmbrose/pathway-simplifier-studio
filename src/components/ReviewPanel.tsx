@@ -4,7 +4,7 @@
  */
 import { useState, type ReactNode } from 'react';
 import type { RunRecord } from '../api.ts';
-import { nameOf } from '../edit/describe.ts';
+import { cleanText, nameOf } from '../edit/describe.ts';
 import type { Extraction } from '../types/extraction.ts';
 
 export interface QuestionStatus { state: 'open' | 'done' | 'byHand' | 'needsHand'; answer: string | null }
@@ -62,7 +62,7 @@ export function ReviewPanel({ run, base, statuses, problems, onOpenQuestion, onS
                   <li key={i}>
                     <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => onOpenQuestion(i)}>
                       <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${dot[s.state]}`}>{s.state === 'open' ? i + 1 : s.state === 'needsHand' ? '!' : '✓'}</span>
-                      <span className="min-w-0 flex-1">{c.question}</span>
+                      <span className="min-w-0 flex-1">{cleanText(base, c.question)}</span>
                       <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
                         {s.state === 'open' ? 'Not answered' : s.state === 'byHand' ? 'Fixed by hand' : s.state === 'needsHand' ? `${s.answer}: still needs a fix by hand` : s.answer}
                       </span>
@@ -93,7 +93,7 @@ export function ReviewPanel({ run, base, statuses, problems, onOpenQuestion, onS
                         <button className="w-full rounded px-1 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onMouseEnter={() => onHover(f.on)} onMouseLeave={() => onHover(null)} onClick={() => onShow(f.on)}>
                           <span className="font-medium">{nameOf(base, f.on)}</span>
                           {f.asWritten && f.suggestion && <span className="text-slate-500 dark:text-slate-400"> · written "{f.asWritten}", perhaps "{f.suggestion}"</span>}
-                          <span className="block text-xs text-slate-500 dark:text-slate-400">{f.basis}</span>
+                          <span className="block text-xs text-slate-500 dark:text-slate-400">{cleanText(base, f.basis)}</span>
                         </button>
                       </li>
                     ))}

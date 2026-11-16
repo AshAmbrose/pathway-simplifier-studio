@@ -39,6 +39,23 @@ export function parseBox(value: string | null): number[] | null {
   return n.length === 4 && n.every(Number.isFinite) && n[2] > 0 && n[3] > 0 ? n : null;
 }
 
+/**
+ * Takes shapes out of the extraction, with everything that can't stand without them: their arrows and contacts,
+ * their places in clusters, and any cluster left empty (and that cluster's arrows).
+ */
+function dropElements(x: Extraction, ids: string[], touched: Set<string>) {
+  const out = new Set(ids);
+  x.elements = x.elements.filter((v) => !out.has(v.id));
+  for (const g of x.groups) {
+    if (g.members.some((m) => out.has(m))) { g.members = g.members.filter((m) => !out.has(m)); touched.add(g.id); }
+  }
+  const emptied = new Set(x.groups.filter((g) => g.members.length === 0).map((g) => g.id));
+  x.groups = x.groups.filter((g) => !emptied.has(g.id));
+  const gone = (id: string) => out.has(id) || emptied.has(id);
+  x.arrows = x.arrows.filter((a) => !gone(a.from) && !gone(a.to));
+  x.contacts = x.contacts.filter((c) => !gone(c.a) && !gone(c.b));
+}
+
 /** Applies one change in place. Returns the reason it couldn't be applied, or null. */
 function applyOne(x: Extraction, e: Edit, key: string, touched: Set<string>): string | null {
   const el = (id: string | null) => x.elements.find((v) => v.id === id);
@@ -141,17 +158,17 @@ function applyOne(x: Extraction, e: Edit, key: string, touched: Set<string>): st
       return null;
     }
     case 'remove_element': {
-      const i = x.elements.findIndex((v) => v.id === e.id);
-      if (i < 0) return `shape "${e.id}" is not there`;
-      x.elements.splice(i, 1);
-      for (const g of x.groups) {
-        if (g.members.includes(e.id)) { g.members = g.members.filter((m) => m !== e.id); touched.add(g.id); }
-      }
-      const emptied = new Set(x.groups.filter((g) => g.members.length === 0).map((g) => g.id));
-      x.groups = x.groups.filter((g) => !emptied.has(g.id));
-      const gone = (id: string) => id === e.id || emptied.has(id);
-      x.arrows = x.arrows.filter((a) => !gone(a.from) && !gone(a.to));
-      x.contacts = x.contacts.filter((c) => !gone(c.a) && !gone(c.b));
+      if (!el(e.id)) return `shape "${e.id}" is not there`;
+      dropElements(x, [e.id], touched);
+      return null;
+    }
+    case 'hide': {
+      // Left out of the simplified figure. Same effect as removing, but kept apart so the change list can say why.
+      if (ar(e.id)) { x.arrows = x.arrows.filter((a) => a.id !== e.id); return null; }
+      const g = gr(e.id);
+      if (g) { dropElements(x, [...g.members], touched); x.groups = x.groups.filter((v) => v.id !== g.id); return null; }
+      if (!el(e.id)) return `"${e.id}" is not there`;
+      dropElements(x, [e.id], touched);
       return null;
     }
     case 'add_to_group':
