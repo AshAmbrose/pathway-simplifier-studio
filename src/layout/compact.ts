@@ -24,6 +24,7 @@ import { arrangeRows, FONT, median, sizeOf, UNIT_H } from './shapes.ts';
 import type { LayoutNotes, LayoutOptions, LayoutValue } from './value.ts';
 
 export const COMPACT_RULES = [
+  { key: 'spine', name: 'Main route straight down', why: 'When no shape gathers several routes, the longest route runs straight down the middle, with everything else packed beside it on the side it was drawn.' },
   { key: 'hub', name: 'Hub in the middle', why: 'When several routes lead into one shape, it goes in the middle, its routes spread evenly either side, and what follows it runs straight down.' },
   { key: 'sizes', name: 'One size per kind', why: 'Proteins, receptors, genes and outcomes each share one size.' },
   { key: 'fit', name: 'Names fit their shapes', why: 'A shape widens to fit its name, so text stays readable.' },
@@ -142,23 +143,67 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
     }
   }
 
-  // Columns inside each group, from the original: shapes whose widths overlap by at least 40% share a column (never
-  // two of one row). Wide shapes (headings, DNA) take none. The hub and what follows it share one column.
-  const tolX = (a: Box, b: Box) => overlapShare(a.x, a.x + a.width, b.x, b.x + b.width) >= 0.4;
-  let at = 0;
-  for (const group of order) {
-    const cols: Unit[][] = [];
-    const inGroup = group.filter((u) => !u.wide);
-    for (const u of [...inGroup].sort((a, b) => cx(a.o) - cx(b.o))) {
-      const col = cols[cols.length - 1];
-      if (col && tolX(col[0].o, u.o) && !col.some((v) => v.row === u.row)) col.push(u); else cols.push([u]);
+  // The main route (rule "spine"), when no hub: the longest chain of arrows going down (preferring one that reaches
+  // the nucleus), run straight down one column. Yu's route c is one chain; kept in its drawn columns it zigzags.
+  const notHeading = (u: Unit) => !u.ids.some((id) => byId.get(id)!.kind === 'heading');
+  const inNucleus = (u: Unit) => u.ids.some((id) => regionOf(byId.get(id)!)?.kind === 'nucleus');
+  const memo = new Map<Unit, Unit[]>();
+  const chainFrom = (u: Unit): Unit[] => {
+    if (memo.has(u)) return memo.get(u)!;
+    memo.set(u, [u]);
+    const nexts = [...new Set(forward.filter((l) => l.f === u).map((l) => l.t))].filter((v) => v.row > u.row && notHeading(v)).map(chainFrom);
+    const best = nexts.sort((p, q) => q.length - p.length || Number(q.some(inNucleus)) - Number(p.some(inNucleus)))[0] ?? [];
+    memo.set(u, [u, ...best]);
+    return memo.get(u)!;
+  };
+  let straight: Unit[] = [];
+  if (!hub && on('spine')) {
+    straight = units.filter(notHeading).map(chainFrom).sort((p, q) => q.length - p.length || Number(q.some(inNucleus)) - Number(p.some(inNucleus)))[0] ?? [];
+    if (straight.length < 3) straight = [];
+    if (straight.length) {
+      const end = straight[straight.length - 1];
+      fan = [...new Set(forward.filter((l) => l.f === end).map((l) => l.t))].filter((v) => v.row > end.row && notHeading(v));
     }
-    for (const c of cols) {
+  }
+  const line = new Set([...spine, ...straight]);
+
+  // Columns, from the original: shapes whose widths overlap by at least 40% share a column (never two of one row).
+  // Wide shapes (headings, DNA) take none.
+  const tolX = (a: Box, b: Box) => overlapShare(a.x, a.x + a.width, b.x, b.x + b.width) >= 0.4;
+  const columns = (us: Unit[]) => {
+    const cols: Unit[][] = [];
+    for (const u of us) { const col = cols[cols.length - 1]; if (col && tolX(col[0].o, u.o) && !col.some((v) => v.row === u.row)) col.push(u); else cols.push([u]); }
+    return cols;
+  };
+  if (straight.length) {
+    // The main route takes the middle column; every other shape keeps the side it was drawn on (left or right of
+    // the route at its height) and packs in beside it, nearest first, so nothing is left far out.
+    const refAt = (u: Unit) => {
+      const same = straight.find((v) => v.row === u.row);
+      const near = same ?? [...straight].sort((p, q) => Math.abs(p.row - u.row) - Math.abs(q.row - u.row))[0];
+      return cx(near.o);
+    };
+    const rest = units.filter((u) => !u.wide && !line.has(u) && !fan.includes(u));
+    const left = rest.filter((u) => cx(u.o) < refAt(u)).sort((p, q) => cx(q.o) - cx(p.o));
+    const right = rest.filter((u) => cx(u.o) >= refAt(u)).sort((p, q) => cx(p.o) - cx(q.o));
+    const half = Math.max(...straight.map((u) => u.w)) / 2;
+    for (const u of straight) u.x = -u.w / 2;
+    let cursor = -half - GAP_X;
+    for (const c of columns(left)) { const w = Math.max(...c.map((u) => u.w)); for (const u of c) u.x = cursor - w + (w - u.w) / 2; cursor -= w + GAP_X; }
+    cursor = half + GAP_X;
+    for (const c of columns(right)) { const w = Math.max(...c.map((u) => u.w)); for (const u of c) u.x = cursor + (w - u.w) / 2; cursor += w + GAP_X; }
+    if (fan.length) {
+      const total = fan.reduce((sum, u) => sum + u.w, 0) + (fan.length - 1) * 2 * GAP_X;
+      let fx = -total / 2;
+      for (const u of [...fan].sort((p, q) => cx(p.o) - cx(q.o))) { u.x = fx; fx += u.w + 2 * GAP_X; }
+    }
+  } else {
+    let at = 0;
+    for (const group of order) for (const c of columns(group.filter((u) => !u.wide).sort((p, q) => cx(p.o) - cx(q.o)))) {
       const w = Math.max(...c.map((u) => u.w));
       for (const u of c) u.x = at + (w - u.w) / 2;
       at += w + GAP_X;
     }
-    at += GAP_X;
   }
   // The hub goes to the middle of the routes that lead into it, with what follows it straight down below; where
   // that line splits (Guo's two outcomes), the shapes it leads to spread evenly below its end. Left-to-right order
@@ -170,13 +215,13 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
     if (fan.length >= 2) {
       const total = fan.reduce((sum, u) => sum + u.w, 0) + (fan.length - 1) * 2 * GAP_X;
       let fx = mid - total / 2;
-      for (const u of [...fan].sort((a, b) => cx(a.o) - cx(b.o))) { u.x = fx; fx += u.w + 2 * GAP_X; }
+      for (const u of [...fan].sort((p, q) => cx(p.o) - cx(q.o))) { u.x = fx; fx += u.w + 2 * GAP_X; }
     }
   }
 
   // Wide shapes: a heading over the shapes of its part, a DNA strand under the shapes it joins (or where it was).
   const placedCentre = (us: Unit[]) => { const xs = us.filter((u) => !u.wide); return xs.length ? (Math.min(...xs.map((u) => u.x)) + Math.max(...xs.map((u) => u.x + u.w))) / 2 : null; };
-  for (const u of units.filter((v) => v.wide && !spine.includes(v) && !fan.includes(v))) {
+  for (const u of units.filter((v) => v.wide && !line.has(v) && !fan.includes(v))) {
     const e = byId.get(u.ids[0])!;
     const mates = e.kind === 'heading'
       ? units.filter((v) => !v.wide && v.ids.some((id) => t.partOf.get(id) === `heading:${e.id}` || (e.panel && byId.get(id)!.panel === e.panel)))
@@ -258,7 +303,7 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
   const all = [...box.values(), ...regionBoxes.values(), ...panelBoxes.values()];
   const frame = grow(union(all), 24);
   const cw = Math.round(frame.width), ch = Math.round(frame.height);
-  const bows = on('bows') ? bendArrows(x, box, 1) : { bend: new Map<string, number>(), behind: [] };
+  const bows = on('bows') ? bendArrows(x, box, 1, (id) => t.unitOf.get(id) ?? []) : { bend: new Map<string, number>(), behind: [] };
   notes.behind.push(...bows.behind);
   const text = on('labels') ? placeArrowText(x, box, bows.bend, Math.min(Math.max(cw / 90, 8), 14) / 11, true) : { at: new Map(), clashes: [] };
   notes.textClashes.push(...text.clashes);

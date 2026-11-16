@@ -143,7 +143,7 @@ export function tidyFigure(x: Extraction, W: number, H: number, t: Tracing, opts
 
   // Arrows: bows around shapes, then text clear of them, at the size it will be drawn.
   const cw = Math.round(frame.width), ch = Math.round(frame.height);
-  const bows = on('bows') ? bendArrows(x, box, mh / 40) : { bend: new Map<string, number>(), behind: [] };
+  const bows = on('bows') ? bendArrows(x, box, mh / 40, (id) => t.unitOf.get(id) ?? []) : { bend: new Map<string, number>(), behind: [] };
   notes.behind.push(...bows.behind);
   const text = on('labels') ? placeArrowText(x, box, bows.bend, Math.min(Math.max(cw / 90, 8), 14) / 11, true) : { at: new Map(), clashes: [] };
   notes.textClashes.push(...text.clashes);

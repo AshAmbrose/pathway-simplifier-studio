@@ -23,7 +23,7 @@ A step bar across the top walks you through: **Check**, then **① Issues → �
    - **③ Repeats:** merge copies of a molecule drawn more than once in the same place and state. If the figure has panels, say first whether they are different conditions (copies stay apart) or one picture.
    - **④ Clusters:** open a cluster, tick the shapes that should become one, name it and press Collapse. Its members' names stay small under the new name.
    - **⑤ Layout:** three ways, chosen at the top of the step.
-     - **Compact** (the default) keeps the figure's arrangement but re-spaces it on an even grid. Compartments fit what's in them, and shapes of one kind share one size. Where several routes meet in one shape, that shape goes in the middle of them, with what follows it straight down.
+     - **Compact** (the default) keeps the figure's arrangement but re-spaces it on an even grid. Compartments fit what's in them, and shapes of one kind share one size. Where several routes meet in one shape, that shape goes in the middle of them, with what follows it straight down. Otherwise the longest route runs straight down the middle, with everything else packed beside it.
      - **Tidy as drawn** keeps the figure at its own size. It lines up shapes that are nearly in line, closes and crops the space earlier steps left, moves overlapping shapes clear, and bows arrows around shapes.
      - **Redraw as a cell** rebuilds it top to bottom: compartments as rows, panels as columns, and the route into the nucleus as a straight line.
      - A table shows before → after: arrows crossing, behind a shape, and pointing up.

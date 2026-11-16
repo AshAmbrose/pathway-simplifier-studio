@@ -48,9 +48,10 @@ export const drawnArrows = (x: Extraction, box: Map<string, Box>) => {
 };
 
 /** Bows: per arrow, how far it bows (0 = straight), and the arrows still behind a shape however they bow. */
-export function bendArrows(x: Extraction, box: Map<string, Box>, unit: number): { bend: Map<string, number>; behind: string[] } {
+export function bendArrows(x: Extraction, box: Map<string, Box>, unit: number, together?: (id: string) => string[]): { bend: Map<string, number>; behind: string[] } {
   const { endBox } = endBoxes(x, box);
-  const inside = (id: string) => new Set([id, ...(x.groups.find((g) => g.id === id)?.members ?? [])]);
+  // An arrow may run over the shapes at its ends, and over shapes drawn together with them (TAK1 on TAB2/3).
+  const inside = (id: string) => { const own = [id, ...(x.groups.find((g) => g.id === id)?.members ?? [])]; return new Set([...own, ...own.flatMap((m) => together?.(m) ?? [])]); };
   const shapes = [...box].filter(([id]) => x.elements.some((e) => e.id === id && e.kind !== 'heading'));
   const passesBehind = (a: Arrow, bend: number) => {
     const g = edgeGeometry(endBox(a.from)!, endBox(a.to)!, false, bend);

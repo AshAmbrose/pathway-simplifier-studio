@@ -129,6 +129,8 @@ Any step can be skipped, and Back always works, including back to Check. Each si
   - **Rows and columns from the original:** shapes whose heights overlap by at least 40% share a row, and likewise widths for columns. They are then laid out with even gaps, so empty space disappears, and a staggered drawing doesn't become a staircase.
   - **Hub in the middle** (your request): the first shape, going down, that nearly all routes lead into (NEMO in Guo) goes to the middle of those routes. What follows it runs straight down below it, and where that line splits (Guo's two outcomes), the shapes spread evenly below.
     - Left-to-right order is kept, so this adds no crossings. An earlier attempt that moved whole routes to either side created up to 10.
+  - **Main route straight down** (when there is no hub): the longest chain of arrows going down, preferring one that reaches the nucleus, runs straight down the middle. Every other shape keeps the side it was drawn on and packs in beside it, nearest first. On Yu kept to route c, the original's slightly offset columns had turned the one chain into a zigzag.
+  - **Bows ignore shapes drawn together with an arrow's ends:** an arrow to TAK1 may cross TAB2/3, which TAK1 is drawn on.
   - **One size per kind,** names fit their shapes.
   - **Compartments and panels fit what's in them:** the nucleus shrinks to its contents, a band spans its panel, and the membrane stays a thin band through its receptors. Empty ones are left out and listed.
   - **A DNA strand spans what its arrows join.**
