@@ -9,10 +9,8 @@ You check the copy beside the original and fix anything the model got wrong. The
 2. Copy `.env.example` to `.env.local`, then fill in `GEMINI_API_KEY` and `EXTRACT_MODEL`. The key stays on your computer and is never sent to the browser.
 3. `npm run dev`, then open the address it prints.
 
-Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures.
-
 ## Using it
-A step bar across the top walks you through: **Check**, then **① Issues → ② Focus → ③ Repeats → ④ Clusters → ⑤ Layout**.
+A step bar across the top walks you through: **Check**, then **① Issues → ② Focus → ③ Repeats → ④ Clusters → ⑤ Layout**. Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures.
 
 1. **Upload** a PNG, JPEG or WebP figure. One model call reads it, and the result is saved, so reopening it is free.
 2. **Answer the questions.** Numbered pins mark where the model wasn't sure. Pick an answer, and both views move on to the next question.

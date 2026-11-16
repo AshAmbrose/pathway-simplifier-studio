@@ -35,7 +35,7 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 - **Simplification can reuse the same mechanism:** opt-in, reversible, every difference listed.
 - **A change that no longer applies** (for example, its shape was removed) is reported, not silently dropped.
 
-## 3. Review on the canvas
+## 3. Review on the canvas (the Check step)
 **Decision:** the model's questions about ambiguous parts appear as numbered pins on both the original and the reconstruction. Opening one moves both views to the shapes concerned and offers the answers beside them.
 
 **Why answers are the main route:** choosing from a short list is quick and consistent. Fixing by hand (click a shape or arrow for a small form) is the other route, and dragging is only a shortcut for the same fixes.
@@ -65,10 +65,7 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 
 **Why:** a test run lost its changes. The page reloaded from an older copy during development and saved it over newer work. The same could happen with two tabs open on one run.
 
-## 6. Internal ids stay off the screen
-**Decision:** the model's ids for shapes and arrows ("e5", "a_tx_1") are never shown. The model sometimes writes them into its questions and reasons ("drawn twice (e19 and e26)"). A bracketed list of ids is dropped; any other id is replaced by the item's name as written.
-
-## 6b. How it's tested
+## 6. How it's tested
 - **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, and step 2's routes on the saved test figures (untick → left out → tick back → restored).
 - **Practice runs:** a copy of a real extraction with shapes taken out, and a checker that says whether each was put back with the right name, place and arrows.
 - **Browser tests at human pace,** only on throwaway copies. A test that clicks instantly once missed a real fault: a pop-up that moved while the pointer hovered.
@@ -112,3 +109,6 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **Every shape can be ticked without a box per item:** a route opens to show its shapes as small chips, one per set of shapes that travel together.
 
 **Next:** step 3 (merge plain repeats), step 4 (collapse chosen clusters), step 5 (reorganise the layout, reusing BioPathway Studio's Organize Layout, with locations taken only from the original figure). Suggestions from prior knowledge may come later, always labelled with their source.
+
+## 8. Internal ids stay off the screen
+**Decision:** the model's ids for shapes and arrows ("e5", "a_tx_1") are never shown. The model sometimes writes them into its questions and reasons ("drawn twice (e19 and e26)"). A bracketed list of ids is dropped; any other id is replaced by the item's name as written.

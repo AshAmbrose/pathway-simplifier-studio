@@ -42,7 +42,7 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 | `server/extract.ts`, `server/prompts/` | One model call per figure, with the current extraction prompt (v3). |
 | `server/runs.ts`, `server/plugin.ts` | Saving and loading runs, and the local API. Saves are versioned so newer work is never overwritten. |
 | `server/aiLedger.ts` | A log of every AI call and its cost, and the daily budget. |
-| `src/edit/` | Applying the list of changes to the extraction, the order they apply in (`order.ts`), and describing each in plain words. |
+| `src/edit/` | Applying the list of changes to the extraction, the order they apply in (`order.ts`), and describing each in plain words (`describe.ts`, which also keeps internal ids off the screen). |
 | `src/simplify/` | The simplification steps' logic, without any screen: step 1's issues, step 2's route tracing. |
 | `src/render/` | Turning an extraction into shapes and arrows at their original positions. |
 | `src/components/RunScreen.tsx` | One run: holds and saves the change list, and which step of the journey is open (Check, then ①–⑤). |
