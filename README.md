@@ -12,7 +12,7 @@ side by side, at the original positions. No other data sources, no editing yet.
 3. `npm run dev`, then open the address it prints.
 
 ## How it works
-- **`server/extract.ts`:** sends the image plus `server/prompts/extraction-v2.md` to Gemini once.
+- **`server/extract.ts`:** sends the image plus `server/prompts/extraction-v3.md` to Gemini once.
   - The output format is enforced by a JSON Schema built from `src/types/extraction.ts`.
   - The reply is validated, and references that don't resolve are listed, not hidden.
   - Every call is logged to `data/ai-ledger.jsonl`, with a daily budget (`DAILY_USD`).

@@ -1,5 +1,5 @@
 /**
- * One extraction: the uploaded image + prompt v2 → one Gemini call → validated Extraction.
+ * One extraction: the uploaded image + prompt v3 → one Gemini call → validated Extraction.
  * Independent of Vite, so a plain Node server can call it later (hosting) and scripts can call it directly.
  */
 import { readFileSync } from 'node:fs';
@@ -8,8 +8,8 @@ import { ExtractionSchema, extractionJsonSchema, referenceProblems, type Extract
 import { optionProblems } from '../src/edit/applyEdits.ts';
 import { recordCall } from './aiLedger.ts';
 
-export const PROMPT_VERSION = 'v2';
-const PROMPT = readFileSync(new URL('./prompts/extraction-v2.md', import.meta.url), 'utf8');
+export const PROMPT_VERSION = 'v3';
+const PROMPT = readFileSync(new URL('./prompts/extraction-v3.md', import.meta.url), 'utf8');
 
 /**
  * USD per million tokens. Filled in once the model id and its price are confirmed; an unknown model is
@@ -57,7 +57,7 @@ export async function extractFigure(opts: { apiKey: string; model: string; mimeT
           responseMimeType: 'application/json',
           responseJsonSchema: extractionJsonSchema(),
           temperature: 0,
-          abortSignal: AbortSignal.timeout(180_000),
+          abortSignal: AbortSignal.timeout(300_000),
         },
       });
       break;
@@ -67,7 +67,7 @@ export async function extractFigure(opts: { apiKey: string; model: string; mimeT
         await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
         continue;
       }
-      if (/abort|timeout/i.test(msg)) throw new ExtractError('The model took longer than 3 minutes. Try again, or a smaller image.', 504);
+      if (/abort|timeout/i.test(msg)) throw new ExtractError('The model took longer than 5 minutes. Try again, or a smaller image.', 504);
       if (/"code":\s*402|prepayment credits/i.test(msg)) throw new ExtractError('The Gemini account is out of prepaid credit.', 402);
       throw new ExtractError(`The model call failed: ${msg.slice(0, 300)}`, 502);
     }

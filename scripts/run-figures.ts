@@ -1,13 +1,13 @@
 /**
- * PAID: runs prompt v2 on the six test figures through the same code the app uses, and saves each result
- * where local/tools/score_runs.py can score it against the answer keys (as model "Hydrogen4-v2").
+ * PAID: runs the current prompt on the test figures through the same code the app uses, and saves each result
+ * where local/tools/score_runs.py can score it against the answer keys (as model "Hydrogen4-<prompt version>").
  *
  *   node scripts/run-figures.ts --yes [F1 F2 …]
  *
  * Refuses to run without --yes. Every call is logged to data/ai-ledger.jsonl and counts against DAILY_USD.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { extractFigure } from '../server/extract.ts';
+import { extractFigure, PROMPT_VERSION } from '../server/extract.ts';
 import { localDay, spentOn } from '../server/aiLedger.ts';
 
 const FIGS: Record<string, [string, string]> = {
@@ -26,7 +26,8 @@ if (!args.includes('--yes')) { console.error('This makes paid model calls. Re-ru
 const pick = args.filter((a) => /^F[1-6]$/.test(a));
 const e = env();
 const model = e.EXTRACT_MODEL ?? '', cap = Number(e.DAILY_USD ?? 5) || 5;
-const out = new URL('../local/extraction-tests/runs/Hydrogen4-v2/', import.meta.url);
+const NAME = `Hydrogen4-${PROMPT_VERSION}`;
+const out = new URL(`../local/extraction-tests/runs/${NAME}/`, import.meta.url);
 mkdirSync(out, { recursive: true });
 
 for (const fig of pick.length ? pick : Object.keys(FIGS)) {
@@ -36,8 +37,8 @@ for (const fig of pick.length ? pick : Object.keys(FIGS)) {
   try {
     const r = await extractFigure({ apiKey: e.GEMINI_API_KEY ?? '', model, mimeType, dataBase64: data, route: 'run-figures' });
     // Same shape the scorer reads; `unsure` carries the clarification questions so they reach the review.
-    const rec = { model: 'Hydrogen4-v2', figure: fig, ...r.extraction, unsure: r.extraction.clarify.map((c) => c.question), _run: { model: r.model, seconds: r.seconds, usage: r.usage, costUsd: r.costUsd, problems: r.problems } };
-    writeFileSync(new URL(`Hydrogen4-v2_f${fig.slice(1)}.json`, out), JSON.stringify(rec, null, 1));
+    const rec = { model: NAME, figure: fig, ...r.extraction, unsure: r.extraction.clarify.map((c) => c.question), _run: { model: r.model, seconds: r.seconds, usage: r.usage, costUsd: r.costUsd, problems: r.problems } };
+    writeFileSync(new URL(`${NAME}_f${fig.slice(1)}.json`, out), JSON.stringify(rec, null, 1));
     console.log(`${fig}: ${r.extraction.elements.length} elements, ${r.extraction.arrows.length} arrows, ${r.seconds.toFixed(1)}s, $${r.costUsd.toFixed(4)}${r.priceKnown ? '' : ' (price not set)'}${r.problems.length ? `, ${r.problems.length} reference problem(s)` : ''}`);
   } catch (err) {
     console.error(`${fig}: ${(err as Error).message}`);
