@@ -28,14 +28,17 @@ export interface ViewerHandle {
 
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 
-export function PairedViewer({ ref, width, height, left, right, leftTitle, rightTitle, overlay, banner, onBackgroundClick }: {
+export function PairedViewer({ ref, width, height, left, right, leftTitle, rightTitle, overlay, banner, hint, onBackgroundClick }: {
   ref?: Ref<ViewerHandle>;
   width: number; height: number;
   left: (unit: number) => ReactNode; right: (unit: number) => ReactNode;
   leftTitle: string; rightTitle: string;
   overlay?: (p: Placement) => ReactNode;
   banner?: ReactNode;
-  onBackgroundClick?: () => void;
+  /** The name of whatever is under the pointer; shown in the one line under the views in place of the help text. */
+  hint?: string | null;
+  /** A click on the picture that hit no shape, with where it landed in picture coordinates. */
+  onBackgroundClick?: (at: { x: number; y: number }) => void;
 }) {
   const full: View = { x: 0, y: 0, w: width, h: height };
   const [view, setView] = useState<View>(full);
@@ -112,13 +115,13 @@ export function PairedViewer({ ref, width, height, left, right, leftTitle, right
 
   const pane_ = (i: number, content: ReactNode, title: string) => (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{title}</div>
+      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{title}</div>
       <div className="relative">
         <svg
           ref={(el) => { svgs.current[i] = el; }}
           viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
           preserveAspectRatio="xMidYMid meet"
-          className="block h-[66vh] w-full cursor-grab touch-none select-none rounded-lg border border-slate-200 bg-white active:cursor-grabbing dark:border-slate-700"
+          className="block h-[70vh] w-full cursor-grab touch-none select-none rounded-xl border border-slate-200 bg-white shadow-sm active:cursor-grabbing dark:border-slate-700"
           onPointerDown={(e) => {
             if (e.button !== 0) return;
             cancelAnimationFrame(anim.current);
@@ -137,12 +140,15 @@ export function PairedViewer({ ref, width, height, left, right, leftTitle, right
           onPointerLeave={() => { drag.current = null; }}
           // A pan must not also count as a click on whatever was under the pointer.
           onClickCapture={(e) => { if (moved.current) { e.stopPropagation(); moved.current = false; } }}
-          onClick={() => onBackgroundClick?.()}
+          onClick={(e) => {
+            const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(e.currentTarget.getScreenCTM()!.inverse());
+            onBackgroundClick?.({ x: p.x, y: p.y });
+          }}
           onDoubleClick={() => tweenTo(full)}
         >
           {content}
         </svg>
-        {i === 1 && overlay && <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">{overlay(placement)}</div>}
+        {i === 1 && overlay && <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">{overlay(placement)}</div>}
       </div>
     </div>
   );
@@ -154,9 +160,10 @@ export function PairedViewer({ ref, width, height, left, right, leftTitle, right
         {pane_(0, left(unit), leftTitle)}
         {pane_(1, right(unit), rightTitle)}
       </div>
-      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-        Scroll to zoom, drag to pan (both views move together), double-click to reset. Click a shape or arrow to fix it.
-        <button className="ml-2 underline" onClick={() => tweenTo(full)}>Reset view</button>
+      <div className="mt-1.5 flex h-5 items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+        {hint ? <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{hint}</span>
+          : <span className="truncate">Scroll to zoom · drag to pan · click a shape or arrow to fix it</span>}
+        <button className="shrink-0 underline hover:text-slate-800 dark:hover:text-slate-200" onClick={() => tweenTo(full)}>Reset view</button>
       </div>
     </div>
   );

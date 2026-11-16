@@ -18,6 +18,8 @@ export interface SceneArrow {
   /** Where the line leaves its start shape and meets its end shape. */
   x1: number; y1: number; x2: number; y2: number;
   head: string; line: string; colour: string; text: string | null; meaning: string;
+  /** This end is not on a shape: it sits in open space or on a compartment (a user's change). */
+  freeFrom: boolean; freeTo: boolean;
 }
 export interface SceneText extends BoxPx { id: string; text: string }
 export interface Scene {
@@ -26,12 +28,13 @@ export interface Scene {
   skipped: string[];
 }
 
-const HEX = /^#[0-9a-f]{3}([0-9a-f]{3})?$/i;
+// The leading # is optional: models sometimes leave it off.
+const HEX = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i;
 const NAMED: Record<string, string> = { black: '#1e293b', red: '#c0392b', blue: '#2563eb', green: '#15803d', grey: '#94a3b8', gray: '#94a3b8', purple: '#7e22ce', orange: '#ea580c', pink: '#db2777' };
 export function colour(c: string | null | undefined, fallback: string): string {
   if (!c) return fallback;
   const t = c.trim().toLowerCase();
-  if (HEX.test(t)) return t;
+  if (HEX.test(t)) return t.startsWith('#') ? t : '#' + t;
   for (const [k, v] of Object.entries(NAMED)) if (t.includes(k)) return v;
   return fallback;
 }
@@ -66,11 +69,14 @@ export function toScene(x: Extraction, width: number, height: number): Scene {
   for (const g of groups) byId.set(g.id, g);
   const arrows: SceneArrow[] = [];
   for (const a of x.arrows) {
-    const s = byId.get(a.from), t = byId.get(a.to);
+    // An end in open space is a point; everything else is the box of its shape or group.
+    const at = (p: number[] | null | undefined): BoxPx | undefined => (p ? { x: (p[0] / 100) * width, y: (p[1] / 100) * height, width: 0, height: 0 } : undefined);
+    const freeFrom = !!a.ends?.from, freeTo = !!a.ends?.to;
+    const s = freeFrom ? at(a.ends!.from) : byId.get(a.from), t = freeTo ? at(a.ends!.to) : byId.get(a.to);
     if (!s || !t) { skipped.push(`arrow ${a.id}: ${!s ? a.from : a.to} could not be placed`); continue; }
     const geo = edgeGeometry(s, t, a.from === a.to);
     arrows.push({ id: a.id, from: a.from, to: a.to, d: geo.d, midX: geo.midX, midY: geo.midY, x1: geo.p1.x, y1: geo.p1.y, x2: geo.p2.x, y2: geo.p2.y, head: a.head, line: a.line,
-      colour: colour(a.colour, '#1e293b'), text: a.text, meaning: a.meaning });
+      colour: colour(a.colour, '#1e293b'), text: a.text, meaning: a.meaning, freeFrom, freeTo });
   }
   return {
     width, height,
@@ -120,8 +126,8 @@ export function boxOf(scene: Scene, id: string): BoxPx | null {
   if (n) return { x: n.x, y: n.y, width: n.width, height: n.height };
   const a = scene.arrows.find((v) => v.id === id);
   if (!a) return null;
-  const ends = [boxOf(scene, a.from), boxOf(scene, a.to)].filter((b): b is BoxPx => !!b);
-  return ends.length ? union(ends, 0) : null;
+  const ends = [a.freeFrom ? null : boxOf(scene, a.from), a.freeTo ? null : boxOf(scene, a.to)].filter((b): b is BoxPx => !!b);
+  return union([...ends, { x: a.x1, y: a.y1, width: 0, height: 0 }, { x: a.x2, y: a.y2, width: 0, height: 0 }], 0);
 }
 
 /** Where a pin for this item sits: a shape's bottom-right corner (badges sit along the top), or an arrow's midpoint. */
@@ -159,4 +165,10 @@ export function hitTest(scene: Scene, x: number, y: number, groups: boolean): st
   const n = scene.nodes.filter(inside).sort((a, b) => area(a) - area(b))[0];
   if (n) return n.id;
   return groups ? scene.groups.filter(inside).sort((a, b) => area(a) - area(b))[0]?.id ?? null : null;
+}
+
+/** The smallest compartment containing a point, if any. */
+export function regionAt(scene: Scene, x: number, y: number): SceneRegion | null {
+  const inside = scene.regions.filter((r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height);
+  return inside.sort((a, b) => a.width * a.height - b.width * b.height)[0] ?? null;
 }

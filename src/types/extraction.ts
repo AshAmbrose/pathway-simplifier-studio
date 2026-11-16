@@ -38,6 +38,7 @@ export const CONFIDENCE = ['high', 'medium', 'low'] as const;
  *   remove_badge      id = shape, value = badge text
  *   set_arrow_from    id = arrow, to = shape or group it should start at
  *   set_arrow_to      id = arrow, to = shape or group it should end at
+ *                     (by hand only: value = "x,y" in percent puts that end in open space; to = the compartment there, or null)
  *   add_arrow         id = start shape or group, to = end shape or group, value = head (arrow | bar | none)
  *   remove_arrow      id = arrow
  *   set_arrow_head    id = arrow, value = arrow | bar | none | other
@@ -118,6 +119,11 @@ export const ExtractionSchema = z.object({
     text: nullable(z.string()).describe('text, step number or "?" written on or beside the arrow'),
     meaning: z.enum(MEANINGS),
     notes: nullable(z.string()),
+    /**
+     * Set only by a user's change, never by the model: where an end sits when it is in open space or on a
+     * compartment instead of a shape, as [x, y] in percent. `from`/`to` then hold the compartment's id, or "open".
+     */
+    ends: z.object({ from: nullable(z.array(z.number()).length(2)), to: nullable(z.array(z.number()).length(2)) }).optional(),
   })),
   flags: z.array(z.object({
     type: z.enum(FLAG_TYPES),
@@ -149,8 +155,10 @@ export type Option = Question['options'][number];
 
 /** JSON Schema for Gemini's responseJsonSchema. */
 export function extractionJsonSchema(): unknown {
-  const s = z.toJSONSchema(ExtractionSchema, { io: 'input' }) as Record<string, unknown>;
+  const s = z.toJSONSchema(ExtractionSchema, { io: 'input' }) as Record<string, any>;
   delete s.$schema;
+  // Open-space arrow ends are a user's change; the model is never asked for them.
+  delete s.properties?.arrows?.items?.properties?.ends;
   return s;
 }
 
@@ -177,8 +185,15 @@ export function referenceProblems(x: Extraction): string[] {
   }
   for (const g of x.groups) for (const m of g.members) if (!el.has(m)) out.push(`group ${g.id}: member "${m}" is not an element`);
   for (const c of x.contacts) for (const id of [c.a, c.b]) if (!node(id)) out.push(`contact ${c.a}–${c.b}: unknown id "${id}"`);
-  for (const a of x.arrows) for (const id of [a.from, a.to]) if (!node(id)) out.push(`arrow ${a.id}: unknown end "${id}"`);
+  for (const a of x.arrows) {
+    if (!node(a.from) && !a.ends?.from) out.push(`arrow ${a.id}: unknown end "${a.from}"`);
+    if (!node(a.to) && !a.ends?.to) out.push(`arrow ${a.id}: unknown end "${a.to}"`);
+  }
   for (const f of x.flags) if (!node(f.on) && !ar.has(f.on)) out.push(`flag "${f.type}": unknown target "${f.on}"`);
+  // Appearance the render depends on: say so when it is missing, instead of quietly drawing everything grey.
+  const filled = x.elements.filter((e) => e.outline !== 'text only');
+  const noFill = filled.filter((e) => !e.fill).length;
+  if (filled.length >= 4 && noFill > filled.length / 2) out.push(`${noFill} of ${filled.length} shapes came back without a fill colour, so they are drawn in a default grey`);
   x.clarify.forEach((c, i) => {
     for (const id of c.about) if (!node(id) && !ar.has(id)) out.push(`question ${i + 1}: unknown id "${id}"`);
     for (const o of c.options) if (o.shape && !node(o.shape)) out.push(`question ${i + 1}, answer "${o.label}": unknown shape "${o.shape}"`);

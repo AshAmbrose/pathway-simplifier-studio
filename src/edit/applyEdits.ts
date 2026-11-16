@@ -23,6 +23,16 @@ export function parseBadge(text: string): { type: string; count: number | null }
 export const badgeText = (m: { type: string; site: string | null; count: number | null }) =>
   m.type + (m.site ? ` ${m.site}` : '') + (m.count && m.count > 1 ? `×${m.count}` : '');
 
+/** "12.5,40" → [12.5, 40]: a point in percent of the image. */
+export function parsePoint(value: string | null): number[] | null {
+  if (!value) return null;
+  const n = value.split(',').map(Number);
+  return n.length === 2 && n.every(Number.isFinite) ? n : null;
+}
+
+/** The id an arrow end holds when it sits in open space outside every compartment. */
+export const OPEN = 'open';
+
 export function parseBox(value: string | null): number[] | null {
   const n = (value ?? '').split(',').map(Number);
   return n.length === 4 && n.every(Number.isFinite) && n[2] > 0 && n[3] > 0 ? n : null;
@@ -72,8 +82,18 @@ function applyOne(x: Extraction, e: Edit, key: string, touched: Set<string>): st
     case 'set_arrow_to': {
       const a = ar(e.id);
       if (!a) return `arrow "${e.id}" is not there`;
-      if (!isNode(e.to)) return `shape "${e.to}" is not there`;
-      if (e.op === 'set_arrow_from') a.from = e.to!; else a.to = e.to!;
+      const which = e.op === 'set_arrow_from' ? 'from' : 'to';
+      const point = parsePoint(e.value);
+      if (point) {
+        // An end in open space or on a compartment: keep the point, and the compartment it falls in if any.
+        if (e.to && !x.regions.some((r) => r.id === e.to)) return `compartment "${e.to}" is not there`;
+        a[which] = e.to ?? OPEN;
+        a.ends = { from: a.ends?.from ?? null, to: a.ends?.to ?? null, [which]: point };
+      } else {
+        if (!isNode(e.to)) return `shape "${e.to}" is not there`;
+        a[which] = e.to!;
+        if (a.ends) a.ends = { ...a.ends, [which]: null };
+      }
       touched.add(a.id);
       return null;
     }

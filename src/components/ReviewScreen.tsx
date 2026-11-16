@@ -2,25 +2,30 @@
  * Side by side: the uploaded image and the reconstruction, aligned, with the review on the canvas.
  *
  *  - The model's questions are numbered pins on both views. Opening one moves both views to the shapes it
- *    concerns and offers the answers beside them. Answers are the main route; fixing by hand is the other.
+ *    concerns and offers the answers beside them. Choosing an answer always moves on to the next question.
  *  - Clicking any shape or arrow opens a small form to fix it. Dragging is a shortcut for the same fixes.
  *  - The extraction is never altered. Each answer or fix adds to a list of changes saved with the run;
  *    what is drawn is the extraction with that list applied, and any change can be undone.
+ *  - Everything else (question list, flags, run details) sits in one closed panel under the picture.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveReview, type RunRecord } from '../api.ts';
 import { applyEdits, optionState } from '../edit/applyEdits.ts';
-import { describeEdit, nameOf } from '../edit/describe.ts';
+import { describeEdit, nameOf, regionName } from '../edit/describe.ts';
 import type { BoxPx } from '../render/edgePorts.ts';
-import { anchorOf, boxOf, toScene, union } from '../render/toScene.ts';
+import { anchorOf, boxOf, nearest, regionAt, toScene, union } from '../render/toScene.ts';
 import { EMPTY_REVIEW, type AppliedEdit, type Edit, type Review } from '../types/extraction.ts';
+import { CheckPopover } from './CheckPopover.tsx';
 import { EditPopover, type PickRequest } from './EditPopover.tsx';
 import { PairedViewer, type ViewerHandle } from './PairedViewer.tsx';
 import { Popover } from './Popover.tsx';
 import { QuestionPopover, type Choice } from './QuestionPopover.tsx';
+import { ReviewPanel, type QuestionStatus } from './ReviewPanel.tsx';
 import { ImageLayer, MarkerDefs, SceneSvg, type Mark, type Pin, type SceneUi } from './SceneSvg.tsx';
 
 type Active = { kind: 'q'; i: number } | { kind: 'sel'; id: string } | null;
+/** An arrow end waiting for the "there is no shape here" check, in picture coordinates. */
+interface FreeEnd { arrow: string; end: 'from' | 'to'; x: number; y: number }
 
 let counter = 0;
 const newKey = () => `${Date.now().toString(36)}${(counter++).toString(36)}`;
@@ -44,6 +49,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const [active, setActive] = useState<Active>(null);
   const [hoverOpt, setHoverOpt] = useState<number | null>(null);
   const [pick, setPick] = useState<PickRequest | null>(null);
+  const [check, setCheck] = useState<FreeEnd | null>(null);
   const [showChanges, setShowChanges] = useState(false);
   const [hot, setHot] = useState<string | null>(null);
   const viewer = useRef<ViewerHandle>(null);
@@ -62,12 +68,25 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   const qi = active?.kind === 'q' ? active.i : null;
   const question = qi !== null ? base.clarify[qi] : null;
 
-  // What is drawn: the extraction plus the changes; while an answer is hovered, a preview of that answer.
+  // The picture as it stands: the extraction plus every answer and fix. Pop-ups are placed against this one,
+  // so a preview can never move a pop-up out from under the pointer.
+  const settled = useMemo(() => applyEdits(base, inOrder(review.edits)), [base, review.edits]);
+  const settledScene = useMemo(() => toScene(settled.extraction, W, H), [settled, W, H]);
+
+  /** The change that puts an arrow's end at a point with no shape: in the compartment there, or in open space. */
+  const freeEdit = (c: FreeEnd): Edit => ({
+    op: c.end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: c.arrow, to: regionAt(settledScene, c.x, c.y)?.id ?? null,
+    value: `${Math.round((c.x / W) * 1e4) / 100},${Math.round((c.y / H) * 1e4) / 100}`,
+  });
+
+  // What is drawn: the model's own reading, or the settled picture, or a preview of a hovered answer / a pending check.
   const editsNow = useMemo<(Edit & { key?: string })[]>(() => {
     if (asExtracted) return [];
+    if (check) return [...inOrder(review.edits), freeEdit(check)];
     if (question && qi !== null && hoverOpt !== null) return withAnswer(review.edits, qi, question.options[hoverOpt].edits);
     return inOrder(review.edits);
-  }, [asExtracted, question, qi, hoverOpt, review.edits]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asExtracted, check, question, qi, hoverOpt, review.edits]);
   const applied = useMemo(() => applyEdits(base, editsNow), [base, editsNow]);
   const x = applied.extraction;
   const scene = useMemo(() => toScene(x, W, H), [x, W, H]);
@@ -87,8 +106,17 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     });
   }, [base, review.edits]);
 
-  const answered = (i: number) => String(i) in review.answers;
-  const nAnswered = base.clarify.filter((_, i) => answered(i)).length;
+  // Where each question stands. An answer the model gave no usable changes for is recorded, but still needs a fix by hand.
+  const statuses: QuestionStatus[] = useMemo(() => base.clarify.map((c, i) => {
+    const a = review.answers[String(i)];
+    if (a === undefined) return { state: 'open', answer: null };
+    if (a === -1) return { state: 'byHand', answer: null };
+    const o = c.options[a];
+    const answersOnly = applyEdits(base, inOrder(review.edits.filter((e) => e.source !== 'manual' && e.source !== src(i)))).extraction;
+    return { state: o && optionState(answersOnly, o) === 'manual' ? 'needsHand' : 'done', answer: o?.label ?? null };
+  }), [base, review]);
+  const answered = (i: number) => statuses[i].state !== 'open';
+  const nAnswered = statuses.filter((s) => s.state !== 'open').length;
   const nextOpen = (after: number) => {
     const n = base.clarify.length;
     for (let k = 1; k <= n; k++) { const j = (after + k) % n; if (!answered(j)) return j; }
@@ -100,8 +128,8 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     const c = base.clarify[i];
     return [...new Set([...c.about, ...c.options.map((o) => o.shape).filter((s): s is string => !!s)])];
   };
-  const boxFor = (ids: string[], s = scene): BoxPx | null => {
-    const boxes = ids.map((id) => boxOf(s, id)).filter((b): b is BoxPx => !!b);
+  const boxFor = (ids: string[]): BoxPx | null => {
+    const boxes = ids.map((id) => boxOf(settledScene, id)).filter((b): b is BoxPx => !!b);
     return boxes.length ? union(boxes, 0) : null;
   };
 
@@ -115,7 +143,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
       return;
     }
     // A selected shape is brought closer only if it is small on screen.
-    const b = boxOf(scene, active.id);
+    const b = boxOf(settledScene, active.id);
     if (b && Math.max(b.width, b.height) / viewer.current.unit() < 90) viewer.current.focus(b, { fill: 0.24, anchorX: 0.33 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey]);
@@ -123,13 +151,13 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (pick) setPick(null); else if (showChanges) setShowChanges(false); else setActive(null);
+      if (check) setCheck(null); else if (pick) setPick(null); else if (showChanges) setShowChanges(false); else setActive(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [pick, showChanges]);
+  }, [pick, showChanges, check]);
 
-  const openQuestion = (i: number) => { setPick(null); setHoverOpt(null); setShowChanges(false); setActive({ kind: 'q', i }); };
+  const openQuestion = (i: number) => { setPick(null); setCheck(null); setHoverOpt(null); setShowChanges(false); setActive({ kind: 'q', i }); };
   const close = () => { setActive(null); setHoverOpt(null); };
 
   const stamp = (source: string) => (e: Edit): AppliedEdit => ({ ...e, key: newKey(), source, at: new Date().toISOString() });
@@ -146,18 +174,20 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     return { edits: r.edits.filter((e) => e.source !== src(i)), answers };
   });
 
-  const fixByHand = (i: number, shape: string | null) => {
+  /** "None of these: fix it myself": the one route that opens the fix form from a question. */
+  const fixByHand = (i: number) => {
     setReview((r) => ({ edits: r.edits.filter((e) => e.source !== src(i)), answers: { ...r.answers, [String(i)]: -1 } }));
     setHoverOpt(null);
-    const target = shape ?? base.clarify[i].about.find((id) => boxOf(scene, id)) ?? null;
+    const target = base.clarify[i].about.find((id) => boxOf(settledScene, id)) ?? null;
     setActive(target ? { kind: 'sel', id: target } : null);
   };
 
+  /** Choosing an answer records it, applies its changes if it has any, and always moves on to the next question. */
   const choose = (i: number, oi: number) => {
-    const c = base.clarify[i], o = c.options[oi];
+    const o = base.clarify[i].options[oi];
     const others = review.edits.filter((e) => e.source !== src(i));
-    if (optionState(applyEdits(base, inOrder(others.filter((e) => e.source !== 'manual'))).extraction, o) === 'manual') return fixByHand(i, o.shape);
-    setReview({ edits: [...others, ...o.edits.map(stamp(src(i)))], answers: { ...review.answers, [String(i)]: oi } });
+    const usable = optionState(applyEdits(base, inOrder(others.filter((e) => e.source !== 'manual'))).extraction, o) === 'ready';
+    setReview({ edits: usable ? [...others, ...o.edits.map(stamp(src(i)))] : others, answers: { ...review.answers, [String(i)]: oi } });
     setHoverOpt(null);
     const n = base.clarify.length;
     let next: number | null = null;
@@ -171,7 +201,7 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   };
 
   const select = (id: string) => {
-    if (asExtracted) return;
+    if (asExtracted || check) return;
     if (pick) {
       const ok = x.elements.some((v) => v.id === id) || (pick.groups && x.groups.some((v) => v.id === id));
       if (ok) { pick.accept(id); setPick(null); }
@@ -179,6 +209,13 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     }
     setHoverOpt(null); setShowChanges(false);
     setActive({ kind: 'sel', id });
+  };
+
+  /** Bring an item into view on both pictures and outline it briefly (from the flag list). */
+  const show = (id: string) => {
+    const b = boxOf(settledScene, id);
+    if (b) viewer.current?.focus(b, { fill: 0.3, anchorX: 0.5 });
+    setHot(id);
   };
 
   // --- what is layered over the two views ---
@@ -191,16 +228,17 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
   }
   const pins: Pin[] = base.clarify.flatMap((c, i) => {
     const id = involved(i).find((v) => anchorOf(scene, v));
-    return id ? [{ n: i + 1, id, done: answered(i), active: qi === i }] : [];
+    return id ? [{ n: i + 1, id, done: answered(i), active: qi === i, warn: statuses[i].state === 'needsHand' }] : [];
   });
-  const selId = active?.kind === 'sel' && boxOf(scene, active.id) ? active.id : null;
+  const selId = check ? check.arrow : active?.kind === 'sel' && boxOf(scene, active.id) ? active.id : null;
   const toPercent = (b: BoxPx) => [b.x / W * 100, b.y / H * 100, b.width / W * 100, b.height / H * 100].map((v) => Math.round(v * 100) / 100).join(',');
   const ui = (unit: number): SceneUi => ({
     unit, hot, onHover: setHot, marks, selected: pick ? null : selId, touched: asExtracted ? new Set() : applied.touched, pins,
-    quiet: !!question || !!pick, picking: !!pick, editable: !asExtracted,
+    quiet: !!question || !!pick || !!check, picking: !!pick, editable: !asExtracted && !check,
     onSelect: select, onPin: (n) => openQuestion(n - 1),
     onMoveBadge: (from, badge, to) => add({ op: 'move_badge', id: from, to, value: badge }),
     onArrowEnd: (arrow, end, to) => add({ op: end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: arrow, to, value: null }),
+    onArrowEndFree: (arrow, end, at) => { setActive({ kind: 'sel', id: arrow }); setCheck({ arrow, end, ...at }); },
     onMoveNode: (id, box) => add({ op: 'set_box', id, to: null, value: toPercent(box) }),
   });
 
@@ -210,47 +248,48 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
     // Answers are judged against the model's reading plus the other answers, never against hand fixes.
     const answersOnly = applyEdits(base, inOrder(review.edits.filter((e) => e.source !== 'manual' && e.source !== src(qi)))).extraction;
     // "Shown now" is a fact about the screen: giving this answer would leave the picture exactly as it is.
-    const now = JSON.stringify(applyEdits(base, inOrder(review.edits)).extraction);
+    const now = JSON.stringify(settled.extraction);
     const same = question.options.map((o) => JSON.stringify(applyEdits(base, withAnswer(review.edits, qi, o.edits)).extraction) === now);
     const several = same.filter(Boolean).length > 1;
     const pos = (shape: string | null) => { const b = shape ? boxOf(baseScene, shape) : null; return b ? [Math.round(b.y / (H / 40)), b.x] : [Infinity, Infinity]; };
     return question.options
       .map((o, index) => ({ index, label: o.label, byHand: optionState(answersOnly, o) === 'manual', shownNow: same[index] && !(several && o.asRead), at: pos(o.shape) }))
       .sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1]);
-  }, [question, qi, base, baseScene, review, H]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question, qi, base, baseScene, review, settled, H]);
 
-  const anchorBox = question && qi !== null ? boxFor(involved(qi)) : selId ? boxOf(scene, selId) : null;
-  const counts: [string, number][] = [
-    ['elements', base.elements.length], ['groups', base.groups.length], ['contacts', base.contacts.length], ['arrows', base.arrows.length],
-    ['regions', base.regions.length], ['flags', base.flags.length], ['clarification questions', base.clarify.length],
-  ];
+  const point = (c: { x: number; y: number }): BoxPx => ({ x: c.x, y: c.y, width: 0, height: 0 });
+  const anchorBox = check ? point(check) : question && qi !== null ? boxFor(involved(qi)) : selId ? boxOf(settledScene, selId) ?? boxOf(scene, selId) : null;
   const openCount = base.clarify.length - nAnswered;
-  const chip = 'rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800';
+  const chip = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800';
+  const checkRegion = check ? regionAt(settledScene, check.x, check.y) : null;
 
   return (
-    <div className="px-4 py-4">
-      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <button className={chip} onClick={onBack}>← Upload another</button>
-        <h1 className="text-lg font-semibold">{run.name}</h1>
-        <span className="text-sm text-slate-500 dark:text-slate-400">
-          {run.model} · prompt {run.promptVersion} · {run.seconds.toFixed(1)}s{run.priceKnown ? ` · $${run.costUsd.toFixed(4)}` : ''}
-        </span>
+    <div className="mx-auto max-w-[1800px] px-5 py-4">
+      <header className="mb-3 flex flex-wrap items-center gap-3">
+        <button className={chip} onClick={onBack}>← Back</button>
+        <h1 className="text-lg font-semibold tracking-tight">{run.name}</h1>
         <span className="flex-1" />
-        {base.clarify.length > 0 && <span className="text-sm">{nAnswered} of {base.clarify.length} questions answered</span>}
+        {base.clarify.length > 0 && (
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300" title="Questions the model asked about this figure">
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"><div className="h-full rounded-full bg-green-600 transition-all" style={{ width: `${(nAnswered / base.clarify.length) * 100}%` }} /></div>
+            {nAnswered} of {base.clarify.length} answered
+          </div>
+        )}
         {openCount > 0 && !asExtracted && (
-          <button className="rounded-lg bg-orange-500 px-3 py-1 text-sm font-semibold text-white hover:bg-orange-600" onClick={() => { const j = nextOpen(qi ?? -1); if (j !== null) openQuestion(j); }}>
-            {qi === null ? (nAnswered === 0 ? 'Start with question 1 →' : 'Next question →') : 'Next question →'}
+          <button className="rounded-lg bg-orange-500 px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-600" onClick={() => { const j = nextOpen(qi ?? -1); if (j !== null) openQuestion(j); }}>
+            {qi === null && nAnswered === 0 ? 'Start the questions →' : 'Next question →'}
           </button>
         )}
         <div className="relative">
           <button className={chip} onClick={() => setShowChanges((v) => !v)}>{review.edits.length} change{review.edits.length === 1 ? '' : 's'} ▾</button>
           {showChanges && (
             <div className="absolute right-0 z-20 mt-1 max-h-[60vh] w-96 overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 text-sm shadow-xl dark:border-slate-600 dark:bg-slate-800">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={asExtracted} onChange={(e) => { setAsExtracted(e.target.checked); close(); setPick(null); }} /> Show as extracted (hide my changes)</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={asExtracted} onChange={(e) => { setAsExtracted(e.target.checked); close(); setPick(null); setCheck(null); }} /> Show as extracted (hide my changes)</label>
               {changeList.length === 0 ? <p className="mt-2 text-slate-500 dark:text-slate-400">No changes yet. The reconstruction is exactly what the model read.</p> : (
                 <ul className="mt-2 space-y-1.5">
                   {changeList.map(({ edit, text, failed }) => (
-                    <li key={edit.key} className="flex items-start justify-between gap-2 rounded border border-slate-200 p-2 dark:border-slate-700">
+                    <li key={edit.key} className="flex items-start justify-between gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700">
                       <div>
                         <div className={failed ? 'text-slate-400 line-through' : ''}>{text}</div>
                         <div className="text-xs text-slate-500 dark:text-slate-400">{edit.source === 'manual' ? 'by hand' : `answer to question ${Number(edit.source.slice(1)) + 1}`}{failed ? ` · could not be applied: ${failed}` : ''}</div>
@@ -264,16 +303,22 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
             </div>
           )}
         </div>
-      </div>
-      {saveError && <div className="mb-2 rounded bg-red-50 px-3 py-1.5 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">Your last change was not saved: {saveError}</div>}
+      </header>
+      {saveError && <div className="mb-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">Your last change was not saved: {saveError}</div>}
 
       <PairedViewer
         ref={viewer}
         width={W}
         height={H}
-        leftTitle="Uploaded figure"
-        rightTitle={asExtracted ? 'Reconstruction: as the model read it' : review.edits.length ? 'Reconstruction: with your changes' : 'Reconstruction'}
-        onBackgroundClick={() => { if (!pick) close(); setShowChanges(false); }}
+        leftTitle="Original"
+        rightTitle={asExtracted ? 'Reconstruction · as the model read it' : review.edits.length ? 'Reconstruction · with your changes' : 'Reconstruction'}
+        hint={hot ? nameOf(x, hot) : null}
+        onBackgroundClick={(at) => {
+          setShowChanges(false);
+          if (check) return;
+          if (pick) { if (pick.acceptPoint) { pick.acceptPoint(at); setPick(null); } return; }
+          close();
+        }}
         banner={pick ? (
           <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white">
             <span>{pick.prompt}</span><button className="underline" onClick={() => setPick(null)}>Cancel (Esc)</button>
@@ -286,73 +331,32 @@ export function ReviewScreen({ run, imageUrl, onBack }: { run: RunRecord; imageU
         right={(unit) => <><MarkerDefs /><SceneSvg scene={scene} ui={ui(unit)} /></>}
         overlay={(place) => {
           if (pick || !anchorBox) return null;
+          if (check) return (
+            <Popover anchor={anchorBox} place={place} width={290}>
+              <CheckPopover end={check.end} where={checkRegion ? `open space in the ${regionName(checkRegion)}` : 'open space'}
+                near={nearest(settledScene, point(check), { exclude: [], groups: true, count: 2 }).map((id) => ({ id, name: nameOf(settled.extraction, id) }))}
+                onAccept={() => { add(freeEdit(check)); setCheck(null); }}
+                onNear={(id) => { add({ op: check.end === 'from' ? 'set_arrow_from' : 'set_arrow_to', id: check.arrow, to: id, value: null }); setCheck(null); }}
+                onCancel={() => setCheck(null)} />
+            </Popover>
+          );
           if (question && qi !== null) return (
             <Popover anchor={anchorBox} place={place} width={300}>
               <QuestionPopover n={qi + 1} total={base.clarify.length} question={question.question} choices={choices} answered={answered(qi)}
-                onHover={setHoverOpt} onChoose={(oi) => choose(qi, oi)} onManual={() => fixByHand(qi, null)} onClear={() => clearAnswer(qi)} onClose={close} />
+                onHover={setHoverOpt} onChoose={(oi) => choose(qi, oi)} onManual={() => fixByHand(qi)} onClear={() => clearAnswer(qi)} onClose={close} />
             </Popover>
           );
           if (selId) return (
             <Popover anchor={anchorBox} place={place} width={310}>
-              <EditPopover key={selId} x={x} scene={scene} id={selId} add={add} startPick={setPick} onClose={close} />
+              <EditPopover key={selId} x={x} scene={scene} id={selId} add={add} startPick={setPick}
+                onFreeEnd={(arrow, end, at) => setCheck({ arrow, end, ...at })} onClose={close} />
             </Popover>
           );
           return null;
         }}
       />
-      <div className="mt-1 h-5 text-sm text-slate-700 dark:text-slate-200">{hot ? nameOf(x, hot) : ''}</div>
 
-      <div className="mt-3 grid gap-6 lg:grid-cols-3">
-        <section>
-          <h2 className="font-semibold">What was extracted</h2>
-          <ul className="mt-1 text-sm">{counts.map(([k, v]) => <li key={k}>{v} {k}</li>)}</ul>
-          {base.structure && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{base.structure}</p>}
-          {(run.problems.length > 0 || scene.skipped.length > 0) && (
-            <>
-              <h3 className="mt-3 text-sm font-semibold">Could not be placed or used</h3>
-              <ul className="mt-1 list-disc pl-5 text-sm text-slate-600 dark:text-slate-300">
-                {[...run.problems, ...scene.skipped].map((p, i) => <li key={i}>{p}</li>)}
-              </ul>
-            </>
-          )}
-        </section>
-        <section>
-          <h2 className="font-semibold">Clarification questions</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Where the model found the drawing ambiguous. Click one to answer it on the picture.</p>
-          {base.clarify.length === 0 ? <p className="mt-1 text-sm">None.</p> : (
-            <ul className="mt-1 space-y-2 text-sm">
-              {base.clarify.map((c, i) => {
-                const a = review.answers[String(i)];
-                return (
-                  <li key={i}>
-                    <button className="w-full rounded border border-slate-200 p-2 text-left hover:border-orange-500 dark:border-slate-700" onClick={() => openQuestion(i)}>
-                      <div><span className="font-semibold">{i + 1}.</span> {c.question}</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {a === undefined ? 'Not answered yet' : a === -1 ? 'Answered: fixed by hand' : `Answered: ${c.options[a]?.label ?? '—'}`}
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-        <section>
-          <h2 className="font-semibold">Flags</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Drawing-level problems the model noticed. Not corrections.</p>
-          {base.flags.length === 0 ? <p className="mt-1 text-sm">None.</p> : (
-            <ul className="mt-1 space-y-2 text-sm">
-              {base.flags.map((f, i) => (
-                <li key={i} className="rounded border border-slate-200 p-2 dark:border-slate-700" onMouseEnter={() => setHot(f.on)} onMouseLeave={() => setHot(null)}>
-                  <div><span className="font-medium">{f.type}</span> on {nameOf(base, f.on)} <span className="text-slate-500 dark:text-slate-400">({f.confidence})</span></div>
-                  {f.asWritten && <div className="text-slate-600 dark:text-slate-300">Written "{f.asWritten}"{f.suggestion ? `, suggest "${f.suggestion}"` : ''}</div>}
-                  <div className="text-slate-600 dark:text-slate-300">{f.basis}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+      <ReviewPanel run={run} base={base} statuses={statuses} problems={[...run.problems, ...scene.skipped]} onOpenQuestion={openQuestion} onShow={show} onHover={setHot} />
     </div>
   );
 }

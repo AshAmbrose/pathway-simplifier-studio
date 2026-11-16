@@ -1,5 +1,9 @@
 /** Names and plain-words descriptions, for the change list and the pop-ups. */
 import type { Edit, Extraction } from '../types/extraction.ts';
+import { OPEN, parsePoint } from './applyEdits.ts';
+
+/** A compartment as the figure names it, or by its kind if the figure doesn't. */
+export const regionName = (r: { label: string | null; kind: string }) => r.label ?? r.kind.replace('_', ' ');
 
 /** A readable name for a shape, group or arrow id: its label as written, or a description if it has none. */
 export function nameOf(x: Extraction, id: string | null): string {
@@ -10,6 +14,10 @@ export function nameOf(x: Extraction, id: string | null): string {
   if (g) return g.label ?? `[${g.members.map((m) => nameOf(x, m)).join(' + ')}]`;
   const a = x.arrows.find((v) => v.id === id);
   if (a) return `${nameOf(x, a.from)} ${a.head === 'bar' ? '⊣' : '→'} ${nameOf(x, a.to)}`;
+  // An arrow end that is not on a shape.
+  const r = x.regions.find((v) => v.id === id);
+  if (r) return `open space in the ${regionName(r)}`;
+  if (id === OPEN) return 'open space';
   return id;
 }
 
@@ -23,8 +31,8 @@ export function describeEdit(before: Extraction, e: Edit): string {
     case 'move_badge': return `${e.value} moved from ${n(e.id)} to ${n(e.to)}`;
     case 'add_badge': return `${e.value} added to ${n(e.id)}`;
     case 'remove_badge': return `${e.value} removed from ${n(e.id)}`;
-    case 'set_arrow_from': return `Arrow ${n(e.id)} now starts at ${n(e.to)}`;
-    case 'set_arrow_to': return `Arrow ${n(e.id)} now ends at ${n(e.to)}`;
+    case 'set_arrow_from': return `Arrow ${n(e.id)} now starts ${parsePoint(e.value) ? 'in' : 'at'} ${n(parsePoint(e.value) ? e.to ?? OPEN : e.to)}`;
+    case 'set_arrow_to': return `Arrow ${n(e.id)} now ends ${parsePoint(e.value) ? 'in' : 'at'} ${n(parsePoint(e.value) ? e.to ?? OPEN : e.to)}`;
     case 'add_arrow': return `Arrow added: ${n(e.id)} ${e.value === 'bar' ? '⊣' : '→'} ${n(e.to)}`;
     case 'remove_arrow': return `Arrow removed: ${n(e.id)}`;
     case 'set_arrow_head': return `Arrow ${n(e.id)}: head is now "${e.value}"`;

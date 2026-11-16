@@ -35,7 +35,8 @@ Record what is **drawn**, exactly as drawn. This is not a biology exercise.
 12. **Meaning comes from the drawing:** a bar head means inhibits; "?" means uncertain; a numbered step means "next state" or what its text says. Otherwise use your best reading, or "unknown".
 13. **Positions:** every element, region and panel needs a `box` [x, y, width, height] in percent of the image (0–100), as tight as you can make it. Approximate is fine; missing is not.
 14. **Appearance, so the figure can be redrawn faithfully:**
-    - for each element: `fill` (main fill colour as #rrggbb, or null), `outline` (rounded box, box, oval, circle, text only, other) and `textColour`;
+    - for each element: `fill`, `outline` (rounded box, box, oval, circle, text only, other) and `textColour`;
+    - **every shape that is filled needs its `fill`**: the main fill colour, written `#rrggbb` with the leading `#`. Use null only for a shape with no fill at all (plain text, or an outline with nothing inside);
     - for each arrow: `colour` and `line`.
 15. **Flags are drawing-level problems a careful editor would raise, not corrections.** Use only the listed types, and say what each is based on.
     - Don't raise biology or naming-convention questions: the goal is a faithful copy, and biological accuracy is reviewed later.

@@ -101,6 +101,13 @@ for (const [e, ok] of cases) {
   const r = run1(e);
   check(r.failed.length === 0 && ok(r.extraction) && describeEdit(base, e).length > 0, `change "${e.op}" applies: ${describeEdit(base, e)}`);
 }
+const free = applyEdits({ ...base, regions: [{ id: 'r1', kind: 'cytoplasm', label: null, boundary: null, box: [0, 0, 100, 100] }] }, [E('set_arrow_to', 'a1', 'r1', '60,70')]);
+check(free.failed.length === 0 && free.extraction.arrows[0].to === 'r1' && free.extraction.arrows[0].ends?.to?.join() === '60,70'
+  && toScene(free.extraction, 1000, 800).arrows.find((a) => a.id === 'a1')?.freeTo === true && !referenceProblems(free.extraction).some((p) => p.startsWith('arrow')),
+  `an arrow's end can be put in open space and is still drawn: ${describeEdit({ ...base, regions: free.extraction.regions }, E('set_arrow_to', 'a1', 'r1', '60,70'))}`);
+const back = applyEdits(free.extraction, [E('set_arrow_to', 'a1', 'e2')]);
+check(back.extraction.arrows[0].to === 'e2' && !back.extraction.arrows[0].ends?.to, 'pointing it back at a shape clears the open-space end');
+check(!JSON.stringify(extractionJsonSchema()).includes('"ends"'), 'the model is never asked for open-space arrow ends');
 check(JSON.stringify(base) === snapshot, 'applying changes never alters the extraction itself');
 check(JSON.stringify(applyEdits(base, []).extraction) === snapshot, 'with every change undone, the result is the extraction exactly');
 const bad = applyEdits(base, [E('move_badge', 'e1', 'e9', 'Ub×3'), E('set_arrow_head', 'a1', null, 'bar')]);

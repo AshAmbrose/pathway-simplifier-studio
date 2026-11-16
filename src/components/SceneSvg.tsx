@@ -18,7 +18,8 @@ const SEL = '#2563eb';
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 export type Mark = 'about' | 'candidate' | 'hover';
-export interface Pin { n: number; id: string; done: boolean; active: boolean }
+/** `warn`: answered, but the answer could not be applied by itself and still needs a fix by hand. */
+export interface Pin { n: number; id: string; done: boolean; active: boolean; warn?: boolean }
 
 /** Everything the review screen layers over the two views. Both views get the same object. */
 export interface SceneUi {
@@ -37,6 +38,8 @@ export interface SceneUi {
   onPin: (n: number) => void;
   onMoveBadge: (from: string, badge: string, to: string) => void;
   onArrowEnd: (arrow: string, end: 'from' | 'to', to: string) => void;
+  /** An arrow's end was dropped where there is no shape: open space or a compartment. The screen asks before accepting. */
+  onArrowEndFree: (arrow: string, end: 'from' | 'to', at: { x: number; y: number }) => void;
   onMoveNode: (id: string, box: BoxPx) => void;
 }
 
@@ -171,9 +174,9 @@ function PinsAndDots({ scene, ui, dots }: { scene: Scene; ui: SceneUi; dots: boo
         return (
           <g key={'p-' + p.n} transform={`translate(${at.x + (k * 20 + (at.onArrow ? 15 : 0)) * u},${at.y})`} opacity={ui.quiet && !p.active ? 0.3 : 1} style={{ cursor: 'pointer' }}
             onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); ui.onPin(p.n); }}>
-            <title>{p.done ? `Question ${p.n}: answered (click to change)` : `Question ${p.n}`}</title>
-            <circle r={r} fill={p.done ? '#16a34a' : HL} stroke="#ffffff" strokeWidth={(p.active ? 2.5 : 1.5) * u} />
-            <text y={(p.done ? 2.4 : 3.6) * u} textAnchor="middle" fontSize={(p.done ? 7 : 10.5) * u} fontWeight={700} fill="#ffffff" fontFamily="ui-sans-serif, system-ui" style={{ pointerEvents: 'none' }}>{p.done ? '✓' : p.n}</text>
+            <title>{p.warn ? `Question ${p.n}: answered, but still needs a fix by hand` : p.done ? `Question ${p.n}: answered (click to change)` : `Question ${p.n}`}</title>
+            <circle r={r} fill={p.warn ? '#d97706' : p.done ? '#16a34a' : HL} stroke="#ffffff" strokeWidth={(p.active ? 2.5 : 1.5) * u} />
+            <text y={(p.done ? 2.4 : 3.6) * u} textAnchor="middle" fontSize={(p.done ? 7 : 10.5) * u} fontWeight={700} fill="#ffffff" fontFamily="ui-sans-serif, system-ui" style={{ pointerEvents: 'none' }}>{p.warn ? '!' : p.done ? '✓' : p.n}</text>
           </g>
         );
       })}
@@ -256,6 +259,9 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
             <path d={a.d} fill="none" stroke="transparent" strokeWidth={Math.max(14, 14 * u)} />
             <path d={a.d} fill="none" stroke={h ? HL : a.colour} strokeWidth={h ? sw * 2 : sw} strokeDasharray={dash} strokeLinecap="round"
               opacity={a.line === 'faint' && !h ? 0.45 : 1} markerEnd={marker} />
+            {/* An end that is not on a shape gets a small ring, so "ends in open space" is visible. */}
+            {a.freeFrom && <circle cx={a.x1} cy={a.y1} r={sw * 2.4} fill="#ffffff" stroke={h ? HL : a.colour} strokeWidth={sw} />}
+            {a.freeTo && <circle cx={a.x2} cy={a.y2} r={sw * 4} fill="none" stroke={h ? HL : a.colour} strokeWidth={sw * 0.8} strokeDasharray={`${sw * 1.6} ${sw * 1.6}`} />}
             {a.text && <text x={a.midX} y={a.midY} textAnchor="middle" fontSize={clamp(scene.width / 90, 8, 14)} fill="#0f172a" stroke="#ffffff" strokeWidth={3} paintOrder="stroke" fontFamily="ui-sans-serif, system-ui">{a.text}</text>}
           </g>
         );
@@ -306,7 +312,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
               onClick={(e) => e.stopPropagation()}
               onPointerDown={begin}
               onPointerMove={(e) => { const p = moving(e); if (p) setDrag({ kind: 'end', arrow: selArrow.id, end, x: p.x, y: p.y }); }}
-              onPointerUp={(e) => { const p = finish(e); const to = p && hitTest(scene, p.x, p.y, true); if (to) ui.onArrowEnd(selArrow.id, end, to); }}>
+              onPointerUp={(e) => { const p = finish(e); if (!p) return; const to = hitTest(scene, p.x, p.y, true); if (to) ui.onArrowEnd(selArrow.id, end, to); else ui.onArrowEndFree(selArrow.id, end, { x: p.x, y: p.y }); }}>
               <title>{end === 'from' ? 'Start of the arrow: drag onto another shape' : 'End of the arrow: drag onto another shape'}</title>
             </circle>
           </g>

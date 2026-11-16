@@ -13,7 +13,11 @@ const btn = 'rounded-md border border-slate-300 px-2 py-1 text-xs hover:border-b
 const input = 'w-full rounded-md border border-slate-300 bg-transparent px-2 py-1 text-sm dark:border-slate-600';
 const lab = 'text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400';
 
-export interface PickRequest { prompt: string; groups: boolean; accept: (id: string) => void }
+export interface PickRequest {
+  prompt: string; groups: boolean; accept: (id: string) => void;
+  /** If set, clicking an empty spot is allowed too (an arrow end in open space); the screen checks before accepting. */
+  acceptPoint?: (at: { x: number; y: number }) => void;
+}
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return <div className="mt-2"><div className={lab}>{label}</div><div className="mt-1">{children}</div></div>;
@@ -29,11 +33,12 @@ function TextCommit({ value, placeholder, onCommit }: { value: string; placehold
 }
 
 /** Choose a target: the nearest shapes as buttons, or any other shape by clicking it on the picture. */
-function Targets({ x, scene, from, exclude, groups, prompt, onPick, startPick }: {
-  x: Extraction; scene: Scene; from: string; exclude: string[]; groups: boolean; prompt: string;
-  onPick: (id: string) => void; startPick: (p: PickRequest) => void;
+function Targets({ x, scene, from, at, exclude, groups, prompt, onPick, onPoint, startPick }: {
+  /** Nearest to this shape's box, or to the point `at` if given (an arrow's end). */
+  x: Extraction; scene: Scene; from: string; at?: { x: number; y: number }; exclude: string[]; groups: boolean; prompt: string;
+  onPick: (id: string) => void; onPoint?: (at: { x: number; y: number }) => void; startPick: (p: PickRequest) => void;
 }) {
-  const box = boxOf(scene, from);
+  const box = at ? { x: at.x, y: at.y, width: 0, height: 0 } : boxOf(scene, from);
   const near = box ? nearest(scene, box, { exclude, groups, count: 4 }) : [];
   return (
     <div className="mt-1 rounded-lg bg-slate-50 p-2 dark:bg-slate-900/60">
@@ -41,13 +46,17 @@ function Targets({ x, scene, from, exclude, groups, prompt, onPick, startPick }:
       <div className="mt-1 flex flex-wrap gap-1">
         {near.map((id) => <button key={id} className={btn} onClick={() => onPick(id)}>{nameOf(x, id)}</button>)}
       </div>
-      <button className="mt-1.5 text-xs underline text-slate-600 dark:text-slate-300" onClick={() => startPick({ prompt, groups, accept: onPick })}>Another shape: click it on the picture</button>
+      <button className="mt-1.5 text-left text-xs underline text-slate-600 dark:text-slate-300" onClick={() => startPick({ prompt, groups, accept: onPick, acceptPoint: onPoint })}>
+        {onPoint ? 'Somewhere else: click a shape, or an empty spot, on the picture' : 'Another shape: click it on the picture'}
+      </button>
     </div>
   );
 }
 
-export function EditPopover({ x, scene, id, add, startPick, onClose }: {
-  x: Extraction; scene: Scene; id: string; add: (e: Edit) => void; startPick: (p: PickRequest) => void; onClose: () => void;
+export function EditPopover({ x, scene, id, add, startPick, onFreeEnd, onClose }: {
+  x: Extraction; scene: Scene; id: string; add: (e: Edit) => void; startPick: (p: PickRequest) => void;
+  /** An arrow end was put where there is no shape: the screen checks before accepting. */
+  onFreeEnd: (arrow: string, end: 'from' | 'to', at: { x: number; y: number }) => void; onClose: () => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [badge, setBadge] = useState('');
@@ -123,14 +132,16 @@ export function EditPopover({ x, scene, id, add, startPick, onClose }: {
 
   const ar = x.arrows.find((v) => v.id === id);
   if (ar) {
+    const drawn = scene.arrows.find((v) => v.id === id);
+    const endAt = (which: 'from' | 'to') => (drawn ? (which === 'from' ? { x: drawn.x1, y: drawn.y1 } : { x: drawn.x2, y: drawn.y2 }) : undefined);
     const end = (which: 'from' | 'to') => (
       <div className="mb-1">
         <div className="flex items-center justify-between gap-2">
           <span><span className="text-slate-500 dark:text-slate-400">{which === 'from' ? 'Starts at' : 'Ends at'}</span> <b>{nameOf(x, ar[which])}</b></span>
           <button className={btn} onClick={() => toggle(which)}>Change…</button>
         </div>
-        {open === which && <Targets x={x} scene={scene} from={ar[which]} exclude={[ar[which]]} groups prompt={`Click the shape the arrow ${which === 'from' ? 'starts at' : 'ends at'}`}
-          onPick={(to) => { add(E(which === 'from' ? 'set_arrow_from' : 'set_arrow_to', id, to)); setOpen(null); }} startPick={startPick} />}
+        {open === which && <Targets x={x} scene={scene} from={id} at={endAt(which)} exclude={[ar[which]]} groups prompt={`Click where the arrow ${which === 'from' ? 'starts' : 'ends'}: a shape, or an empty spot`}
+          onPick={(to) => { add(E(which === 'from' ? 'set_arrow_from' : 'set_arrow_to', id, to)); setOpen(null); }} onPoint={(at) => onFreeEnd(id, which, at)} startPick={startPick} />}
       </div>
     );
     const seg = (v: string, on: boolean, click: () => void) => <button key={v} onClick={click} className={`${btn} ${on ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-600' : ''}`}>{v}</button>;
