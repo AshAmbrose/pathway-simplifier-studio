@@ -20,7 +20,9 @@ A step bar across the top walks you through: **Check**, then **① Issues → �
 6. **Simplify:** press **Continue to simplify →**. Five steps follow in order, and any can be skipped. Each shows the figure before the step on the left and after it on the right. "Original" opens the uploaded figure in a small window. "← Back" from step ① returns to Check.
    - **① Issues:** shown beside the original. Click a card to outline its item on both pictures. Fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.
    - **② Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
-   - **③ Repeats, ④ Clusters, ⑤ Layout:** coming in later updates.
+   - **③ Repeats:** merge copies of a molecule drawn more than once in the same place and state. If the figure has panels, say first whether they are different conditions (copies stay apart) or one picture.
+   - **④ Clusters:** open a cluster, tick the shapes that should become one, name it and press Collapse. Its members' names stay small under the new name.
+   - **⑤ Layout:** coming in a later update.
 
 ## Scripts
 | Command | What it does |

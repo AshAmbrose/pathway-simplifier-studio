@@ -8,34 +8,39 @@
  *  - Every choice is a change in the run's one change list, tagged with its step, applied after the corrections
  *    in step order, listed in plain words and undoable. A choice that no longer applies (say, its shape was
  *    removed in Check) is reported in its step, never dropped silently.
- *  - Steps 3–5 arrive in later updates; for now they can only be skipped.
+ *  - Step 5 arrives in a later update; for now it can only be skipped.
  *  - Which step is open is held by RunScreen, so the step bar here and on Check is one journey.
  */
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { RunRecord } from '../api.ts';
-import { applyEdits } from '../edit/applyEdits.ts';
+import { applyEdits, dependents } from '../edit/applyEdits.ts';
 import { describeEdit, nameOf } from '../edit/describe.ts';
 import { inOrder, newKey, stepOf, stepSource } from '../edit/order.ts';
 import type { BoxPx } from '../render/edgePorts.ts';
 import { boxOf, toScene, union, type Scene } from '../render/toScene.ts';
 import { findIssues, type Issue } from '../simplify/issues.ts';
+import { collapseEdit, listClusters } from '../simplify/clusters.ts';
+import { findRepeats, type RepeatGroup } from '../simplify/repeats.ts';
 import { focusHidden, items, setItem, toggleShape, traceRoutes } from '../simplify/routes.ts';
 import { EMPTY_SIMPLIFY, STEPS, type AppliedEdit, type Edit, type Review, type Simplify, type StepId } from '../types/extraction.ts';
 import { FloatingOriginal } from './FloatingOriginal.tsx';
 import { PairedViewer, type ViewerHandle } from './PairedViewer.tsx';
 import { ImageLayer, MarkerDefs, SceneSvg, type Mark, type SceneUi } from './SceneSvg.tsx';
 import { STEP_INFO, StepBar, stepTitle, type JourneyStep } from './StepBar.tsx';
+import { ClustersStep, type ClusterDraft } from './steps/ClustersStep.tsx';
 import { FocusStep } from './steps/FocusStep.tsx';
+import { RepeatsStep } from './steps/RepeatsStep.tsx';
 import { IssuesStep } from './steps/IssuesStep.tsx';
 
 const chip = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800';
-const BUILT: StepId[] = ['issues', 'focus'];
+const BUILT: StepId[] = ['issues', 'focus', 'repeats', 'clusters'];
 const noop = () => {};
 
 /** What resetting a step clears from the step record (its changes are cleared separately). */
 const RESET: Partial<Record<StepId, (s: Simplify) => Simplify>> = {
   issues: (s) => ({ ...s, issues: {} }),
   focus: (s) => ({ ...s, focus: EMPTY_SIMPLIFY.focus }),
+  repeats: (s) => ({ ...s, panels: null }),
 };
 
 /** The figure after a step, with what that step left out added back underneath, to be drawn faintly. */
@@ -64,6 +69,8 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const [hoverIds, setHoverIds] = useState<string[] | null>(null);
   const [hot, setHot] = useState<string | null>(null);
   const [activeIssue, setActiveIssue] = useState<string | null>(null);
+  const [activeRepeat, setActiveRepeat] = useState<string | null>(null);
+  const [draft, setDraft] = useState<ClusterDraft | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
   const [showChanges, setShowChanges] = useState(false);
   const viewer = useRef<ViewerHandle>(null);
@@ -71,7 +78,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
 
   // Escape, or a click anywhere outside it, closes the change list; Escape also lets go of the highlighted issue.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowChanges(false); setActiveIssue(null); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowChanges(false); setActiveIssue(null); setActiveRepeat(null); setDraft(null); } };
     const onDown = (e: PointerEvent) => { if (changesBox.current && !changesBox.current.contains(e.target as Node)) setShowChanges(false); };
     window.addEventListener('keydown', onKey);
     window.addEventListener('pointerdown', onDown);
@@ -102,6 +109,10 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const issues = useMemo(() => findIssues(issueBase), [issueBase]);
   const tracing = useMemo(() => traceRoutes(focusBase), [focusBase]);
   const hidden = useMemo(() => focusHidden(focusBase, tracing, s.focus), [focusBase, tracing, s.focus]);
+  // Steps 3 and 4 work on the figure just before them; the parts come from the same tracing as step 2.
+  const stepTracing = useMemo(() => (step === 'repeats' ? traceRoutes(before.extraction) : null), [step, before]);
+  const repeats = useMemo(() => (stepTracing ? findRepeats(before.extraction, stepTracing, s.panels !== 'one') : null), [stepTracing, before, s.panels]);
+  const clusters = useMemo(() => (step === 'clusters' ? listClusters(before.extraction) : []), [step, before]);
   const names = useMemo(() => [...new Set([...issueBase.elements, ...issueBase.groups].map((v) => v.label).filter((l): l is string => !!l && l.length > 1))].sort((a, b) => a.localeCompare(b)), [issueBase]);
 
   // --- changing the step record and the step's changes ---
@@ -129,6 +140,24 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     });
   };
 
+  /** Step 3: one card's choice. Its merges are rewritten: every merged copy goes into the kept one. */
+  const setRepeat = (g: RepeatGroup, keeper: string, merged: string[]) => setReview((r) => ({
+    ...r,
+    edits: [...r.edits.filter((e) => !(stepOf(e.source) === 'repeats' && g.copies.includes(e.id))),
+      ...merged.filter((c) => c !== keeper).map((c) => stamp('repeats')({ op: 'merge_into', id: c, to: keeper, value: null }))],
+  }));
+  /** Step 3's parts question. A new answer clears the step's merges, which were offered under the old one. */
+  const setPanels = (v: 'conditions' | 'one') => setReview((r) => ({
+    ...r, edits: r.edits.filter((e) => stepOf(e.source) !== 'repeats'), simplify: { ...(r.simplify ?? EMPTY_SIMPLIFY), panels: v },
+  }));
+  /** Step 4: collapse the ticked shapes into one, named as typed (or by its members). */
+  const collapseNow = (d: ClusterDraft) => {
+    if (d.ticked.length < 2) return;
+    const key = newKey();
+    setReview((r) => ({ ...r, edits: [...r.edits, { ...collapseEdit(before.extraction, key, d.ticked, d.name), key, source: stepSource('clusters'), at: new Date().toISOString() }] }));
+    setDraft(null);
+  };
+
   /** Clears a step's changes and choices, and marks it as given (or forgets its mark). */
   const clearStep = (k: StepId, mark: 'skipped' | null) => setReview((r) => {
     const sim = (RESET[k] ?? ((v: Simplify) => v))(r.simplify ?? EMPTY_SIMPLIFY);
@@ -143,7 +172,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const focusStale = focusEdits.length !== hidden.size || focusEdits.some((e) => hidden.get(e.id) !== e.value);
 
   const choices = step === 'issues' ? stepEdits.length + Object.keys(s.issues).length : step === 'focus' ? hidden.size : stepEdits.length;
-  const go = (k: JourneyStep) => { onStep(k); setHoverIds(null); setActiveIssue(null); setShowChanges(false); };
+  const go = (k: JourneyStep) => { onStep(k); setHoverIds(null); setActiveIssue(null); setActiveRepeat(null); setDraft(null); setShowChanges(false); };
   const next = () => {
     if (BUILT.includes(step)) setSimplify((v) => ({ ...v, steps: { ...v.steps, [step]: 'done' } }));
     if (at < STEPS.length - 1) go(STEPS[at + 1]);
@@ -152,7 +181,8 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   /** Undo one change from the list. A "left out" from step 2 is undone by keeping that shape, so the step's choices stay true. */
   const undo = (e: AppliedEdit) => {
     if (stepOf(e.source) === 'focus') setFocus(toggleShape(s.focus, tracing, e.id, false));
-    else setReview((r) => ({ ...r, edits: r.edits.filter((v) => v.key !== e.key) }));
+    // Anything later that only exists because of this change (a collapsed shape's later changes) goes with it.
+    else setReview((r) => { const gone = new Set([e.key, ...dependents(r.edits, e.key).map((d) => d.key)]); return { ...r, edits: r.edits.filter((v) => !gone.has(v.key)) }; });
   };
 
   // --- on the pictures ---
@@ -170,11 +200,32 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     } else if (step === 'focus') {
       const target = focusBase.elements.some((v) => v.id === id) ? id : focusBase.groups.find((g) => g.id === id)?.members[0];
       if (target) setFocus(toggleShape(s.focus, tracing, target, !hidden.has(target)));
+    } else if (step === 'repeats') {
+      const g = repeats?.groups.find((v) => v.copies.includes(id));
+      if (!g) return;
+      setActiveRepeat(g.key);
+      document.querySelector(`[data-repeat="${CSS.escape(g.key)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else if (step === 'clusters') {
+      if (!before.extraction.elements.some((v) => v.id === id)) {
+        // A click on a cluster's outline opens its card.
+        if (clusters.some((c) => c.id === id) && !draft) setDraft({ cluster: id, ticked: [], name: null });
+        return;
+      }
+      if (draft) setDraft({ ...draft, ticked: draft.ticked.includes(id) ? draft.ticked.filter((v) => v !== id) : [...draft.ticked, id] });
+      else {
+        const c = clusters.find((v) => v.members.includes(id));
+        if (c) { setDraft({ cluster: c.id, ticked: [id], name: null }); document.querySelector(`[data-cluster="${CSS.escape(c.id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      }
     }
   };
   const marks = new Map<string, Mark>();
   const activeId = issues.find((i) => i.key === activeIssue)?.id;
   if (step === 'issues' && activeId) marks.set(activeId, 'about');
+  if (step === 'repeats') for (const id of repeats?.groups.find((g) => g.key === activeRepeat)?.copies ?? []) marks.set(id, 'about');
+  if (step === 'clusters' && draft) {
+    for (const id of clusters.find((c) => c.id === draft.cluster)?.members ?? []) marks.set(id, 'candidate');
+    for (const id of draft.ticked) marks.set(id, 'about');
+  }
   for (const id of hoverIds ?? []) marks.set(id, 'hover');
   const ui = (unit: number, faded?: Set<string>): SceneUi => ({
     unit, hot, onHover: setHot, marks, selected: null, touched: new Set(), pins: [], quiet: false, picking: false, editable: false,
@@ -183,6 +234,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   });
   const hint = hot ? (() => {
     const name = after.extraction.elements.some((v) => v.id === hot) || after.extraction.arrows.some((v) => v.id === hot) ? nameOf(after.extraction, hot) : nameOf(before.extraction, hot);
+    if (step === 'clusters' && draft && before.extraction.elements.some((v) => v.id === hot)) return `${name} · click to ${draft.ticked.includes(hot) ? 'untick' : 'tick'} it`;
     if (step !== 'focus' || !focusBase.elements.some((v) => v.id === hot)) return name;
     return `${name} · ${hidden.has(hot) ? 'left out: click to bring it back' : 'click to leave it out'}`;
   })() : null;
@@ -278,6 +330,18 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
               onRestore={(id) => setFocus(toggleShape(s.focus, tracing, id, false))}
               onShape={(id, keptNow) => setFocus(toggleShape(s.focus, tracing, id, keptNow))}
               onHover={setHoverIds} onShow={show} />
+          )}
+          {step === 'repeats' && repeats && stepTracing && (
+            <RepeatsStep x={before.extraction} tracing={stepTracing} panels={s.panels ?? null} groups={repeats.groups} apart={repeats.apart} edits={stepEdits} active={activeRepeat}
+              onPanels={setPanels} onSet={setRepeat}
+              onAll={() => setReview((r) => ({ ...r, edits: [...r.edits.filter((e) => stepOf(e.source) !== 'repeats'),
+                ...repeats.groups.flatMap((g) => g.copies.filter((c) => c !== g.keeper).map((c) => stamp('repeats')({ op: 'merge_into', id: c, to: g.keeper, value: null })))] }))}
+              onNone={() => setReview((r) => ({ ...r, edits: r.edits.filter((e) => stepOf(e.source) !== 'repeats') }))}
+              onHover={setHoverIds} onSelect={(g) => { setActiveRepeat(g.key); show(g.copies); }} />
+          )}
+          {step === 'clusters' && (
+            <ClustersStep x={before.extraction} clusters={clusters} edits={stepEdits} draft={draft} names={names}
+              onDraft={setDraft} onCollapse={collapseNow} onUndo={undo} onHover={setHoverIds} onShow={show} />
           )}
           {!BUILT.includes(step) && <p className="text-sm text-slate-600 dark:text-slate-300">This step comes in a later update. Skip it, or press Next: nothing changes.</p>}
         </aside>

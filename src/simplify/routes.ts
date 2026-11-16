@@ -35,6 +35,12 @@ export interface Tracing {
   others: string[];
   /** The shapes each shape travels with (itself included). Headings are not in any unit. */
   unitOf: Map<string, string[]>;
+  /**
+   * The figure's parts (its panels, else the areas under its headings; one part if it has neither), and which
+   * part each shape is in. Step 3 asks whether parts are different conditions before merging across them.
+   */
+  parts: { key: string; label: string }[];
+  partOf: Map<string, string>;
 }
 export const OTHERS = 'others';
 
@@ -169,9 +175,11 @@ export function traceRoutes(x: Extraction): Tracing {
     const best = tied.sort((a, b) => near(a) - near(b))[0];
     groupBy.get(best ?? groupOf(r.key.slice(4)))!.regulators.push(r);
   }
+  const parts = groups.filter((g) => els.some((e) => groupOf(keyOf.get(e.id)!) === g.key)).map((g) => ({ key: g.key, label: g.label }));
+  const partOf = new Map(els.map((e) => [e.id, groupOf(keyOf.get(e.id)!)]));
   groups = groups.filter((g) => g.routes.length > 0 || g.regulators.length > 0);
 
-  return { groups, regulators, others, unitOf };
+  return { groups, regulators, others, unitOf, parts, partOf };
 }
 
 /** Every route, regulator and the "others" item, with its key and members. */

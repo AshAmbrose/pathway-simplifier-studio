@@ -108,7 +108,19 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **Traced after Check and step 1,** so fixes, names and left-out parts are included.
 - **Every shape can be ticked without a box per item:** a route opens to show its shapes as small chips, one per set of shapes that travel together.
 
-**Next:** step 3 (merge plain repeats), step 4 (collapse chosen clusters), step 5 (reorganise the layout, reusing BioPathway Studio's Organize Layout, with locations taken only from the original figure). Suggestions from prior knowledge may come later, always labelled with their source.
+**Step 3, Repeats:**
+- **A plain repeat** has the same label as written, the same kind of compartment and the same badges. Copies in another compartment or state stay apart, listed with the reason. Copies drawn together in one cluster (a pair, like a dimer) also stay apart, since merging would erase the pair.
+- **Asked once per figure** (when it has panels or headings): are they different conditions or parts of one picture? Under "conditions", nothing merges across them.
+- **Each card says what merging does** before you choose: shapes fewer, arrows moved, arrows now drawn once.
+- **The `merge_into` change** moves the copy's arrows, contacts and cluster places onto the kept copy.
+
+**Step 4, Clusters:**
+- **Nothing is suggested:** being drawn together doesn't prove the members belong together. You tick two or more members (shapes from outside can be added by clicking them), then name and collapse them.
+- **The `collapse` change** makes one shape over the members' area. Arrows to a member point at it, and arrows between members go. A cluster made only of those members becomes the new shape. With a name of its own, the members' names stay as a small sub-label.
+- **Tidy-up after merging or collapsing,** limited to what the change touched: arrows that became identical are drawn once (BioPathway Studio's rule), an arrow from a shape to itself is dropped, clusters holding the same shapes become one, and a cluster left with one shape stops being a cluster.
+- **Until step 5,** a collapsed shape keeps the members' area, so shapes that weren't collapsed may overlap it.
+
+**Next:** step 5 (reorganise the layout, reusing BioPathway Studio's Organize Layout, with locations taken only from the original figure). Suggestions from prior knowledge may come later, always labelled with their source.
 
 ## 8. Internal ids stay off the screen
 **Decision:** the model's ids for shapes and arrows ("e5", "a_tx_1") are never shown. The model sometimes writes them into its questions and reasons ("drawn twice (e19 and e26)"). A bracketed list of ids is dropped; any other id is replaced by the item's name as written.

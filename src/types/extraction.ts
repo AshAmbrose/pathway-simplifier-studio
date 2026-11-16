@@ -59,13 +59,19 @@ export const CONFIDENCE = ['high', 'medium', 'low'] as const;
  * Simplification only (never offered to the model, so not in MODEL_EDIT_OPS):
  *   hide              id = shape, group or arrow, value = the reason in plain words ("not on a chosen pathway").
  *                     Leaves it out of the simplified figure; a shape's arrows and contacts go with it.
+ *   merge_into        id = a repeated copy that goes, to = the copy that stays. Its arrows, contacts and cluster
+ *                     places move to the staying copy.
+ *   collapse          id = the new shape's id ("col-…"), value = '{"members":[ids],"label":"…","sub":"A + B + C"|null}'.
+ *                     One shape over the members' area replaces them; their arrows point at it.
+ * After merge_into and collapse, arrows that have become identical are drawn as one, an arrow from a shape to
+ * itself is dropped, and clusters holding the same shapes become one.
  */
 export const MODEL_EDIT_OPS = [
   'move_badge', 'add_badge', 'remove_badge', 'set_arrow_from', 'set_arrow_to', 'add_arrow', 'remove_arrow',
   'set_arrow_head', 'set_arrow_line', 'set_arrow_meaning', 'set_arrow_text', 'set_label', 'remove_element',
   'add_to_group', 'remove_from_group', 'set_box', 'add_element',
 ] as const;
-export const EDIT_OPS = [...MODEL_EDIT_OPS, 'hide'] as const;
+export const EDIT_OPS = [...MODEL_EDIT_OPS, 'hide', 'merge_into', 'collapse'] as const;
 const editFields = {
   id: z.string().describe('the shape, group or arrow the change applies to'),
   to: nullable(z.string()).describe('the other shape or group, for moves and arrow ends; otherwise null'),
@@ -98,11 +104,14 @@ export type StepId = (typeof STEPS)[number];
  *  - issues: step 1 items settled without a change ("kept as written", "seen", with an optional note of what it means);
  *  - focus:  step 2's choices: routes and regulators ticked off, and shapes kept or dropped by clicking.
  *            The step's changes are worked out from these, so ticking a route back on restores it exactly.
+ *  - panels: step 3's answer about the panels.
  */
 export const SimplifySchema = z.object({
   steps: z.record(z.string(), z.enum(['done', 'skipped'])),
   issues: z.record(z.string(), z.object({ kind: z.enum(['kept', 'seen']), note: nullable(z.string()) })),
   focus: z.object({ off: z.array(z.string()), keep: z.array(z.string()), drop: z.array(z.string()) }),
+  /** Step 3's question: are the figure's panels different conditions (repeats kept apart) or one picture? */
+  panels: z.enum(['conditions', 'one']).nullable().optional(),
 });
 export type Simplify = z.infer<typeof SimplifySchema>;
 export const EMPTY_SIMPLIFY: Simplify = { steps: {}, issues: {}, focus: { off: [], keep: [], drop: [] } };
@@ -142,6 +151,8 @@ export const ExtractionSchema = z.object({
     fill: nullable(z.string()).describe('main fill colour as #rrggbb, or null if none'),
     outline: z.enum(OUTLINES),
     textColour: nullable(z.string()).describe('label colour as #rrggbb'),
+    /** Set only by step 4's collapse, never by the model: the members' names ("A + B + C") under a new name. */
+    sublabel: z.string().nullable().optional(),
   })),
   groups: z.array(z.object({ id: z.string(), members: z.array(z.string()), label: nullable(z.string()), region: nullable(z.string()) })),
   contacts: z.array(z.object({ a: z.string(), b: z.string(), kind: z.enum(CONTACT_KINDS) })),
@@ -195,6 +206,8 @@ export function extractionJsonSchema(): unknown {
   delete s.$schema;
   // Open-space arrow ends are a user's change; the model is never asked for them.
   delete s.properties?.arrows?.items?.properties?.ends;
+  // Nor for a collapsed shape's sub-label, which only simplification sets.
+  delete s.properties?.elements?.items?.properties?.sublabel;
   return s;
 }
 

@@ -10,6 +10,8 @@ import { badgeText } from '../edit/applyEdits.ts';
 export interface SceneNode extends BoxPx {
   id: string; label: string | null; kind: string; outline: string; fill: string | null; textColour: string | null;
   mods: { text: string }[];
+  /** A collapsed shape's members ("A + B + C"), drawn small under its name. */
+  sublabel: string | null;
 }
 export interface SceneGroup extends BoxPx { id: string; label: string | null; members: string[] }
 export interface SceneRegion extends BoxPx { id: string; kind: string; label: string | null; boundary: string | null }
@@ -60,7 +62,7 @@ export function union(boxes: BoxPx[], pad: number): BoxPx {
 export function toScene(x: Extraction, width: number, height: number): Scene {
   const skipped: string[] = [];
   const nodes: SceneNode[] = x.elements.map((e) => ({
-    id: e.id, label: e.label, kind: e.kind, outline: e.outline, fill: e.fill, textColour: e.textColour,
+    id: e.id, label: e.label, kind: e.kind, outline: e.outline, fill: e.fill, textColour: e.textColour, sublabel: e.sublabel ?? null,
     mods: e.modifications.map((m) => ({ text: badgeText(m) })),
     ...px(e.box, width, height),
   }));
