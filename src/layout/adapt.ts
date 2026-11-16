@@ -35,8 +35,23 @@ import { tidyFigure } from './tidy.ts';
 import { arrangeRows, FONT, median, nameWidth, sizeOf, UNIT_H } from './shapes.ts';
 import type { LayoutNotes, LayoutOptions, LayoutValue } from './value.ts';
 
-/** Step 5's layout, in the chosen way: compact (compact.ts, the default), tidy as drawn (tidy.ts), or redraw as a cell (below). */
+/** A compartment's name by its kind, for those the figure doesn't name ("other" stays unnamed). */
+const KIND_NAME: Partial<Record<Region['kind'], string>> = {
+  extracellular: 'Extracellular space', plasma_membrane: 'Plasma membrane', cytoplasm: 'Cytoplasm', nucleus: 'Nucleus',
+  endosome: 'Endosome', mitochondrion: 'Mitochondrion', ER: 'Endoplasmic reticulum',
+};
+
+/**
+ * Step 5's layout, in the chosen way: compact (compact.ts, the default), tidy as drawn (tidy.ts), or redraw as a
+ * cell (below). In the laid-out figure every compartment is labelled: one the figure leaves unnamed is named by
+ * its kind (as the model read it), so the cell reads on its own.
+ */
 export function layOut(x: Extraction, W: number, H: number, t: Tracing, opts: LayoutOptions): LayoutValue {
+  const v = chooseLayout(x, W, H, t, opts);
+  return { ...v, regions: v.regions.map((r) => ({ ...r, label: r.label ?? KIND_NAME[r.kind] ?? null })) };
+}
+
+function chooseLayout(x: Extraction, W: number, H: number, t: Tracing, opts: LayoutOptions): LayoutValue {
   if (opts.mode === 'cell') return layoutFigure(x, W, H, t, opts);
   if (opts.mode === 'tidy') return tidyFigure(x, W, H, t, opts);
   // Compact runs the main route straight down only where that reads at least as well: on a figure with panels side

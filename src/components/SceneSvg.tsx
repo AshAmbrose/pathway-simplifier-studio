@@ -79,6 +79,23 @@ const REGION_FILL: Record<string, string> = {
   extracellular: '#f8fafc', plasma_membrane: '#e2e8f0', cytoplasm: '#f1f5f9', nucleus: '#eef2ff',
   endosome: '#ecfdf5', mitochondrion: '#fff7ed', ER: '#fdf4ff', other: '#f8fafc',
 };
+/**
+ * Where a compartment's name goes: the first corner of its box clear of shapes (top left, top right, bottom left,
+ * bottom right), so the name isn't hidden behind them. A thin band (a membrane) has it at one end, centred.
+ */
+function labelSpot(r: { x: number; y: number; width: number; height: number }, label: string, fs: number, scene: Scene) {
+  const w = label.length * fs * 0.58, h = fs * 1.2, pad = 8;
+  const thin = r.height < fs * 2;
+  const spots = thin
+    ? [{ x: r.x + pad, y: r.y + r.height / 2 + fs * 0.35, anchor: 'start' as const }, { x: r.x + r.width - pad, y: r.y + r.height / 2 + fs * 0.35, anchor: 'end' as const }]
+    : [{ x: r.x + pad, y: r.y + fs + 4, anchor: 'start' as const }, { x: r.x + r.width - pad, y: r.y + fs + 4, anchor: 'end' as const },
+      { x: r.x + pad, y: r.y + r.height - 6, anchor: 'start' as const }, { x: r.x + r.width - pad, y: r.y + r.height - 6, anchor: 'end' as const }];
+  const clear = (sp: (typeof spots)[number]) => {
+    const x0 = sp.anchor === 'start' ? sp.x : sp.x - w, y0 = sp.y - fs;
+    return !scene.nodes.some((n) => n.x < x0 + w && x0 < n.x + n.width && n.y < y0 + h && y0 < n.y + n.height);
+  };
+  return spots.find(clear) ?? spots[0];
+}
 const dashFor = (s: string | null) => (s && /dash|broken|dott/i.test(s) ? '10 6' : undefined);
 
 function NodeShape({ n, hot }: { n: SceneNode; hot: boolean }) {
@@ -359,7 +376,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
         <g key={r.id} style={{ pointerEvents: 'none' }}>
           <rect x={r.x} y={r.y} width={r.width} height={r.height} rx={r.kind === 'nucleus' ? 24 : 6}
             fill={REGION_FILL[r.kind] ?? '#f8fafc'} fillOpacity={0.7} stroke="#94a3b8" strokeWidth={r.kind === 'plasma_membrane' ? 2.5 : 1.2} strokeDasharray={dashFor(r.boundary)} />
-          {r.label && <text x={r.x + 8} y={r.y + 16} fontSize={clamp(scene.width / 70, 10, 20)} fill="#475569" fontFamily="ui-sans-serif, system-ui">{r.label}</text>}
+          {r.label && (() => { const fs = clamp(scene.width / 70, 10, 20), at = labelSpot(r, r.label, fs, scene); return <text x={at.x} y={at.y} textAnchor={at.anchor} fontSize={fs} fill="#475569" fontFamily="ui-sans-serif, system-ui">{r.label}</text>; })()}
         </g>
       ))}
       {scene.panels.map((p) => <rect key={p.id} x={p.x} y={p.y} width={p.width} height={p.height} fill="none" stroke="#cbd5e1" strokeDasharray="2 4" style={{ pointerEvents: 'none' }} />)}

@@ -1,7 +1,7 @@
 /**
  * Step 5's before → after numbers: how readable a drawing is, measured the way BioPathway Studio's Organize
  * Layout scores its own results.
- *  - crossings: pairs of arrows whose lines cross (arrows sharing a shape don't count);
+ *  - crossings: pairs of arrows whose lines cross (arrows meeting at a shape count only if they cross away from it);
  *  - behind: arrows whose line runs behind a shape they don't join (a shape drawn in one cluster with an end counts as joined);
  *  - up: arrows pointing up, against the top-to-bottom reading direction; those that return to where the
  *    signal came from (feedback: their end leads back to their start) are counted separately, as they may.
@@ -29,8 +29,10 @@ export function measure(scene: Scene): Measures {
   for (let i = 0; i < arrows.length; i++)
     for (let j = i + 1; j < arrows.length; j++) {
       const a = arrows[i], b = arrows[j];
-      if ([...ends.get(a.id)!].some((id) => ends.get(b.id)!.has(id))) continue;
-      if (a.pts.slice(1).some((p, k) => b.pts.slice(1).some((q, m) => cross(a.pts[k], p, b.pts[m], q)))) crossings++;
+      // Arrows meeting at a shape count only if their lines cross away from it (the middle of each line).
+      const shared = [...ends.get(a.id)!].some((id) => ends.get(b.id)!.has(id));
+      const pa = shared ? a.pts.slice(3, 14) : a.pts, pb = shared ? b.pts.slice(3, 14) : b.pts;
+      if (pa.slice(1).some((p, k) => pb.slice(1).some((q, m) => cross(pa[k], p, pb[m], q)))) crossings++;
     }
 
   let behind = 0;

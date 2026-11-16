@@ -69,11 +69,14 @@ export function bendArrows(x: Extraction, box: Map<string, Box>, unit: number, t
   // A bow is only worth it if the bowed line crosses no more of the other arrows than the straight one does.
   const line = (a: Arrow, b: number) => { const g = edgeGeometry(endBox(a.from)!, endBox(a.to)!, false, b); return Array.from({ length: 17 }, (_, i) => bezier(g, i / 16)); };
   const ends = (a: Arrow) => new Set([...inside(a.from), ...inside(a.to)]);
+  // Arrows sharing a shape meet at it; they still cross if their lines cross away from it, so for those only
+  // the middle of each line is compared.
   const crossings = (a: Arrow, b: number) => {
     const mine = line(a, b), skip = ends(a);
-    return drawn.filter((o) => o !== a && ![...ends(o)].some((id) => skip.has(id))).filter((o) => {
-      const theirs = line(o, bend.get(o.id) ?? 0);
-      return mine.slice(1).some((p, i) => theirs.slice(1).some((q, j) => cross(mine[i], p, theirs[j], q)));
+    return drawn.filter((o) => o !== a).filter((o) => {
+      const shared = [...ends(o)].some((id) => skip.has(id));
+      const m = shared ? mine.slice(3, 14) : mine, theirs0 = line(o, bend.get(o.id) ?? 0), t = shared ? theirs0.slice(3, 14) : theirs0;
+      return m.slice(1).some((p, i) => t.slice(1).some((q, j) => cross(m[i], p, t[j], q)));
     }).length;
   };
   for (const a of drawn) {
@@ -85,6 +88,21 @@ export function bendArrows(x: Extraction, box: Map<string, Box>, unit: number, t
     const c = CURVES.filter((v) => Math.abs(v) * 1.5 <= 0.6 * length).find((v) => !passesBehind(a, v) && crossings(a, v) <= straight);
     bend.set(a.id, c ?? 0);
     if (c === undefined) behind.push(a.id);
+  }
+  // Then an arrow that crosses others may bow too, if a bow crosses fewer and runs behind no shape.
+  for (const a of drawn) {
+    if (bend.get(a.id)) continue;
+    const straight = crossings(a, 0);
+    if (!straight) continue;
+    const s1 = endBox(a.from)!, s2 = endBox(a.to)!;
+    const length = Math.hypot(s2.x + s2.width / 2 - s1.x - s1.width / 2, s2.y + s2.height / 2 - s1.y - s1.height / 2);
+    let best = 0, fewest = straight;
+    for (const v of CURVES.filter((c) => Math.abs(c) * 1.5 <= 0.6 * length)) {
+      if (passesBehind(a, v)) continue;
+      const n = crossings(a, v);
+      if (n < fewest) { fewest = n; best = v; }
+    }
+    if (best) bend.set(a.id, best);
   }
   // Two-way pairs would draw on top of each other: each bows to its own side.
   for (const a of drawn) {

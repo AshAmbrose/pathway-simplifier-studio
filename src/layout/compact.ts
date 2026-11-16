@@ -107,6 +107,19 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
     const ks = r.flatMap((u) => u.ids.map((id) => regionOf(byId.get(id)!)?.kind ?? ''));
     return [...ks].sort((p, q) => ks.filter((v) => v === q).length - ks.filter((v) => v === p).length)[0];
   });
+  /** The compartment of a row (a side branch's row, between two, takes the one above). */
+  const place = (r: number) => rowPlace[Math.floor(r)];
+  /** Rows from top to bottom: each as tall as its tallest shape, even gaps, a little more where the compartment changes. */
+  const restack = () => {
+  const used = [...new Set(units.map((u) => u.row))].sort((a, b) => a - b);
+  let yAt = 0;
+  used.forEach((r, k) => {
+    const mine = units.filter((u) => u.row === r), h = Math.max(...mine.map((u) => u.h));
+    if (k > 0 && place(r) !== place(used[k - 1])) yAt += COMPARTMENT_GAP;
+    for (const u of mine) u.y = yAt + (h - u.h) / 2;
+    yAt += h + GAP_Y;
+  });
+  };
   // Row heights from their tallest shapes, even gaps between, and a little more where the compartment changes.
   const rowH = rows.map((r) => Math.max(...r.map((u) => u.h)));
   const rowY: number[] = [];
@@ -166,6 +179,16 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
     }
   }
   const line = new Set([...spine, ...straight]);
+
+  // Side branches step down: a shape fed from the main line in the line's own row (IκB → Proteasome) moves to a new
+  // row just below, with what it leads to in that row (→ Degradation), so the branch reads top to bottom.
+  for (const l of forward) {
+    if (!line.has(l.f) || line.has(l.t) || l.t.wide || l.t.row !== l.f.row) continue;
+    const row = l.f.row, branch = [l.t];
+    for (let i = 0; i < branch.length; i++)
+      for (const m of forward.filter((v) => v.f === branch[i] && !line.has(v.t) && v.t.row === row && !branch.includes(v.t))) branch.push(m.t);
+    for (const u of branch) u.row = row + 0.5;
+  }
 
   // Columns, from the original: shapes whose widths overlap by at least 40% share a column (never two of one row).
   // Wide shapes (headings, DNA) take none.
@@ -256,6 +279,17 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
     size.set(u.ids[0], { w: u.w, h: size.get(u.ids[0])!.h });
   }
 
+  restack();
+  // A side branch that stepped down sits beside the line, on the side it was drawn, not under it (the line's
+  // arrow continues straight down there).
+  for (const r of [...new Set(units.filter((u) => u.row % 1).map((u) => u.row))]) {
+    const branch = units.filter((u) => u.row === r), parent = units.find((u) => line.has(u) && u.row === Math.floor(r));
+    if (!parent) continue;
+    const toLeft = median(branch.map((u) => cx(u.o))) < cx(parent.o);
+    const edge = toLeft ? Math.max(...branch.map((u) => u.x + u.w)) : Math.min(...branch.map((u) => u.x));
+    const need = toLeft ? edge - (parent.x - GAP_X) : parent.x + parent.w + GAP_X - edge;
+    if (need > 0) for (const u of branch) u.x += toLeft ? -need : need;
+  }
   // No overlaps: two shapes overlapping in a row are pushed apart, keeping the side each was drawn on. The main
   // line stays put; others move outwards, away from it (left of it to the left, right of it to the right).
   const fixed = (u: Unit) => line.has(u) || fan.includes(u);
@@ -295,14 +329,7 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
     if (clash || joined) continue;
     for (const u of here) u.row = i + 1;
   }
-  const used = [...new Set(units.map((u) => u.row))].sort((a, b) => a - b);
-  let yAt = 0;
-  used.forEach((r, k) => {
-    const mine = units.filter((u) => u.row === r), h = Math.max(...mine.map((u) => u.h));
-    if (k > 0 && rowPlace[r] !== rowPlace[used[k - 1]]) yAt += COMPARTMENT_GAP;
-    for (const u of mine) u.y = yAt + (h - u.h) / 2;
-    yAt += h + GAP_Y;
-  });
+  restack();
 
   // Every shape's box.
   const box = new Map<string, Box>();

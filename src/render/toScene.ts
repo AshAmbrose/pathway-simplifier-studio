@@ -119,7 +119,10 @@ export function toScene(x: Extraction, imageW: number, imageH: number): Scene {
   for (const { box, ends } of sides.values()) {
     if (ends.length < 2) continue;
     const across = ends[0].p.side === 'top' || ends[0].p.side === 'bottom';
-    ends.sort((m, n) => (across ? m.other.x - n.other.x : m.other.y - n.other.y));
+    // By the angle each arrives at, seen from the shape's centre: steeper from above comes first, so lines don't cross.
+    const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+    const slope = (o: { x: number; y: number }) => (across ? (o.x - cx) / Math.max(1e-6, Math.abs(o.y - cy)) : (o.y - cy) / Math.max(1e-6, Math.abs(o.x - cx)));
+    ends.sort((m, n) => slope(m.other) - slope(n.other));
     ends.forEach((e, i) => {
       const f = 0.2 + (0.6 * (i + 0.5)) / ends.length;
       if (across) e.p.x = box.x + box.width * f; else e.p.y = box.y + box.height * f;
