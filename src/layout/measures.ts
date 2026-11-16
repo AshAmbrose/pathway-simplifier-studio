@@ -2,7 +2,7 @@
  * Step 5's before → after numbers: how readable a drawing is, measured the way BioPathway Studio's Organize
  * Layout scores its own results.
  *  - crossings: pairs of arrows whose lines cross (arrows sharing a shape don't count);
- *  - behind: arrows whose line runs behind a shape they don't join;
+ *  - behind: arrows whose line runs behind a shape they don't join (a shape drawn in one cluster with an end counts as joined);
  *  - up: arrows pointing up, against the top-to-bottom reading direction; those that return to where the
  *    signal came from (feedback: their end leads back to their start) are counted separately, as they may.
  * Worked out on the drawn scene, so they hold for any positions: the original's or the new layout's.
@@ -17,8 +17,11 @@ const cross = (a: P, b: P, c: P, d: P) => orient(a, b, c) * orient(a, b, d) < 0 
 
 export function measure(scene: Scene): Measures {
   const groupMembers = new Map(scene.groups.map((g) => [g.id, g.members]));
-  /** A shape or cluster, with the shapes inside a cluster. */
-  const reach = (id: string) => new Set([id, ...(groupMembers.get(id) ?? []), ...scene.groups.filter((g) => g.members.includes(id)).map((g) => g.id)]);
+  /** A shape or cluster, with the shapes inside a cluster, and the shapes drawn in one cluster with a shape. */
+  const reach = (id: string) => {
+    const around = scene.groups.filter((g) => g.members.includes(id));
+    return new Set([id, ...(groupMembers.get(id) ?? []), ...around.map((g) => g.id), ...around.flatMap((g) => g.members)]);
+  };
   const arrows = scene.arrows.filter((a) => a.from !== a.to && !a.freeFrom && !a.freeTo);
   const ends = new Map(arrows.map((a) => [a.id, new Set([...reach(a.from), ...reach(a.to)])]));
 

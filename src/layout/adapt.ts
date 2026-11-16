@@ -28,13 +28,25 @@ import type { Element, Extraction, Region } from '../types/extraction.ts';
 import { layoutCell, neighbourMap, placeByPartner, BAND_NAME, type CompartmentType, type LEdge, type LNode } from './cellLayout.ts';
 import { bendArrows, endBoxes, placeArrowText } from './arrows.ts';
 import { compactFigure } from './compact.ts';
+import { measure } from './measures.ts';
+import { applyEdits } from '../edit/applyEdits.ts';
+import { toScene } from '../render/toScene.ts';
 import { tidyFigure } from './tidy.ts';
 import { arrangeRows, FONT, median, nameWidth, sizeOf, UNIT_H } from './shapes.ts';
 import type { LayoutNotes, LayoutOptions, LayoutValue } from './value.ts';
 
 /** Step 5's layout, in the chosen way: compact (compact.ts, the default), tidy as drawn (tidy.ts), or redraw as a cell (below). */
-export const layOut = (x: Extraction, W: number, H: number, t: Tracing, opts: LayoutOptions): LayoutValue =>
-  (opts.mode === 'cell' ? layoutFigure : opts.mode === 'tidy' ? tidyFigure : compactFigure)(x, W, H, t, opts);
+export function layOut(x: Extraction, W: number, H: number, t: Tracing, opts: LayoutOptions): LayoutValue {
+  if (opts.mode === 'cell') return layoutFigure(x, W, H, t, opts);
+  if (opts.mode === 'tidy') return tidyFigure(x, W, H, t, opts);
+  // Compact runs the main route straight down only where that reads at least as well: on a figure with panels side
+  // by side (Wnt) or a dense one (Hu) it can add crossings or arrows behind shapes, and then the drawn columns stay.
+  const straight = compactFigure(x, W, H, t, opts);
+  if (opts.off.includes('spine')) return straight;
+  const kept = compactFigure(x, W, H, t, { ...opts, off: [...opts.off, 'spine'] });
+  const cost = (v: LayoutValue) => { const m = measure(toScene(applyEdits(x, [{ op: 'set_layout', id: 'layout', to: null, value: JSON.stringify(v) }]).extraction, W, H)); return m.crossings + m.behind; };
+  return cost(straight) <= cost(kept) ? straight : { ...kept, opts };
+}
 
 export const RULES = [
   { key: 'blocks', name: 'Keep clusters and touching shapes together', why: 'A cluster, or a ligand on its receptor, moves as one block, its rows kept as drawn.' },

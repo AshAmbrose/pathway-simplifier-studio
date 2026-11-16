@@ -79,7 +79,10 @@ export function bendArrows(x: Extraction, box: Map<string, Box>, unit: number, t
   for (const a of drawn) {
     if (!passesBehind(a, 0)) { bend.set(a.id, 0); continue; }
     const straight = crossings(a, 0);
-    const c = CURVES.find((v) => !passesBehind(a, v) && crossings(a, v) <= straight);
+    // A short arrow bowed hard turns into a loop: no bow deeper than about half the arrow's length.
+    const s1 = endBox(a.from)!, s2 = endBox(a.to)!;
+    const length = Math.hypot(s2.x + s2.width / 2 - s1.x - s1.width / 2, s2.y + s2.height / 2 - s1.y - s1.height / 2);
+    const c = CURVES.filter((v) => Math.abs(v) * 1.5 <= 0.6 * length).find((v) => !passesBehind(a, v) && crossings(a, v) <= straight);
     bend.set(a.id, c ?? 0);
     if (c === undefined) behind.push(a.id);
   }

@@ -90,21 +90,26 @@ export function toScene(x: Extraction, imageW: number, imageH: number): Scene {
   }
   for (const g of groups) byId.set(g.id, g);
   // Each arrow's ends first: where its line leaves each shape. Then arrows meeting the same side of one shape are
-  // spread along it, ordered by where their other end is, so arrows joining one shape stay apart.
+  // spread along it, ordered by the direction they arrive from, so they stay apart and don't cross.
   const at = (p: number[] | null | undefined): BoxPx | undefined => (p ? { x: (p[0] / 100) * width, y: (p[1] / 100) * height, width: 0, height: 0 } : undefined);
-  const placed: { a: Extraction['arrows'][number]; s: BoxPx; t: BoxPx; freeFrom: boolean; freeTo: boolean; p1: { x: number; y: number; side: Side }; p2: { x: number; y: number; side: Side } }[] = [];
+  type Pt = { x: number; y: number };
+  const placed: { a: Extraction['arrows'][number]; s: BoxPx; t: BoxPx; freeFrom: boolean; freeTo: boolean; p1: Pt & { side: Side }; p2: Pt & { side: Side }; from1: Pt; from2: Pt }[] = [];
   for (const a of x.arrows) {
     // An end in open space is a point; everything else is the box of its shape or group.
     const freeFrom = !!a.ends?.from, freeTo = !!a.ends?.to;
     const s = freeFrom ? at(a.ends!.from) : byId.get(a.from), t = freeTo ? at(a.ends!.to) : byId.get(a.to);
     if (!s || !t) { skipped.push(`arrow ${a.id}: ${!s ? a.from : a.to} could not be placed`); continue; }
     const c = (b: BoxPx) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
-    placed.push({ a, s, t, freeFrom, freeTo, p1: boxExit(s, c(t)), p2: boxExit(t, c(s)) });
+    const p1 = boxExit(s, c(t)), p2 = boxExit(t, c(s));
+    // Where each end is approached from: the other end, or for a bowed arrow, the point it bows out to.
+    const bend = ((a.bend ?? 0) / 100) * width, len = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+    const q = { x: (p1.x + p2.x) / 2 - ((p2.y - p1.y) / len) * bend * 1.5, y: (p1.y + p2.y) / 2 + ((p2.x - p1.x) / len) * bend * 1.5 };
+    placed.push({ a, s, t, freeFrom, freeTo, p1, p2, from1: bend ? q : p2, from2: bend ? q : p1 });
   }
   const sides = new Map<string, { box: BoxPx; ends: { p: { x: number; y: number; side: Side }; other: { x: number; y: number } }[] }>();
   for (const v of placed) {
     if (v.a.from === v.a.to) continue;
-    for (const [id, box, p, other] of [[v.a.from, v.s, v.p1, v.p2], [v.a.to, v.t, v.p2, v.p1]] as const) {
+    for (const [id, box, p, other] of [[v.a.from, v.s, v.p1, v.from1], [v.a.to, v.t, v.p2, v.from2]] as const) {
       if (!box.width || !box.height) continue;
       const k = `${id}|${p.side}`;
       if (!sides.has(k)) sides.set(k, { box, ends: [] });

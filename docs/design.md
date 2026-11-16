@@ -130,13 +130,17 @@ Any step can be skipped, and Back always works, including back to Check. Each si
   - **Hub in the middle** (your request): the first shape, going down, that nearly all routes lead into (NEMO in Guo) goes to the middle of those routes. What follows it runs straight down below it, and where that line splits (Guo's two outcomes), the shapes spread evenly below.
     - Left-to-right order is kept, so this adds no crossings. An earlier attempt that moved whole routes to either side created up to 10.
   - **Main route straight down** (when there is no hub): the longest chain of arrows going down, preferring one that reaches the nucleus, runs straight down the middle. Every other shape keeps the side it was drawn on and packs in beside it, nearest first. On Yu kept to route c, the original's slightly offset columns had turned the one chain into a zigzag.
-  - **Bows ignore shapes drawn together with an arrow's ends:** an arrow to TAK1 may cross TAB2/3, which TAK1 is drawn on.
+  - **Kept only where it reads at least as well:** Compact works the layout out both ways, with the main route straight and in its drawn columns, and keeps the straight one unless it has more crossings plus arrows behind shapes. On Wnt it would pull one panel's chain across both panels; on Hu it added arrows behind shapes.
+  - **Narrow:** beside the main line, nearest first, each shape takes the innermost column with its row free. A row holding only side shapes joins the row above or below when they fit and no arrow joins them, so side shapes don't open gaps in the line.
+  - **Pushes keep sides:** when two shapes overlap, the one off the main line moves outward, on the side it was drawn (Guo's Proteasome stays left of IκB).
+  - **Bands touch, as in a cell:** the membrane crosses its receptors where it did in the original, the space outside reaches down to it, and the cytoplasm starts just under it.
+  - **Bows ignore shapes drawn together with an arrow's ends** (an arrow to TAK1 may cross TAB2/3, which TAK1 is drawn on), and the measures count it the same way. No bow is deeper than about half the arrow's length, so short arrows don't loop.
   - **One size per kind,** names fit their shapes.
   - **Compartments and panels fit what's in them:** the nucleus shrinks to its contents, a band spans its panel, and the membrane stays a thin band through its receptors. Empty ones are left out and listed.
   - **A DNA strand spans what its arrows join.**
   - **Arrows:** bowed around shapes only if that adds no crossings, and arrow text kept clear.
   - **On the test figures:** no new crossings on Yu, Guo or Wnt; arrows behind shapes go down on all four; on Guo kept to its canonical routes, NEMO sits between BCR and TNFR with IκB straight below.
-- **Arrows everywhere are straight lines** (`src/render/edgeGeometry.ts`). BioPathway Studio's port-to-port curves made arrows in published figures look curly. Where several arrows meet one side of a shape, their ends are spread along it in the order of their other ends, so they can be told apart.
+- **Arrows everywhere are straight lines** (`src/render/edgeGeometry.ts`). BioPathway Studio's port-to-port curves made arrows in published figures look curly. Where several arrows meet one side of a shape, their ends are spread along it in the order they arrive from (a bowed arrow arrives from its bow), so they can be told apart and don't cross.
 - **In step 5 the two views zoom separately,** each fitting its own picture. The zoom menu and "Reset view" apply to both. Every step opens with the whole picture in view.
 - **Tidy as drawn** (`src/layout/tidy.ts`) keeps the authors' arrangement and scale. Shapes that travel together (a cluster, shapes drawn touching) move as one. Each rule can be switched off:
   - **Line up:** shapes nearly in one row or column are put exactly in line (small moves only).

@@ -184,14 +184,26 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
       return cx(near.o);
     };
     const rest = units.filter((u) => !u.wide && !line.has(u) && !fan.includes(u));
-    const left = rest.filter((u) => cx(u.o) < refAt(u)).sort((p, q) => cx(q.o) - cx(p.o));
-    const right = rest.filter((u) => cx(u.o) >= refAt(u)).sort((p, q) => cx(p.o) - cx(q.o));
+    const near = (u: Unit) => Math.abs(cx(u.o) - refAt(u));
+    const left = rest.filter((u) => cx(u.o) < refAt(u)).sort((p, q) => near(p) - near(q));
+    const right = rest.filter((u) => cx(u.o) >= refAt(u)).sort((p, q) => near(p) - near(q));
     const half = Math.max(...straight.map((u) => u.w)) / 2;
     for (const u of straight) u.x = -u.w / 2;
-    let cursor = -half - GAP_X;
-    for (const c of columns(left)) { const w = Math.max(...c.map((u) => u.w)); for (const u of c) u.x = cursor - w + (w - u.w) / 2; cursor -= w + GAP_X; }
-    cursor = half + GAP_X;
-    for (const c of columns(right)) { const w = Math.max(...c.map((u) => u.w)); for (const u of c) u.x = cursor + (w - u.w) / 2; cursor += w + GAP_X; }
+    // Nearest first, each shape takes the innermost column that has its row free, so the figure stays narrow.
+    const pack = (side: Unit[], dir: -1 | 1) => {
+      const cols: { units: Unit[]; w: number }[] = [];
+      for (const u of side) {
+        const free = cols.find((c) => !c.units.some((v) => v.row === u.row));
+        if (free) { free.units.push(u); free.w = Math.max(free.w, u.w); } else cols.push({ units: [u], w: u.w });
+      }
+      let cursor = dir < 0 ? -half - GAP_X : half + GAP_X;
+      for (const c of cols) {
+        for (const u of c.units) u.x = dir < 0 ? cursor - c.w + (c.w - u.w) / 2 : cursor + (c.w - u.w) / 2;
+        cursor += dir * (c.w + GAP_X);
+      }
+    };
+    pack(left, -1);
+    pack(right, 1);
     if (fan.length) {
       const total = fan.reduce((sum, u) => sum + u.w, 0) + (fan.length - 1) * 2 * GAP_X;
       let fx = -total / 2;
@@ -244,18 +256,53 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
     size.set(u.ids[0], { w: u.w, h: size.get(u.ids[0])!.h });
   }
 
-  // No overlaps: in each row, a shape overlapping the one on its left moves right (and the rest of the row with it).
-  for (let pass = 0; pass < 6; pass++) {
+  // No overlaps: two shapes overlapping in a row are pushed apart, keeping the side each was drawn on. The main
+  // line stays put; others move outwards, away from it (left of it to the left, right of it to the right).
+  const fixed = (u: Unit) => line.has(u) || fan.includes(u);
+  const lineAt = line.size ? median([...line].map((u) => u.x + u.w / 2)) : null;
+  for (let pass = 0; pass < 8; pass++) {
     let moved = false;
     const sorted = [...units].sort((a, b) => a.x - b.x);
     for (let i = 0; i < sorted.length; i++) for (let j = i + 1; j < sorted.length; j++) {
       const a = sorted[i], b = sorted[j];
       const ox = a.x + a.w + GAP_X / 2 - b.x, oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
-      // The hub's line stays put: the shape beside it moves instead.
-      if (ox > 0 && oy > 0) { if ((spine.includes(b) || fan.includes(b)) && !spine.includes(a) && !fan.includes(a)) a.x -= ox; else b.x += ox; moved = true; }
+      if (ox <= 0 || oy <= 0) continue;
+      moved = true;
+      if (fixed(b) && !fixed(a)) { if (cx(a.o) <= cx(b.o)) a.x -= ox; else a.x = b.x + b.w + GAP_X / 2; }
+      else if (fixed(a) && !fixed(b)) { if (cx(b.o) >= cx(a.o)) b.x += ox; else b.x = a.x - b.w - GAP_X / 2; }
+      else if (lineAt !== null && a.x + a.w / 2 < lineAt) a.x -= ox;
+      else b.x += ox;
     }
     if (!moved) break;
   }
+
+  // Close up rows: a row holding no part of the main line, whose shapes fit beside those of the row above (and
+  // have no arrows to them), joins that row, so side shapes don't open gaps in the line.
+  for (let i = rows.length - 1; i > 0; i--) {
+    const here = units.filter((u) => u.row === i), above = units.filter((u) => u.row === i - 1);
+    if (!here.length || !above.length || here.some(fixed) || rowPlace[i] !== rowPlace[i - 1]) continue;
+    const clash = here.some((u) => above.some((v) => u.x < v.x + v.w + GAP_X / 2 && v.x < u.x + u.w + GAP_X / 2));
+    const joined = links.some((l) => (here.includes(l.f) && above.includes(l.t)) || (here.includes(l.t) && above.includes(l.f)));
+    if (clash || joined) continue;
+    for (const u of here) u.row = i - 1;
+  }
+  // Then the other way: a row that couldn't move up may join the row below it.
+  for (let i = 0; i < rows.length - 1; i++) {
+    const here = units.filter((u) => u.row === i), below = units.filter((u) => u.row === i + 1);
+    if (!here.length || !below.length || here.some(fixed) || rowPlace[i] !== rowPlace[i + 1]) continue;
+    const clash = here.some((u) => below.some((v) => u.x < v.x + v.w + GAP_X / 2 && v.x < u.x + u.w + GAP_X / 2));
+    const joined = links.some((l) => (here.includes(l.f) && below.includes(l.t)) || (here.includes(l.t) && below.includes(l.f)));
+    if (clash || joined) continue;
+    for (const u of here) u.row = i + 1;
+  }
+  const used = [...new Set(units.map((u) => u.row))].sort((a, b) => a - b);
+  let yAt = 0;
+  used.forEach((r, k) => {
+    const mine = units.filter((u) => u.row === r), h = Math.max(...mine.map((u) => u.h));
+    if (k > 0 && rowPlace[r] !== rowPlace[used[k - 1]]) yAt += COMPARTMENT_GAP;
+    for (const u of mine) u.y = yAt + (h - u.h) / 2;
+    yAt += h + GAP_Y;
+  });
 
   // Every shape's box.
   const box = new Map<string, Box>();
@@ -280,8 +327,26 @@ export function compactFigure(x: Extraction, W: number, H: number, t: Tracing, o
       const scope = panel ? union(x.elements.filter((e) => panelOf(e.id) === panel).map((e) => box.get(e.id)!)) : content;
       b = { ...b, x: scope.x - PAD, width: scope.width + 2 * PAD };
     }
-    if (r.kind === MEMBRANE) { const h = Math.max(16, px(r.box).height * s), mid = median(mine.map((m) => cy(m))); b = { ...b, y: mid - h / 2, height: h }; }
+    if (r.kind === MEMBRANE) {
+      // The membrane crosses its receptors where it crossed them in the original (most of the way down the glyph).
+      const band = px(r.box), h = Math.max(16, band.height * s);
+      const recs = x.elements.filter((e) => regionOf(e)?.id === r.id && e.kind === 'receptor');
+      const at = recs.length
+        ? median(recs.map((e) => { const o = px(e.box), n = box.get(e.id)!; return n.y + ((cy(band) - o.y) / Math.max(1, o.height)) * n.height; }))
+        : median(mine.map((m) => cy(m)));
+      b = { ...b, y: at - h / 2, height: h };
+    }
     regionBoxes.set(r.id, b);
+  }
+  // Bands touch, as in a cell: the space outside reaches down to the membrane, and the cytoplasm starts just under it.
+  for (const m of x.regions.filter((r) => r.kind === MEMBRANE && regionBoxes.has(r.id))) {
+    const mb = regionBoxes.get(m.id)!;
+    const scope = (r: (typeof x.regions)[number]) => x.elements.find((e) => regionOf(e)?.id === r.id && e.panel)?.panel ?? null;
+    for (const r of x.regions.filter((v) => regionBoxes.has(v.id) && scope(v) === scope(m))) {
+      const b = regionBoxes.get(r.id)!;
+      if (r.kind === 'extracellular' && b.y < mb.y) regionBoxes.set(r.id, { ...b, height: mb.y - b.y });
+      if (r.kind === 'cytoplasm') { const bottom = Math.max(b.y + b.height, mb.y + mb.height + 2 * PAD); regionBoxes.set(r.id, { ...b, y: mb.y + mb.height, height: bottom - mb.y - mb.height }); }
+    }
   }
   // A compartment drawn inside another (the nucleus in the cytoplasm, an endosome) stays inside it.
   const inside = (a: Box, b: Box) => cx(b) >= a.x && cx(b) <= a.x + a.width && cy(b) >= a.y && cy(b) <= a.y + a.height;

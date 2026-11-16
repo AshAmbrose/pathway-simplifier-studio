@@ -153,7 +153,7 @@ export function PairedViewer({ ref, width, height, rightSize, left, right, leftT
   const placement: Placement = { toScreen: (x, y) => ({ left: ox + (x - rv.x) * s, top: oy + (y - rv.y) * s }), paneW: pane.w, paneH: pane.h };
 
   const pane_ = (i: number, content: ReactNode, title: string) => (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-w-0 flex-1 flex-col" data-pane={i ? 'right' : 'left'}>
       <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{title}</div>
       <div className="relative">
         <svg

@@ -78,6 +78,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const [activeRepeat, setActiveRepeat] = useState<string | null>(null);
   const [draft, setDraft] = useState<ClusterDraft | null>(null);
   const [layoutSel, setLayoutSel] = useState<string | null>(null);
+  const [finished, setFinished] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const [showChanges, setShowChanges] = useState(false);
   const viewer = useRef<ViewerHandle>(null);
@@ -224,6 +225,29 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const next = () => {
     if (BUILT.includes(step)) setSimplify((v) => ({ ...v, steps: { ...v.steps, [step]: 'done' } }));
     if (at < STEPS.length - 1) go(STEPS[at + 1]);
+    else setFinished(true);
+  };
+  /**
+   * Saves the simplified figure as an SVG file: the right view's picture, whole, without the on-screen marks.
+   * A stopgap until the editing canvas (the next update) takes over Finish.
+   */
+  const downloadSvg = () => {
+    const svg = document.querySelector('[data-pane="right"] svg');
+    if (!svg) return;
+    const copy = svg.cloneNode(true) as SVGSVGElement;
+    const w = right.scene.width, h = right.scene.height;
+    copy.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    copy.setAttribute('width', String(Math.round(w)));
+    copy.setAttribute('height', String(Math.round(h)));
+    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    copy.removeAttribute('class');
+    copy.querySelector('[data-scene]')?.parentElement?.setAttribute('transform', '');
+    const blob = new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${run.name.replace(/[^\w-]+/g, '-')}-simplified.svg`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
   /** Undo one change from the list. A "left out" from step 2 is undone by keeping that shape, so the step's choices stay true. */
@@ -354,6 +378,15 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
         </div>
       </header>
       {notices}
+      {finished && (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100">
+          <span>✓ Simplification finished and saved. The editing canvas for final tweaks comes in the next update; for now you can download the figure.</span>
+          <span className="flex shrink-0 gap-3">
+            <button className="font-semibold underline" onClick={downloadSvg}>Download SVG</button>
+            <button className="underline" onClick={() => setFinished(false)}>Close</button>
+          </span>
+        </div>
+      )}
       {openQuestions > 0 && (
         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
           <span>{openQuestions} question{openQuestions === 1 ? ' is' : 's are'} still open in Check. You can carry on: answers given there will show up here.</span>

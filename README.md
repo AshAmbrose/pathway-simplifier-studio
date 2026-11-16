@@ -29,6 +29,7 @@ A step bar across the top walks you through: **Check**, then **① Issues → �
      - A table shows before → after: arrows crossing, behind a shape, and pointing up.
      - Optional: one consistent style, and hiding the member names under collapsed shapes. Any rule that doesn't help can be switched off.
      - Afterwards, click a shape on the right and drag it to fine-tune.
+   - **Finish** marks the simplification done and offers the figure as an SVG download. An editing canvas for final tweaks is planned next.
 
 ## Scripts
 | Command | What it does |
