@@ -53,7 +53,7 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 **Decision:** "+ Shape" and "+ Arrow" buttons.
 - **A new shape takes its colour from the original image** where it's placed.
 - **Its name box suggests names already written in the figure.** Greek letters can be typed as Latin ones.
-- **New arrows** can be drawn from any shape or cluster, as an arrow or a bar. A cluster's shapes touch, so in "+ Arrow" mode each cluster gets a small tab to drag from or drop on. An arrow ending where there is no shape is accepted after a check.
+- **New arrows** can be drawn from any shape or cluster, as an arrow or a bar. A cluster's shapes touch, so in "+ Arrow" mode a cluster you hover (or drag an arrow over) shows a small tab to drag from or drop on. Only that one, so the picture isn't covered in tabs. An arrow ending where there is no shape is accepted after a check.
 
 **Why:** the colour and the name suggestions come from the figure itself, so additions stay faithful without guessing. Undoing an added shape also undoes everything that depends on it (its name, arrows and moves).
 
@@ -102,7 +102,7 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 **Step 2, Focus: routes are traced from the drawing.** There's no model call and no biology.
 - **Shapes that travel together form one unit:** shapes drawn touching, or drawn in one cluster.
 - **A route** starts where nothing points in and follows the arrows.
-- **Inhibition arrows aren't followed.** What they come from is listed as a regulator.
+- **Inhibition arrows aren't followed.** What they come from is listed as a regulator, with the routes it acts on (not just the heading it sits nearest).
 - **Routes are grouped as the figure groups them:** by panel, else by the nearest heading.
 - **Everything starts ticked,** so skipping the step changes nothing.
 - **Traced after Check and step 1,** so fixes, names and left-out parts are included.

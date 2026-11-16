@@ -417,7 +417,7 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
                       className={`rounded-md px-2 py-0.5 text-sm ${drawHead === h ? 'bg-white font-semibold text-blue-700' : 'bg-blue-500/40 hover:bg-blue-500/70'}`}>{label}</button>
                   ))}
                 </span>
-                Drag from the shape where it starts to where it ends (a shape, or an empty spot). For a whole cluster, use its grey “cluster” tab.
+                Drag from the shape where it starts to where it ends (a shape, or an empty spot). For a whole cluster, hover it and drag from its grey “cluster” tab.
               </>}
             </span>
             <button className="underline" onClick={() => setMode(null)}>{mode === 'draw' ? 'Done (Esc)' : 'Cancel (Esc)'}</button>

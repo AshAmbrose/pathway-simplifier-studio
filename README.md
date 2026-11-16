@@ -15,7 +15,7 @@ A step bar across the top walks you through: **Check**, then **① Issues → �
 1. **Upload** a PNG, JPEG or WebP figure. One model call reads it, and the result is saved, so reopening it is free.
 2. **Answer the questions.** Numbered pins mark where the model wasn't sure. Pick an answer, and both views move on to the next question.
 3. **Fix** anything else: click a shape or arrow to rename it, re-point it, change it or remove it.
-4. **Add** what's missing: use "+ Shape" and "+ Arrow". A new shape takes its colour from the figure. To draw an arrow from or to a whole cluster, use its grey "cluster" tab, or select the cluster and drag from its blue dots.
+4. **Add** what's missing: use "+ Shape" and "+ Arrow". A new shape takes its colour from the figure. To draw an arrow from or to a whole cluster, hover it and use its grey "cluster" tab, or select the cluster and drag from its blue dots.
 5. **Review your changes:** the list at the top shows each one in plain words, with undo, and "Show as extracted" shows the model's own reading.
 6. **Simplify:** press **Continue to simplify →**. Five steps follow in order, and any can be skipped. Each shows the figure before the step on the left and after it on the right. "Original" opens the uploaded figure in a small window. "← Back" from step ① returns to Check.
    - **① Issues:** shown beside the original. Click a card to outline its item on both pictures. Fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.

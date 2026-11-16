@@ -307,6 +307,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
   const sw = Math.max(1.2, scene.width / 650);
   const u = ui.unit;
   const { drag, setDrag, start, begin, moving, finish } = usePointerDrag<Drag>();
+  const lastCluster = useRef<string | null>(null);
   const hotArrow = (a: { id: string; from: string; to: string }) => ui.hot === a.id || ui.hot === a.from || ui.hot === a.to;
 
   /** Starts a new arrow from shape `from` (from "+ Arrow" mode, or a connector dot on the selected shape). */
@@ -323,7 +324,19 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
 
   // In "+ Arrow" mode each cluster gets a small tab above its top-right corner: drag from it to start an arrow
   // at the cluster, or drop on it to end one there. (Its shapes touch, so there is little else of it to grab.)
-  const tabs = ui.drawing && !ui.picking ? scene.groups.map((g) => ({ id: g.id, x: g.x + g.width - 46 * u, y: g.y - 15 * u, width: 46 * u, height: 13 * u })) : [];
+  // Only the tabs of clusters you are at, so the picture isn't covered in them: the cluster under the pointer
+  // (it, or one of its shapes, is hovered), the cluster the pointer is over while dragging an arrow end, and
+  // the cluster an arrow is being drawn from.
+  const pointer = drag && (drag.kind === 'new' || drag.kind === 'end') ? drag : null;
+  // The last cluster hovered keeps its tab, so the pointer can travel from the cluster up to the tab.
+  const hovered = scene.groups.find((g) => ui.hot === g.id || (!!ui.hot && g.members.includes(ui.hot)));
+  if (hovered) lastCluster.current = hovered.id;
+  const near = (g: Scene['groups'][number]) => {
+    if (g.id === lastCluster.current) return true;
+    if (drag?.kind === 'new' && drag.from === g.id) return true;
+    return !!pointer && pointer.x >= g.x - 20 * u && pointer.x <= g.x + g.width + 20 * u && pointer.y >= g.y - 24 * u && pointer.y <= g.y + g.height + 10 * u;
+  };
+  const tabs = ui.drawing && !ui.picking ? scene.groups.filter(near).map((g) => ({ id: g.id, x: g.x + g.width - 46 * u, y: g.y - 15 * u, width: 46 * u, height: 13 * u })) : [];
   const onTab = (x: number, y: number) => tabs.find((t) => x >= t.x && x <= t.x + t.width && y >= t.y && y <= t.y + t.height)?.id ?? null;
   /** What is under a point, for dropping an arrow end: a cluster's tab, else the smallest shape, else a cluster. */
   const endAt = (x: number, y: number) => onTab(x, y) ?? hitTest(scene, x, y, true);

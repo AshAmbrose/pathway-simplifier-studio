@@ -137,7 +137,6 @@ export function traceRoutes(x: Extraction): Tracing {
   const others = [...units.keys()].filter((u) => !placed.has(u)).flatMap((u) => units.get(u)!);
 
   // Grouping: by panel when routes start in two or more panels, else by the nearest heading, else one group.
-  // Regulators go in the group of the panel or heading they sit in or nearest.
   const headings = x.elements.filter((e) => e.kind === 'heading');
   const panelOf = (u: string) => byId.get(u)!.panel;
   const startPanels = new Set(routes.map((r) => panelOf(r.start)).filter(Boolean));
@@ -156,7 +155,20 @@ export function traceRoutes(x: Extraction): Tracing {
   }
   const groupBy = new Map(groups.map((g) => [g.key, g]));
   for (const r of routes) groupBy.get(groupOf(r.start))!.routes.push(r);
-  for (const r of regulators) groupBy.get(groupOf(r.key.slice(4)))!.regulators.push(r);
+  // A regulator sits with the routes it acts on: the group holding most of the route units it points at.
+  // Only one that acts on nothing on a route falls back to the panel or heading it sits nearest.
+  const routeGroupOf = new Map<string, Map<string, number>>();
+  for (const r of routeUnits) { const g = groupOf(r.start); for (const u of r.units) { const m = routeGroupOf.get(u) ?? new Map(); m.set(g, (m.get(g) ?? 0) + 1); routeGroupOf.set(u, m); } }
+  for (const r of regulators) {
+    const votes = new Map<string, number>();
+    for (const t of any.get(r.key.slice(4)) ?? []) for (const [g, n] of routeGroupOf.get(t) ?? []) votes.set(g, (votes.get(g) ?? 0) + n);
+    // A tie (a target shared by two routes) goes to whichever tied group's heading sits nearest the regulator.
+    const top = Math.max(0, ...votes.values());
+    const tied = [...votes].filter(([, n]) => n === top).map(([g]) => g);
+    const near = (g: string) => { const hs = groupBy.get(g)!.headings.map((h) => byId.get(h)!); return hs.length ? Math.min(...hs.map((h) => gap(boxPct(h.box), pos(r.key.slice(4))))) : Infinity; };
+    const best = tied.sort((a, b) => near(a) - near(b))[0];
+    groupBy.get(best ?? groupOf(r.key.slice(4)))!.regulators.push(r);
+  }
   groups = groups.filter((g) => g.routes.length > 0 || g.regulators.length > 0);
 
   return { groups, regulators, others, unitOf };
