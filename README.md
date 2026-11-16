@@ -9,6 +9,8 @@ You check the copy beside the original and fix anything the model got wrong. The
 2. Copy `.env.example` to `.env.local`, then fill in `GEMINI_API_KEY` and `EXTRACT_MODEL`. The key stays on your computer and is never sent to the browser.
 3. `npm run dev`, then open the address it prints.
 
+Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures.
+
 ## Using it
 A step bar across the top walks you through: **Check**, then **① Issues → ② Focus → ③ Repeats → ④ Clusters → ⑤ Layout**.
 
@@ -18,8 +20,8 @@ A step bar across the top walks you through: **Check**, then **① Issues → �
 4. **Add** what's missing: use "+ Shape" and "+ Arrow". A new shape takes its colour from the figure. To draw an arrow from or to a whole cluster, use its grey "cluster" tab, or select the cluster and drag from its blue dots.
 5. **Review your changes:** the list at the top shows each one in plain words, with undo, and "Show as extracted" shows the model's own reading.
 6. **Simplify:** press **Continue to simplify →**. Five steps follow in order, and any can be skipped. Each shows the figure before the step on the left and after it on the right. "Original" opens the uploaded figure in a small window. "← Back" from step ① returns to Check.
-   - **① Issues:** fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.
-   - **② Focus:** choose which routes to show. The routes are traced from the figure's own arrows. Click any shape to add it or drop it.
+   - **① Issues:** shown beside the original. Click a card to outline its item on both pictures. Fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.
+   - **② Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
    - **③ Repeats, ④ Clusters, ⑤ Layout:** coming in later updates.
 
 ## Scripts

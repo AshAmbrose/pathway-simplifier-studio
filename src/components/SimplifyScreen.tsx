@@ -1,8 +1,8 @@
 /**
  * The simplification steps, after Check: five steps in a fixed order (Issues, Focus, Repeats, Clusters, Layout), each skippable.
  *
- *  - Left view: the figure after every earlier step (and every correction). Right view: the same with this
- *    step's choices applied, with whatever it leaves out drawn faintly so it can be clicked back in.
+ *  - Left view: the figure after every earlier step (and every correction); in step 1, the original figure
+ *    instead, since its issues are best judged against what was drawn. Right view: this step's choices applied, with whatever it leaves out drawn faintly so it can be clicked back in.
  *    Zoom and pan are shared; hovering a choice outlines what it affects on both views.
  *  - The original figure opens in a small floating window.
  *  - Every choice is a change in the run's one change list, tagged with its step, applied after the corrections
@@ -23,7 +23,7 @@ import { focusHidden, items, setItem, toggleShape, traceRoutes } from '../simpli
 import { EMPTY_SIMPLIFY, STEPS, type AppliedEdit, type Edit, type Review, type Simplify, type StepId } from '../types/extraction.ts';
 import { FloatingOriginal } from './FloatingOriginal.tsx';
 import { PairedViewer, type ViewerHandle } from './PairedViewer.tsx';
-import { MarkerDefs, SceneSvg, type Mark, type SceneUi } from './SceneSvg.tsx';
+import { ImageLayer, MarkerDefs, SceneSvg, type Mark, type SceneUi } from './SceneSvg.tsx';
 import { STEP_INFO, StepBar, stepTitle, type JourneyStep } from './StepBar.tsx';
 import { FocusStep } from './steps/FocusStep.tsx';
 import { IssuesStep } from './steps/IssuesStep.tsx';
@@ -250,9 +250,10 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
         onSkip={() => { clearStep(step, 'skipped'); if (at < STEPS.length - 1) go(STEPS[at + 1]); }} onNext={next} onReset={() => clearStep(step, null)} />
 
       <div className="mt-3 flex flex-col gap-4 lg:flex-row">
-        <aside className="w-full shrink-0 lg:max-h-[78vh] lg:w-[340px] lg:overflow-y-auto lg:pr-1">
+        <aside className="w-full shrink-0 rounded-xl border border-slate-200 bg-slate-100 p-3 lg:max-h-[78vh] lg:w-[360px] lg:overflow-y-auto dark:border-slate-700 dark:bg-slate-900/80">
           <h2 className="text-base font-semibold">{stepTitle(step)}</h2>
           <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">{info.what}</p>
+          {step === 'focus' && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">Traced from the figure as it stands after Check and step ①, so your fixes, names and left-out parts are already included.</p>}
           {stepFailures.length > 0 && (
             <div className="mb-3 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
               {stepFailures.length} choice{stepFailures.length === 1 ? '' : 's'} in this step no longer appl{stepFailures.length === 1 ? 'ies' : 'y'}, usually because something changed in Check:
@@ -261,7 +262,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
           )}
           {step === 'issues' && (
             <IssuesStep x={before.extraction} issues={issues} edits={stepEdits} decisions={s.issues} names={names} active={activeIssue}
-              onSettle={settleIssue} onHover={setHoverIds} onShow={(id) => show([id])} />
+              onSettle={settleIssue} onHover={setHoverIds} onSelect={(i) => { setActiveIssue(i.key); show([i.id]); }} />
           )}
           {step === 'focus' && focusStale && (
             <div className="mb-3 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
@@ -275,6 +276,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
               onOnly={(key) => setFocus({ off: items(tracing).map((i) => i.key).filter((k) => k !== key), keep: [], drop: [] })}
               onAll={() => setFocus(EMPTY_SIMPLIFY.focus)}
               onRestore={(id) => setFocus(toggleShape(s.focus, tracing, id, false))}
+              onShape={(id, keptNow) => setFocus(toggleShape(s.focus, tracing, id, keptNow))}
               onHover={setHoverIds} onShow={show} />
           )}
           {!BUILT.includes(step) && <p className="text-sm text-slate-600 dark:text-slate-300">This step comes in a later update. Skip it, or press Next: nothing changes.</p>}
@@ -284,11 +286,13 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
             ref={viewer}
             width={W}
             height={H}
-            leftTitle="Before this step"
+            leftTitle={step === 'issues' ? 'Original' : 'Before this step'}
             rightTitle={`After ${stepTitle(step)}`}
             hint={hint}
             help={step === 'focus' ? 'Scroll to zoom · drag to pan · click a shape to leave it out or bring it back' : 'Scroll to zoom · drag to pan · faded = left out by this step'}
-            left={(unit) => <><MarkerDefs /><SceneSvg scene={beforeScene} ui={ui(unit)} /></>}
+            left={(unit) => step === 'issues'
+              ? <ImageLayer scene={beforeScene} src={imageUrl} ui={ui(unit)} />
+              : <><MarkerDefs /><SceneSvg scene={beforeScene} ui={ui(unit)} /></>}
             right={(unit) => <><MarkerDefs /><SceneSvg scene={right.scene} ui={ui(unit, right.ghosts)} /></>}
           />
         </div>

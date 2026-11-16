@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, ty
 import type { RunRecord } from '../api.ts';
 import { applyEdits, dependents, optionState } from '../edit/applyEdits.ts';
 import { inOrder, isAnswer, isCorrection, newKey } from '../edit/order.ts';
-import { describeEdit, nameOf, regionName } from '../edit/describe.ts';
+import { cleanText, describeEdit, nameOf, regionName } from '../edit/describe.ts';
 import type { BoxPx } from '../render/edgePorts.ts';
 import { anchorOf, boxOf, nearest, regionAt, toScene, union } from '../render/toScene.ts';
 import type { AppliedEdit, Edit, Review } from '../types/extraction.ts';
@@ -332,7 +332,7 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
     const several = same.filter(Boolean).length > 1;
     const pos = (shape: string | null) => { const b = shape ? boxOf(baseScene, shape) : null; return b ? [Math.round(b.y / (H / 40)), b.x] : [Infinity, Infinity]; };
     return question.options
-      .map((o, index) => ({ index, label: o.label, byHand: optionState(answersOnly, o) === 'manual', shownNow: same[index] && !(several && o.asRead), at: pos(o.shape) }))
+      .map((o, index) => ({ index, label: cleanText(base, o.label), byHand: optionState(answersOnly, o) === 'manual', shownNow: same[index] && !(several && o.asRead), at: pos(o.shape) }))
       .sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question, qi, base, baseScene, review, settled, H]);
@@ -449,7 +449,7 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
           );
           if (question && qi !== null) return (
             <Popover anchor={anchorBox} place={place} width={300}>
-              <QuestionPopover n={qi + 1} total={base.clarify.length} question={question.question} choices={choices} answered={answered(qi)}
+              <QuestionPopover n={qi + 1} total={base.clarify.length} question={cleanText(base, question.question)} choices={choices} answered={answered(qi)}
                 onHover={setHoverOpt} onChoose={(oi) => choose(qi, oi)} onManual={() => fixByHand(qi)} onClear={() => clearAnswer(qi)} onClose={close} />
             </Popover>
           );
