@@ -1,10 +1,10 @@
 /**
- * The app's two screens: upload a figure, or review one. The open run's id is kept in the address
- * (?run=<id>), so a review can be reloaded or bookmarked.
+ * The app's two screens: upload a figure, or work on one (RunScreen: Current and Simplified). The open run's id
+ * is kept in the address (?run=<id>), so a run can be reloaded or bookmarked.
  */
 import { useEffect, useState } from 'react';
 import { getRun, runImageUrl, type RunRecord } from './api.ts';
-import { ReviewScreen } from './components/ReviewScreen.tsx';
+import { RunScreen } from './components/RunScreen.tsx';
 import { UploadScreen } from './components/UploadScreen.tsx';
 
 /** The open run is kept in the address (?run=<id>), so a review can be reloaded or bookmarked. */
@@ -23,7 +23,7 @@ export default function App() {
     const id = new URL(location.href).searchParams.get('run');
     if (id) open(id);
   }, []);
-  if (run) return <ReviewScreen run={run} imageUrl={runImageUrl(run.id)} onBack={() => show(null)} />;
+  if (run) return <RunScreen key={run.id} run={run} imageUrl={runImageUrl(run.id)} onBack={() => show(null)} />;
   return (
     <>
       {error && <div className="mx-auto mt-4 max-w-4xl px-4 text-sm text-red-700 dark:text-red-300">{error}</div>}

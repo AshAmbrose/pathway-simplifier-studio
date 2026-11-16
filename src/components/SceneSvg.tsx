@@ -15,6 +15,7 @@ import { readableTextColors } from '../render/textContrast.ts';
 
 const HL = '#f97316';
 const SEL = '#2563eb';
+const FADED = 0.2;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 export type Mark = 'about' | 'candidate' | 'hover';
@@ -50,6 +51,8 @@ export interface SceneUi {
   /** An arrow's end was dropped where there is no shape: open space or a compartment. The screen asks before accepting. */
   onArrowEndFree: (arrow: string, end: 'from' | 'to', at: { x: number; y: number }) => void;
   onMoveNode: (id: string, box: BoxPx) => void;
+  /** Drawn faintly: what a simplification step leaves out, shown so it can be clicked back in. */
+  faded?: Set<string>;
 }
 
 /** The arrowhead shapes (arrow, bar, open), shared by every arrow; each takes its line's colour. */
@@ -305,7 +308,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
       ))}
       {scene.panels.map((p) => <rect key={p.id} x={p.x} y={p.y} width={p.width} height={p.height} fill="none" stroke="#cbd5e1" strokeDasharray="2 4" style={{ pointerEvents: 'none' }} />)}
       {scene.groups.map((g) => (
-        <g key={g.id} onMouseEnter={() => ui.onHover(g.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(g.id); }} style={{ cursor: 'pointer' }}>
+        <g key={g.id} opacity={ui.faded?.has(g.id) ? FADED : 1} onMouseEnter={() => ui.onHover(g.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(g.id); }} style={{ cursor: 'pointer' }}>
           {/* Only the outline is clickable, so the shapes inside stay reachable. */}
           <rect x={g.x} y={g.y} width={g.width} height={g.height} rx={8} fill="none" stroke="transparent" strokeWidth={10 * u} pointerEvents="stroke" />
           <rect x={g.x} y={g.y} width={g.width} height={g.height} rx={8} fill="none" stroke={ui.hot === g.id ? HL : '#64748b'} strokeOpacity={ui.hot === g.id ? 1 : 0.55}
@@ -318,7 +321,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
         const dash = a.line === 'dashed' ? '7 5' : a.line === 'dotted' ? '1.5 4' : a.line === 'mixed' ? '8 3 2 3' : undefined;
         const marker = a.head === 'arrow' ? 'url(#m-arrow)' : a.head === 'bar' ? 'url(#m-bar)' : a.head === 'other' ? 'url(#m-other)' : undefined;
         return (
-          <g key={a.id} onMouseEnter={() => ui.onHover(a.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(a.id); }} style={{ cursor: 'pointer' }}>
+          <g key={a.id} opacity={ui.faded?.has(a.id) ? FADED : 1} onMouseEnter={() => ui.onHover(a.id)} onMouseLeave={() => ui.onHover(null)} onClick={(e) => { e.stopPropagation(); ui.onSelect(a.id); }} style={{ cursor: 'pointer' }}>
             <path d={a.d} fill="none" stroke="transparent" strokeWidth={Math.max(14, 14 * u)} />
             <path d={a.d} fill="none" stroke={h ? HL : a.colour} strokeWidth={h ? sw * 2 : sw} strokeDasharray={dash} strokeLinecap="round"
               opacity={a.line === 'faint' && !h ? 0.45 : 1} markerEnd={marker} />
@@ -334,7 +337,7 @@ export function SceneSvg({ scene, ui }: { scene: Scene; ui: SceneUi }) {
         const movable = !drawFrom && ui.editable && !ui.picking && ui.selected === n.id;
         const off = drag?.kind === 'node' && drag.id === n.id ? drag : { dx: 0, dy: 0 };
         return (
-          <g key={n.id} transform={`translate(${n.x + off.dx},${n.y + off.dy})`} style={{ cursor: drawFrom ? 'crosshair' : movable ? 'move' : 'pointer' }}
+          <g key={n.id} opacity={ui.faded?.has(n.id) ? FADED : 1} transform={`translate(${n.x + off.dx},${n.y + off.dy})`} style={{ cursor: drawFrom ? 'crosshair' : movable ? 'move' : 'pointer' }}
             onMouseEnter={() => ui.onHover(n.id)} onMouseLeave={() => ui.onHover(null)}
             onClick={(e) => { e.stopPropagation(); if (!drawFrom) ui.onSelect(n.id); }}
             {...(drawFrom ? newArrowHandlers(n.id) : movable ? {

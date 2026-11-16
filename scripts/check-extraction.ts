@@ -5,7 +5,9 @@
  *  3. toScene places every element inside the image;
  *  4. a dangling arrow reference is reported, and the render skips that arrow instead of failing;
  *  5. every kind of change applies, a change that can't apply is reported, and no changes gives back the extraction;
- *  6. runs saved before prompt v3 (local data/, if present) still load.
+ *  6. runs saved before prompt v3 (local data/, if present) still load;
+ *  7. simplification: the order changes apply in, the "hide" change, and step 2's route tracing on the saved
+ *     test figures (local data/, if present), with untick → left out → tick back → restored exactly.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems } from '../src/types/extraction.ts';
@@ -13,7 +15,10 @@ import { toScene } from '../src/render/toScene.ts';
 import { v1ToV2 } from './v1ToV2.ts';
 import { applyEdits, dependents, optionProblems, optionState } from '../src/edit/applyEdits.ts';
 import { describeEdit } from '../src/edit/describe.ts';
-import { EDIT_OPS, type Edit } from '../src/types/extraction.ts';
+import { EDIT_OPS, EMPTY_SIMPLIFY, ReviewSchema, type Edit } from '../src/types/extraction.ts';
+import { inOrder } from '../src/edit/order.ts';
+import { findIssues } from '../src/simplify/issues.ts';
+import { focusHidden, setItem, toggleShape, traceRoutes } from '../src/simplify/routes.ts';
 import { getRun, listRuns } from '../server/runs.ts';
 
 let failed = 0;
@@ -96,6 +101,7 @@ const cases: [Edit, (x: typeof base) => boolean][] = [
   [E('remove_from_group', 'e3', 'g1'), (x) => x.groups[0].members.join() === 'e4'],
   [E('set_box', 'e1', null, '40,40,12,6'), (x) => x.elements[0].box.join() === '40,40,12,6'],
   [E('add_element', 'new-k1', null, JSON.stringify({ box: [70, 70, 8, 4], fill: '#aabbcc' })), (x) => x.elements.length === 5 && x.elements[4].fill === '#aabbcc' && x.elements[4].label === null],
+  [E('hide', 'e2', null, 'not on a chosen pathway'), (x) => x.elements.length === 3 && x.arrows.length === 0 && x.contacts.length === 0],
 ];
 check(cases.length === EDIT_OPS.length && new Set(cases.map(([e]) => e.op)).size === EDIT_OPS.length, `every kind of change has a test (${EDIT_OPS.length})`);
 for (const [e, ok] of cases) {
@@ -133,12 +139,57 @@ const [oA, oB, oZ] = base.clarify[0].options;
 check(optionState(base, oA) === 'ready' && optionState(base, oB) === 'ready' && optionState(base, oZ) === 'manual', 'answers: as-read and applicable ones are ready; one that cannot apply needs fixing by hand');
 check(optionProblems(base).length === 1 && optionProblems(base)[0].includes('"Z"'), 'an answer whose changes cannot apply is listed as a problem');
 
+// --- simplification ---
+check(!JSON.stringify(extractionJsonSchema()).includes('"hide"'), 'the model is never offered the simplification-only "hide" change');
+check(applyEdits(base, [E('hide', 'a1', null, 'x')]).extraction.arrows.map((a) => a.id).join() === 'a2' && applyEdits(base, [E('hide', 'g1', null, 'x')]).extraction.elements.length === 2,
+  'hiding an arrow takes only that arrow; hiding a cluster takes its shapes');
+const src = (source: string, key: string) => ({ ...E('set_label', 'e1', null, key), key, source, at: '' });
+const order = inOrder([src('step:focus', 'f'), src('manual', 'm'), src('q2', 'q2'), src('step:issues', 'i'), src('q0', 'q0')]).map((e) => e.key).join();
+check(order === 'q0,q2,m,i,f', `changes apply as answers, then fixes by hand, then each step in order (${order})`);
+check(ReviewSchema.safeParse({ edits: [], answers: {}, simplify: EMPTY_SIMPLIFY }).success && ReviewSchema.safeParse({ edits: [], answers: {} }).success, 'a review saves with or without a simplification record');
+
 // --- saved runs ---
 const saved = listRuns();
 if (!saved.length) console.log('skip saved-run checks (no runs in data/)');
 else {
   const all = saved.map((r) => getRun(r.id)!);
   check(all.every((r) => r.review && Array.isArray(r.review.edits) && ExtractionSchema.safeParse(r.extraction).success), `${all.length} saved run(s) load in the current shape, including any saved before prompt v3`);
+  // Answered runs look exactly as before: corrections still apply in the old order (answers by question, then by hand).
+  const oldOrder = <T extends { source: string }>(es: T[]) => [...es.filter((e) => e.source !== 'manual').sort((a, b) => Number(a.source.slice(1)) - Number(b.source.slice(1))), ...es.filter((e) => e.source === 'manual')];
+  check(all.every((r) => JSON.stringify(applyEdits(r.extraction, inOrder(r.review.edits)).extraction) === JSON.stringify(applyEdits(r.extraction, oldOrder(r.review.edits)).extraction)),
+    'every saved review gives the same picture as before simplification was added');
+
+  // Step 2 on the test figures: routes grouped the way each figure groups them.
+  const find = (part: string) => all.find((r) => r.id.includes(part));
+  const groupsOf = (part: string) => { const r = find(part); return r ? traceRoutes(r.extraction).groups.map((g) => g.label) : null; };
+  const wnt = groupsOf('wnt-liu2022-v3'), guo = groupsOf('guo2024-nfkb-v3'), yu = groupsOf('yu2020-nfkb-v3');
+  if (wnt) check(wnt.join() === 'WNT OFF,WNT ON', `Wnt: routes grouped by panel (${wnt.join(' | ')})`);
+  if (guo) check(guo.join() === 'Canonical pathway,Non-canonical pathway', `Guo: routes grouped under its headings (${guo.join(' | ')})`);
+  if (yu) check(yu.join() === 'a,b,c,d', `Yu: routes grouped under its branch labels a–d (${yu.join(' | ')})`);
+
+  for (const r of all.filter((v) => /v3$/.test(v.id))) {
+    const x = r.extraction, t = traceRoutes(x);
+    const none = focusHidden(x, t, EMPTY_SIMPLIFY.focus);
+    const first = t.groups[0]?.routes[0];
+    if (!first) continue;
+    const off = setItem(EMPTY_SIMPLIFY.focus, t, first.key, false);
+    const h = focusHidden(x, t, off);
+    const shown = applyEdits(x, [...h].map(([id, why]) => E('hide', id, null, why)));
+    const otherRoutes = new Set(t.groups.flatMap((g) => g.routes).filter((v) => v !== first).flatMap((v) => v.members));
+    const ok = none.size === 0 && h.size > 0 && shown.failed.length === 0
+      && first.members.every((m) => h.has(m) === !otherRoutes.has(m))
+      && shown.extraction.arrows.every((a) => !h.has(a.from) && !h.has(a.to));
+    const back = focusHidden(x, t, setItem(off, t, first.key, true));
+    const click = toggleShape(EMPTY_SIMPLIFY.focus, t, first.members[0], true);
+    const clicked = focusHidden(x, t, click), unclicked = focusHidden(x, t, toggleShape(click, t, first.members[0], false));
+    check(ok && back.size === 0 && clicked.has(first.members[0]) && unclicked.size === 0,
+      `${r.id}: nothing left out by default; unticking "${first.name}" leaves out ${h.size} shape(s) not shared with other routes, and their arrows; ticking it back, or clicking a shape out and in, restores everything`);
+  }
+  const hu = find('hu2021-jak-stat-v3');
+  if (hu) {
+    const kinds = findIssues(hu.extraction).map((i) => i.kind);
+    check(kinds.includes('typo') && kinds.includes('unlabelled') && kinds.includes('meaning'), `Hu: step 1 lists typos, unlabelled parts and colour meanings (${kinds.length} issues)`);
+  }
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

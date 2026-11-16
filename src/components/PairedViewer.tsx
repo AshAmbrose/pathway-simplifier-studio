@@ -28,7 +28,7 @@ export interface ViewerHandle {
 
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 
-export function PairedViewer({ ref, width, height, left, right, leftTitle, rightTitle, overlay, banner, hint, onBackgroundClick }: {
+export function PairedViewer({ ref, width, height, left, right, leftTitle, rightTitle, overlay, banner, hint, help, onBackgroundClick }: {
   ref?: Ref<ViewerHandle>;
   width: number; height: number;
   left: (unit: number) => ReactNode; right: (unit: number) => ReactNode;
@@ -37,6 +37,8 @@ export function PairedViewer({ ref, width, height, left, right, leftTitle, right
   banner?: ReactNode;
   /** The name of whatever is under the pointer; shown in the one line under the views in place of the help text. */
   hint?: string | null;
+  /** The help text under the views when nothing is hovered. */
+  help?: string;
   /** A click on the picture that hit no shape, with where it landed in picture coordinates. */
   onBackgroundClick?: (at: { x: number; y: number }) => void;
 }) {
@@ -162,7 +164,7 @@ export function PairedViewer({ ref, width, height, left, right, leftTitle, right
       </div>
       <div className="mt-1.5 flex h-5 items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
         {hint ? <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{hint}</span>
-          : <span className="truncate">Scroll to zoom · drag to pan · click a shape or arrow to fix it</span>}
+          : <span className="truncate">{help ?? 'Scroll to zoom · drag to pan · click a shape or arrow to fix it'}</span>}
         <button className="shrink-0 underline hover:text-slate-800 dark:hover:text-slate-200" onClick={() => tweenTo(full)}>Reset view</button>
       </div>
     </div>

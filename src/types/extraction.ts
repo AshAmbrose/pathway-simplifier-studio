@@ -33,7 +33,7 @@ export const CONFIDENCE = ['high', 'medium', 'low'] as const;
 
 /**
  * One change to an extraction. The same small vocabulary serves three jobs: the ready-made answers the model
- * attaches to its clarification questions, fixes made by hand, and (later) simplification steps.
+ * attaches to its clarification questions, fixes made by hand, and simplification steps.
  * Flat on purpose (op + id + to + value), so the model can write it under structured output.
  *
  *   move_badge        id = shape carrying the badge, value = badge text, to = the shape that should carry it
@@ -55,32 +55,63 @@ export const CONFIDENCE = ['high', 'medium', 'low'] as const;
  *   set_box           id = shape, value = "x,y,width,height" in percent (hand fixes only)
  *   add_element       id = the new shape's id, to = the compartment it sits in (or null),
  *                     value = '{"box":[x,y,w,h],"fill":"#rrggbb"}' (hand fixes only; never offered to the model)
+ *
+ * Simplification only (never offered to the model, so not in MODEL_EDIT_OPS):
+ *   hide              id = shape, group or arrow, value = the reason in plain words ("not on a chosen pathway").
+ *                     Leaves it out of the simplified figure; a shape's arrows and contacts go with it.
  */
-export const EDIT_OPS = [
+export const MODEL_EDIT_OPS = [
   'move_badge', 'add_badge', 'remove_badge', 'set_arrow_from', 'set_arrow_to', 'add_arrow', 'remove_arrow',
   'set_arrow_head', 'set_arrow_line', 'set_arrow_meaning', 'set_arrow_text', 'set_label', 'remove_element',
   'add_to_group', 'remove_from_group', 'set_box', 'add_element',
 ] as const;
-export const EditSchema = z.object({
-  op: z.enum(EDIT_OPS),
+export const EDIT_OPS = [...MODEL_EDIT_OPS, 'hide'] as const;
+const editFields = {
   id: z.string().describe('the shape, group or arrow the change applies to'),
   to: nullable(z.string()).describe('the other shape or group, for moves and arrow ends; otherwise null'),
   value: nullable(z.string()).describe('the badge text, label, head, line, meaning or text; otherwise null'),
-});
+};
+/** A change the model may write (in a question's answers). */
+export const ModelEditSchema = z.object({ op: z.enum(MODEL_EDIT_OPS), ...editFields });
+/** Any change, including the simplification-only ones. */
+export const EditSchema = z.object({ op: z.enum(EDIT_OPS), ...editFields });
 export type Edit = z.infer<typeof EditSchema>;
 
-/** A change that has been applied to a run: where it came from, and a key to undo it by. */
+/**
+ * A change that has been applied to a run: where it came from, and a key to undo it by.
+ * Sources: 'manual' (a fix by hand), 'q<n>' (the answer to question n), 'step:<step>' (a simplification step).
+ */
 export const AppliedEditSchema = EditSchema.extend({
   key: z.string(),
-  source: z.string().describe("'manual', or 'q<n>' for the answer to clarification question n"),
+  source: z.string().describe("'manual', 'q<n>' for the answer to clarification question n, or 'step:<step>' for a simplification step"),
   at: z.string(),
 });
 export type AppliedEdit = z.infer<typeof AppliedEditSchema>;
 
-/** What the user has done to a run: the change list, and which answer was chosen for each question (-1 = fixed by hand). */
+/** The simplification steps, in the order they apply. */
+export const STEPS = ['issues', 'focus', 'repeats', 'clusters', 'layout'] as const;
+export type StepId = (typeof STEPS)[number];
+
+/**
+ * What the user decided in the simplification steps, beyond the changes themselves (those are in the change list).
+ *  - steps:  which steps are done or skipped;
+ *  - issues: step 1 items settled without a change ("kept as written", "seen", with an optional note of what it means);
+ *  - focus:  step 2's choices: routes and regulators ticked off, and shapes kept or dropped by clicking.
+ *            The step's changes are worked out from these, so ticking a route back on restores it exactly.
+ */
+export const SimplifySchema = z.object({
+  steps: z.record(z.string(), z.enum(['done', 'skipped'])),
+  issues: z.record(z.string(), z.object({ kind: z.enum(['kept', 'seen']), note: nullable(z.string()) })),
+  focus: z.object({ off: z.array(z.string()), keep: z.array(z.string()), drop: z.array(z.string()) }),
+});
+export type Simplify = z.infer<typeof SimplifySchema>;
+export const EMPTY_SIMPLIFY: Simplify = { steps: {}, issues: {}, focus: { off: [], keep: [], drop: [] } };
+
+/** What the user has done to a run: the change list, which answer was chosen for each question (-1 = fixed by hand), and the simplification record. */
 export const ReviewSchema = z.object({
   edits: z.array(AppliedEditSchema),
   answers: z.record(z.string(), z.number()),
+  simplify: SimplifySchema.optional(),
 });
 export type Review = z.infer<typeof ReviewSchema>;
 export const EMPTY_REVIEW: Review = { edits: [], answers: {} };
@@ -145,7 +176,7 @@ export const ExtractionSchema = z.object({
       label: z.string().describe('the answer in a few words, naming the shape as written'),
       shape: nullable(z.string()).describe('the id of the candidate shape or group this answer points at, if it is one'),
       asRead: z.boolean().describe('true for the one option that matches what you recorded'),
-      edits: z.array(EditSchema).describe('the changes that turn what you recorded into this answer; empty for the asRead option'),
+      edits: z.array(ModelEditSchema).describe('the changes that turn what you recorded into this answer; empty for the asRead option'),
     })),
   })),
 });

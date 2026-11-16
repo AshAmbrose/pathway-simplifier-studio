@@ -2,7 +2,7 @@
 
 Turns a published pathway figure into an editable diagram, copied faithfully first.
 
-You check the copy beside the original and fix anything the model got wrong. Every change you make is listed and can be undone. Next: making the figure clearer, with every difference from the original listed.
+You check the copy beside the original and fix anything the model got wrong. Then you simplify it, step by step. Every change you make is listed and can be undone.
 
 ## Setup
 1. `npm install`
@@ -15,6 +15,10 @@ You check the copy beside the original and fix anything the model got wrong. Eve
 3. **Fix** anything else: click a shape or arrow to rename it, re-point it, change it or remove it.
 4. **Add** what's missing: use "+ Shape" and "+ Arrow". A new shape takes its colour from the figure.
 5. **Review your changes:** the list at the top shows each one in plain words, with undo, and "Show as extracted" shows the model's own reading.
+6. **Simplify:** switch the header from **Current** to **Simplified**. Five steps run in order, and any can be skipped. Each shows the figure before the step on the left and after it on the right. "Original" opens the uploaded figure in a small window.
+   - **① Issues:** fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.
+   - **② Focus:** choose which routes to show. The routes are traced from the figure's own arrows. Click any shape to add it or drop it.
+   - **③ Repeats, ④ Clusters, ⑤ Layout:** coming in later updates.
 
 ## Scripts
 | Command | What it does |

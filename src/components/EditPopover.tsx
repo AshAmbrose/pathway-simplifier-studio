@@ -41,7 +41,7 @@ const fold = (t: string) => t.toLowerCase().replace(/[α-ω]/g, (c) => GREEK[c] 
  * (Greek letters can be typed as Latin ones). Suggestions are only text from the figure itself, so a name
  * can be copied exactly as written; anything else can still be typed in full.
  */
-function NameField({ value, placeholder, autoFocus, names, onCommit }: {
+export function NameField({ value, placeholder, autoFocus, names, onCommit }: {
   value: string; placeholder: string; autoFocus?: boolean; names: string[]; onCommit: (v: string) => void;
 }) {
   const [text, setText] = useState(value);

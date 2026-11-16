@@ -66,10 +66,42 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 **Why:** a test run lost its changes. The page reloaded from an older copy during development and saved it over newer work. The same could happen with two tabs open on one run.
 
 ## 6. How it's tested
-- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, and saved runs loading.
+- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, and step 2's routes on the saved test figures (untick → left out → tick back → restored).
 - **Practice runs:** a copy of a real extraction with shapes taken out, and a checker that says whether each was put back with the right name, place and arrows.
 - **Browser tests at human pace,** only on throwaway copies. A test that clicks instantly once missed a real fault: a pop-up that moved while the pointer hovered.
 
-## Next: simplification
-- **Opt-in, reversible simplifications,** listed against the faithful reconstruction. For example: merge repeated copies, collapse a cluster, hide a side branch.
-- **Suggestions from prior knowledge may be allowed here,** unlike in review, but always labelled with their source.
+## 7. Simplification in five steps
+**Decision:** a **Current | Simplified** switch in the header. Simplified runs five steps in a fixed order:
+1. Issues
+2. Focus
+3. Repeats
+4. Clusters
+5. Layout
+
+Any step can be skipped. Each is shown before → after: the left view is the figure after every earlier step, the right view the same with this step's choices. What a step leaves out stays on the right view, faded, so it can be clicked back in. The original opens in a small floating window.
+
+**Why:**
+- **A fixed order:** each step works on a cleaner figure than the last. For example, a name fixed in step 1 is the name step 2 shows.
+- **Before → after for each step:** the effect of one step is easy to see on its own.
+
+**How it fits the change list** (see 2):
+- **Every choice is a change in the same list, tagged with its step.**
+  - Changes apply as answers, then fixes by hand, then each step in order.
+  - So Current never shows simplifications, and Simplified is always built on the corrected figure.
+- **A new change, "leave out" (`hide`),** says why: "not on a chosen pathway", "unlabelled part left out". It is never offered to the model.
+- **A small record is saved with the run:** which steps are done or skipped, the issues settled without a change ("kept as written", "seen"), and step 2's ticks and clicks.
+- **Step 2's changes are rebuilt from its ticks and clicks.** Ticking a route back on restores it exactly. If the figure under it changed since (a correction in Current), the step says so and offers "Update" rather than changing anything unasked.
+
+**Step 1, Issues:**
+- **Lists:** the model's typo flags, every shape with no label, and the colour or styling the model thinks carries meaning.
+- **Colour meanings are only acknowledged,** with an optional note. No key is drawn.
+- **Counts and clusters wait for their own steps.**
+
+**Step 2, Focus: routes are traced from the drawing.** There's no model call and no biology.
+- **Shapes that travel together form one unit:** shapes drawn touching, or drawn in one cluster.
+- **A route** starts where nothing points in and follows the arrows.
+- **Inhibition arrows aren't followed.** What they come from is listed as a regulator.
+- **Routes are grouped as the figure groups them:** by panel, else by the nearest heading.
+- **Everything starts ticked,** so skipping the step changes nothing.
+
+**Next:** step 3 (merge plain repeats), step 4 (collapse chosen clusters), step 5 (reorganise the layout, reusing BioPathway Studio's Organize Layout, with locations taken only from the original figure). Suggestions from prior knowledge may come later, always labelled with their source.

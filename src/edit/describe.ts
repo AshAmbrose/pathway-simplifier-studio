@@ -45,5 +45,6 @@ export function describeEdit(before: Extraction, e: Edit): string {
     case 'remove_from_group': return `${n(e.id)} taken out of group ${n(e.to)}`;
     case 'set_box': return `${n(e.id)} moved or resized`;
     case 'add_element': return `Shape added${e.to ? ` in ${n(e.to).replace('open space in the ', 'the ')}` : ''}`;
+    case 'hide': return `${n(e.id)} left out${e.value ? `: ${e.value}` : ''}`;
   }
 }

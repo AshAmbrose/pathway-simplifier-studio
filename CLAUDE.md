@@ -7,7 +7,7 @@ A local web app that turns a published pathway figure into an editable diagram.
 1. **Upload:** you upload a figure.
 2. **Extract:** one model call reads what is drawn.
 3. **Review:** you check the result side by side with the original, answer the model's questions, and fix or add anything it got wrong.
-4. **Simplify (next):** opt-in, reversible changes make the figure clearer, with every difference listed.
+4. **Simplify:** five ordered, skippable steps (Issues, Focus, Repeats, Clusters, Layout), each shown before → after. Steps 1–2 are built; 3–5 are next.
 
 Design decisions and their reasons are in [docs/design.md](docs/design.md).
 
@@ -15,8 +15,8 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 - **Faithful first.** The input image is the starting point. Record what is drawn, exactly as drawn (typos, unlabelled shapes, odd styling), before anything is changed.
 - **The extraction is never altered.** Every answer, fix or simplification is a change in a list on top of it. Each change is shown in plain words and can be undone.
 - **During extraction and review, answers come only from what can be seen.** Options are the shapes drawn nearby. None is preferred on the basis of biology knowledge.
-  - This may be relaxed for simplification, where suggestions from prior knowledge are planned. They must always be labelled with their source.
-- **Nothing is hidden.** Problems, and changes that can no longer apply, are listed, never dropped.
+  - This may be relaxed for simplification, where suggestions from prior knowledge are planned. They must always be labelled with their source. The steps built so far use only the drawing.
+- **Nothing is hidden.** Problems, and changes that can no longer apply, are listed, never dropped. What simplification leaves out is listed with its reason and can be restored.
 
 ## Working rules
 - **Annotate code clearly:**
@@ -38,12 +38,15 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 ## Map of the code
 | Where | What it does |
 |---|---|
-| `src/types/extraction.ts` | The data formats: the extraction, an edit (one change), the review (a run's list of edits). |
+| `src/types/extraction.ts` | The data formats: the extraction, an edit (one change), the review (a run's list of edits, plus the simplification record). |
 | `server/extract.ts`, `server/prompts/` | One model call per figure, with the current extraction prompt (v3). |
 | `server/runs.ts`, `server/plugin.ts` | Saving and loading runs, and the local API. Saves are versioned so newer work is never overwritten. |
 | `server/aiLedger.ts` | A log of every AI call and its cost, and the daily budget. |
-| `src/edit/` | Applying the list of changes to the extraction, and describing each in plain words. |
+| `src/edit/` | Applying the list of changes to the extraction, the order they apply in (`order.ts`), and describing each in plain words. |
+| `src/simplify/` | The simplification steps' logic, without any screen: step 1's issues, step 2's route tracing. |
 | `src/render/` | Turning an extraction into shapes and arrows at their original positions. |
-| `src/components/ReviewScreen.tsx` | The review screen: the two views, pins, pop-ups, adding shapes and arrows, the change list. |
+| `src/components/RunScreen.tsx` | One run: holds and saves the change list, and switches between Current and Simplified. |
+| `src/components/ReviewScreen.tsx` | Current: the two views, pins, pop-ups, adding shapes and arrows, the change list. |
+| `src/components/SimplifyScreen.tsx`, `StepBar.tsx`, `steps/` | Simplified: the step bar, the before → after views, and one panel per step. |
 | `src/components/SceneSvg.tsx` | Drawing the reconstruction and the marks on top of it (pins, outlines, handles). |
 | `scripts/` | Offline checks, practice runs, spend, and the paid re-test of the prompt. |
