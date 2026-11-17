@@ -1,6 +1,6 @@
 /**
  * Compares step 5's layouts on the saved test figures (local data/, if present): the current Compact against the
- * two general-purpose solvers, ELK (layered) and fCoSE (compound spring embedder). Offline, no model calls.
+ * general-purpose solvers and order-kept compaction, ELK (layered) and fCoSE (compound spring embedder, only with FCOSE=1). Offline, no model calls.
  *
  *   node scripts/compare-layouts.ts
  *
@@ -14,6 +14,8 @@ import { applyEdits } from '../src/edit/applyEdits.ts';
 import { layOut } from '../src/layout/adapt.ts';
 import { measure } from '../src/layout/measures.ts';
 import { elkLayout } from '../src/layout/solvers/elk.ts';
+import { compactionLayout } from '../src/layout/solvers/compaction.ts';
+import { fitMeasures } from '../src/layout/solvers/fit.ts';
 import { fcoseLayout } from '../src/layout/solvers/fcose.ts';
 import type { LayoutValue } from '../src/layout/value.ts';
 import { toScene } from '../src/render/toScene.ts';
@@ -52,28 +54,30 @@ function orderKept(before: Extraction, after: Extraction, W: number, H: number) 
   return n ? same / n : 1;
 }
 
-const rows: string[][] = [['Case', 'Method', 'Crossings', 'Behind', 'Up', 'Order kept', 'Shape (w × h)', 'ms']];
+const rows: string[][] = [['Case', 'Method', 'Crossings', 'Behind', 'Up', 'Order kept', 'Shape (w × h)', 'On screen', 'Aspect', 'Filled', 'Shared ends', 'ms']];
 for (const c of cases) {
   const r = find(c.run);
   if (!r) { console.log(`skip ${c.name} (no saved run)`); continue; }
   const x = c.pick ? c.pick(r.extraction) : r.extraction, W = r.image.width, H = r.image.height, t = traceRoutes(x);
-  const before = measure(toScene(x, W, H));
-  rows.push([c.name, 'original', String(before.crossings), String(before.behind), String(before.up), '100%', '', '']);
+  const s0 = toScene(x, W, H), before = measure(s0), f0 = fitMeasures(s0);
+  rows.push([c.name, 'original', String(before.crossings), String(before.behind), String(before.up), '100%', '', `${f0.onScreen}px`, String(f0.aspect), String(f0.filled), String(f0.sharedEnds), '']);
   const methods: [string, () => Promise<LayoutValue> | LayoutValue][] = [
     ['Compact', () => layOut(x, W, H, t, DEFAULT_LAYOUT)],
     ['ELK layered', () => elkLayout(x, W, H, t, DEFAULT_LAYOUT)],
+    ['Order-kept compaction', () => compactionLayout(x, W, H, t, DEFAULT_LAYOUT)],
     ...(process.env.TUNE ? [['ELK tuned', () => elkLayout(x, W, H, t, DEFAULT_LAYOUT, JSON.parse(process.env.TUNE!))] as [string, () => Promise<LayoutValue>]] : []),
-    ...(process.env.NO_FCOSE ? [] : [['fCoSE', () => fcoseLayout(x, W, H, t, DEFAULT_LAYOUT)] as [string, () => LayoutValue]]),
+    ...(!process.env.FCOSE ? [] : [['fCoSE', () => fcoseLayout(x, W, H, t, DEFAULT_LAYOUT)] as [string, () => LayoutValue]]),
   ];
   for (const [name, run] of methods) {
     const t0 = performance.now();
     let v: LayoutValue;
-    try { v = await run(); } catch (e) { rows.push([c.name, name, `failed: ${(e as Error).message.slice(0, 60)}`, '', '', '', '', '']); continue; }
+    try { v = await run(); } catch (e) { rows.push([c.name, name, `failed: ${(e as Error).message.slice(0, 60)}`, '', '', '', '', '', '', '', '', '']); continue; }
     const ms = Math.round(performance.now() - t0);
     const y = applyEdits(x, [{ op: 'set_layout', id: 'layout', to: null, value: JSON.stringify(v) }]);
-    const m = measure(toScene(y.extraction, W, H));
+    const sc = toScene(y.extraction, W, H), m = measure(sc), f = fitMeasures(sc);
     rows.push([c.name, name, String(m.crossings), String(m.behind), String(m.up), `${Math.round(orderKept(x, y.extraction, W, H) * 100)}%`,
-      `${(v.canvas[0] / 40).toFixed(0)} × ${(v.canvas[1] / 40).toFixed(0)}${y.failed.length ? ' (did not apply)' : ''}`, String(ms)]);
+      `${(v.canvas[0] / 40).toFixed(0)} × ${(v.canvas[1] / 40).toFixed(0)}${y.failed.length ? ' (did not apply)' : ''}`,
+      `${f.onScreen}px`, String(f.aspect), String(f.filled), String(f.sharedEnds), String(ms)]);
   }
 }
 const widths = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)));

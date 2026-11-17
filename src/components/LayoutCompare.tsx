@@ -4,7 +4,8 @@
  *  - the figure as it stands before step 5 (every correction and earlier step applied);
  *  - Compact (src/layout/compact.ts);
  *  - ELK layered (src/layout/solvers/elk.ts);
- *  - fCoSE (src/layout/solvers/fcose.ts).
+ *  - order-kept compaction (src/layout/solvers/compaction.ts).
+ * Under each: crossings and the rest (measures.ts), and how the drawing uses its space (solvers/fit.ts).
  * Nothing is saved; the page only reads the run.
  */
 import { useEffect, useMemo, useState } from 'react';
@@ -14,7 +15,8 @@ import { inOrder, stepOf } from '../edit/order.ts';
 import { layOut } from '../layout/adapt.ts';
 import { measure, type Measures } from '../layout/measures.ts';
 import { elkLayout } from '../layout/solvers/elk.ts';
-import { fcoseLayout } from '../layout/solvers/fcose.ts';
+import { compactionLayout } from '../layout/solvers/compaction.ts';
+import { fitMeasures } from '../layout/solvers/fit.ts';
 import { DEFAULT_LAYOUT, type LayoutValue } from '../layout/value.ts';
 import { toScene, type Scene } from '../render/toScene.ts';
 import { traceRoutes } from '../simplify/routes.ts';
@@ -35,6 +37,7 @@ function Pane({ title, scene, m, note }: { title: string; scene: Scene | null; m
         <h2 className="font-semibold text-ink">{title}</h2>
         {m && <span className={`${meta} num`}>crossings {m.crossings} · behind {m.behind} · up {m.up}</span>}
       </div>
+      {scene && (() => { const f = fitMeasures(scene); return <p className={`${meta} num mb-1.5`}>shape on screen {f.onScreen}px · aspect {f.aspect} · filled {Math.round(f.filled * 100)}% · shared ends {f.sharedEnds}</p>; })()}
       <div className="h-[calc(100vh-9rem)] rounded border border-line bg-white">
         {scene ? (
           <svg viewBox={`0 0 ${scene.width} ${scene.height}`} className="h-full w-full" preserveAspectRatio="xMidYMid meet">
@@ -57,13 +60,13 @@ export function LayoutCompare({ runId }: { runId: string }) {
   const t = useMemo(() => (x ? traceRoutes(x) : null), [x]);
   const laid = (v: LayoutValue | null) => (x && v ? toScene(applyEdits(x, [{ op: 'set_layout', id: 'l', to: null, value: JSON.stringify(v) }]).extraction, W, H) : null);
   const compact = useMemo(() => (x && t ? layOut(x, W, H, t, DEFAULT_LAYOUT) : null), [x, t, W, H]);
-  const fcose = useMemo(() => (x && t ? fcoseLayout(x, W, H, t, DEFAULT_LAYOUT) : null), [x, t, W, H]);
+  const squeezed = useMemo(() => (x && t ? compactionLayout(x, W, H, t, DEFAULT_LAYOUT) : null), [x, t, W, H]);
   useEffect(() => { if (x && t) elkLayout(x, W, H, t, DEFAULT_LAYOUT).then(setElk).catch((e) => setElkError((e as Error).message)); }, [x, t, W, H]);
   const panes: [string, Scene | null][] = [
     ['Before step 5', x ? toScene(x, W, H) : null],
     ['Compact (current)', laid(compact)],
     ['ELK layered', laid(elk)],
-    ['fCoSE', laid(fcose)],
+    ['Order-kept compaction', laid(squeezed)],
   ];
   return (
     <div className="px-5 py-3">
