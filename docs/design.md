@@ -264,7 +264,11 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **Original and finished, side by side (user, 2026-11-17):** the uploaded image beside the finished figure (every change applied, including the layout), each with its counts. That is the brief's "compare it with the original" for the end result, next to the numbers that say what changed. The SVG download is this finished figure, so it is right even when the report is opened from an earlier step.
 - **Simpler, in numbers:** shapes, arrows, clusters and compartments as read, after Check, and finished (Guo with the canonical routes: shapes 82 → 25, arrows 47 → 18, clusters 20 → 4).
 - **Every shape and arrow, grouped by what happened,** with the step and, for shapes, what they were identified as. Exact symbol matches count as identified here even though they are not stored as changes.
-- **Download:** the report as Markdown, and the figure as SVG.
+- **Compact on screen (user, 2026-11-17):** the figures side by side, the counts beside the science checks, and shapes beside arrows, each group folded until opened.
+- **PDF as the main output (user, 2026-11-17):** an A4 page (`src/report/printable.ts`) printed by the local Chrome (`server/pdf.ts`, headless, in a temporary folder that is deleted afterwards). Page 1 holds the fidelity statement, both figures (the finished one as vector SVG), the counts and the science checks; then every shape and arrow, one line each, with what happened, where, and what each shape was identified as (Guo: 4 pages).
+  - **Why Chrome, not a PDF library:** a library's built-in fonts can't print IκBα, IL-1β or H₂O₂ without embedding a font, and those labels are exactly what the report must get right. Chrome prints the page the way the app draws it.
+  - **With no Chrome,** the browser's print dialog opens on the same page ("Save as PDF"). Set `CHROME_PATH` to use another Chrome-based browser.
+  - **Also:** the finished figure as SVG, and the report as Markdown.
 
 ## 8. Internal ids stay off the screen
 **Decision:** the model's ids for shapes and arrows ("e5", "a_tx_1") are never shown. The model sometimes writes them into its questions and reasons ("drawn twice (e19 and e26)"). A bracketed list of ids is dropped; any other id is replaced by the item's name as written.

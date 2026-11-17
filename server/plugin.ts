@@ -10,6 +10,8 @@
  *                                  409 with the newer review if the run was saved elsewhere since `version`
  *   POST /api/relations         -> { ready, snapshots, results }   body RelationQuery: each arrow between identified
  *                                  shapes looked up in the local SIGNOR and OmniPath snapshots (server/relations.ts)
+ *   POST /api/report-pdf        -> the Finish report as a PDF   body { html }: printed by the local Chrome
+ *                                  (server/pdf.ts); 501 when no Chrome is found
  *   POST /api/identify          -> LabelLookup   body { label, kind }: what public databases say the label is
  *                                  (server/identify.ts; only the label text is sent, answers are cached)
  *
@@ -21,6 +23,7 @@ import { localDay, spentOn } from './aiLedger.ts';
 import { ExtractError, extractFigure } from './extract.ts';
 import { identifyLabel } from './identify.ts';
 import { checkArrows } from './relations.ts';
+import { htmlToPdf } from './pdf.ts';
 import { getRun, listRuns, runImage, saveReview, saveRun } from './runs.ts';
 
 const MAX_BODY = 15_000_000; // base64 of a ~11 MB image
@@ -85,6 +88,16 @@ export function apiPlugin(): Plugin {
             return json(200, rec);
           }
           if (url === '/api/runs' && req.method === 'GET') return json(200, listRuns());
+          if (url === '/api/report-pdf' && req.method === 'POST') {
+            // The page carries the uploaded image as a data URL, so it can be as large as an upload.
+            const body = await readJson(req, MAX_BODY + 2_000_000);
+            if (typeof body.html !== 'string' || !body.html.startsWith('<!doctype html>')) throw new ExtractError('No report to print.', 400);
+            const pdf = await htmlToPdf(body.html);
+            if (!pdf) return json(501, { error: 'No Chrome found to print the PDF.' });
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/pdf');
+            return res.end(pdf);
+          }
           if (url === '/api/relations' && req.method === 'POST') {
             const body = await readJson(req, 4_000_000);
             if (!Array.isArray(body.arrows)) throw new ExtractError('No arrows to check.', 400);

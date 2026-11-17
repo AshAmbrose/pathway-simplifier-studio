@@ -20,6 +20,7 @@
  *     faulty apply that drops, reverses or renames silently is caught.
  * 12. arrows against curated records, on the local SIGNOR and OmniPath snapshots (if present): known steps agree,
  *     a step SIGNOR records only the other way round is flagged, and what can't be checked is never called wrong.
+ * 13. the report as a PDF: the printable page keeps every label as written, and the local Chrome (if found) prints it.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems } from '../src/types/extraction.ts';
@@ -42,6 +43,8 @@ import { STYLE_RED } from '../src/edit/applyEdits.ts';
 import { getRun, listRuns } from '../server/runs.ts';
 import { accountFor } from '../src/report/account.ts';
 import { checkArrows } from '../server/relations.ts';
+import { chromePath, htmlToPdf } from '../server/pdf.ts';
+import { reportHtml } from '../src/report/printable.ts';
 import { drawnSign } from '../src/relations/types.ts';
 import type { Identity } from '../src/identify/types.ts';
 import { identityOf, identityText, judge, judgeSearchedAs } from '../src/identify/candidates.ts';
@@ -440,6 +443,18 @@ else {
   } else console.log('skip arrows against curated records (no SIGNOR snapshot: npm run fetch:signor)');
   check(drawnSign({ head: 'bar', meaning: 'unknown' }) === 'down' && drawnSign({ head: 'arrow', meaning: 'activates' }) === 'up' && drawnSign({ head: 'arrow', meaning: 'binds' }) === 'binds',
     'arrows: a bar is read as inhibition, an arrowhead that activates as activation, a binding as binding');
+}
+
+// 13. The report as a PDF: the printable page keeps labels exactly as written and is printed by the local Chrome.
+{
+  const r = accountFor(base, []);
+  const html = reportHtml({ name: 'Check <run>', report: r, extra: ['IκBα ⊣ IKKβ, H₂O₂'], original: 'data:image/png;base64,', finishedSvg: '<svg viewBox="0 0 10 10"></svg>' });
+  check(html.startsWith('<!doctype html>') && html.includes('Check &lt;run&gt;') && html.includes('IκBα ⊣ IKKβ, H₂O₂') && html.includes('<svg viewBox') && html.includes('@page'),
+    'report PDF: the printable page is one self-contained A4 document, text escaped, Greek letters and subscripts kept, both figures in it');
+  if (chromePath()) {
+    const pdf = await htmlToPdf(html);
+    check(!!pdf && pdf.subarray(0, 5).toString() === '%PDF-', `report PDF: the local Chrome prints it (${pdf ? Math.round(pdf.length / 1024) : 0} KB)`);
+  } else console.log('skip report PDF printing (no Chrome found)');
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
