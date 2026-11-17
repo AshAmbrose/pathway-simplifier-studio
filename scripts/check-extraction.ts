@@ -18,6 +18,8 @@
  *     services' (no network), and a malformed identity is refused.
  * 11. the Finish report: every shape and arrow accounted for on the practice runs (local data/, if present), and a
  *     faulty apply that drops, reverses or renames silently is caught.
+ * 12. arrows against curated records, on the local SIGNOR and OmniPath snapshots (if present): known steps agree,
+ *     a step SIGNOR records only the other way round is flagged, and what can't be checked is never called wrong.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems } from '../src/types/extraction.ts';
@@ -39,6 +41,9 @@ import { DEFAULT_LAYOUT } from '../src/layout/value.ts';
 import { STYLE_RED } from '../src/edit/applyEdits.ts';
 import { getRun, listRuns } from '../server/runs.ts';
 import { accountFor } from '../src/report/account.ts';
+import { checkArrows } from '../server/relations.ts';
+import { drawnSign } from '../src/relations/types.ts';
+import type { Identity } from '../src/identify/types.ts';
 import { identityOf, identityText, judge, judgeSearchedAs } from '../src/identify/candidates.ts';
 import { genericWord, spellings, splitLabel } from '../src/identify/normalise.ts';
 import type { DbRecord, Hit, TermLookup } from '../src/identify/types.ts';
@@ -415,6 +420,26 @@ else {
   const honest = accountFor(base, [{ ...E('hide', 'e2', null, 'not on a chosen pathway'), key: 'k1', source: 'step:focus', at: '' }]);
   check(honest.unaccounted === 0 && honest.shapes.find((v) => v.id === 'e2')?.fate === 'left out' && honest.arrows.every((v) => v.fate === 'went with a shape' || v.fate === 'kept'),
     'report: a shape left out in Focus is "left out" with its reason, and its arrows "went with" it');
+}
+
+// 12. Arrows against curated records, on the local SIGNOR and OmniPath snapshots (data/, if present).
+{
+  const gene = (sym: string): Identity => ({ kind: 'molecule', records: [{ db: 'HGNC', id: `HGNC:${sym}`, name: sym, url: '' }], how: [], by: 'you' });
+  const res = checkArrows({ arrows: [
+    { id: 'cyld-traf2', from: gene('CYLD'), to: gene('TRAF2'), sign: 'down' },
+    { id: 'cyld-ikbkb', from: gene('CYLD'), to: gene('IKBKB'), sign: 'down' },
+    { id: 'myd88-irak4', from: gene('MYD88'), to: gene('IRAK4'), sign: 'up' },
+    { id: 'same', from: gene('CTNNB1'), to: gene('CTNNB1'), sign: 'up' },
+    { id: 'open', from: null, to: gene('IRAK4'), sign: 'up' },
+  ] });
+  if (res.ready) {
+    const st = (id: string) => res.results.find((r) => r.id === id)?.status;
+    check(st('cyld-traf2') === 'agrees' && st('myd88-irak4') === 'agrees', 'arrows: CYLD ⊣ TRAF2 and MYD88 → IRAK4 agree with SIGNOR');
+    check(st('cyld-ikbkb') === 'other way round' && res.results.find((r) => r.id === 'cyld-ikbkb')!.records[0].from === 'IKBKB', 'arrows: CYLD ⊣ IKBKB is flagged: SIGNOR records it only the other way round (IKBKB → CYLD)');
+    check(st('same') === 'not checkable' && st('open') === 'not checkable', 'arrows: a molecule to itself (a move or change of state) and an unidentified end are not checked, never called wrong');
+  } else console.log('skip arrows against curated records (no SIGNOR snapshot: npm run fetch:signor)');
+  check(drawnSign({ head: 'bar', meaning: 'unknown' }) === 'down' && drawnSign({ head: 'arrow', meaning: 'activates' }) === 'up' && drawnSign({ head: 'arrow', meaning: 'binds' }) === 'binds',
+    'arrows: a bar is read as inhibition, an arrowhead that activates as activation, a binding as binding');
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

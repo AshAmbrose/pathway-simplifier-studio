@@ -5,12 +5,14 @@
  *  - colour or styling the model thinks carries meaning ("red dashed = negative regulation"). These are only
  *    acknowledged here; no key is drawn.
  *  - what each shape is (kind 'identity'): one per labelled shape, made in SimplifyScreen once the databases have
- *    answered (src/identify/, server/identify.ts), not here, because the lookups run on the server.
+ *    answered (src/identify/, server/identify.ts), not here, because the lookups run on the server;
+ *  - arrows to look at (kind 'relation'): recorded by SIGNOR or OmniPath with the opposite effect, or only the other
+ *    way round (server/relations.ts); also made in SimplifyScreen.
  * Counts and clusters are left to their own steps, and crossings to the layout step.
  */
 import type { Extraction } from '../types/extraction.ts';
 
-export type IssueKind = 'typo' | 'unlabelled' | 'meaning' | 'identity';
+export type IssueKind = 'typo' | 'unlabelled' | 'meaning' | 'identity' | 'relation';
 export interface Issue {
   /** Stable across visits, for the decisions saved with the run. */
   key: string;

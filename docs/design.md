@@ -140,7 +140,7 @@ Any step can be skipped, and Back always works, including back to Check. Each si
   - **Aliases collide:** "p50" is an HGNC alias of five genes, "PKC" of PRRT2, "CARMA" of CRMA. The card shows that wording, so the scientist decides.
   - **Close spellings are not matched:** the databases have no fuzzy search; the model's typo flags cover spelling.
 - **Ranking by context (planned, user 2026-11-17):** shapes already identified are context for the rest. For "p50" in a figure where RelA, IKBKB and NFKB2 are identified, NFKB1 is likelier than CD40 or ASCC1, because it shares an HGNC gene group or curated interactions (SIGNOR, OmniPath) with them. The options would be ordered by that, each saying why ("shares the NF-κB gene group with RelA, identified here"). Still the user's choice, nothing pre-ticked, and every reason traceable to a record.
-- **Next (in order):** ranking by context (above); arrows checked against SIGNOR, with OmniPath where SIGNOR has no record (flags only); same-molecule merges and complex suggestions from the identities; drawn modifications checked against UniProt's modified residues.
+- **Next (in order):** ranking by context (above); arrows checked against SIGNOR and OmniPath (built: below); same-molecule merges and complex suggestions from the identities; drawn modifications checked against UniProt's modified residues.
 
 **Step 2, Focus: routes are traced from the drawing.** There's no model call and no biology.
 - **Shapes that travel together form one unit:** shapes drawn touching, or drawn in one cluster.
@@ -238,6 +238,24 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **Stored as one change (`set_layout`).** The step says when the figure or the switches have changed since. Moves by hand are `set_box` changes on top, and undoing the layout takes them with it.
 - **One consistent style (`restyle`), off by default:** five fills by kind, black arrows, red for inhibition. It says what it replaces, including the colour meanings noted in step 1.
 - **The before → after numbers** are measured the way Organize Layout scores itself: arrows crossing, arrows behind a shape, and arrows pointing up (feedback counted apart).
+
+**Step 1, arrows against curated records (user, 2026-11-17).** The first payoff of identifying shapes: the figure's relationships checked against curated databases, as flags. It answers the brief's "flag potential errors" with a source behind each flag.
+- **Local and free:** SIGNOR (CC BY-SA 4.0, human causal interactions) and OmniPath (academic licence, signed and referenced records), as snapshots on disk, copied from BioPathway Studio along with their fetch scripts. Nothing about the figure leaves the machine. OmniPath is used only where SIGNOR has no record for the pair, as in BioPathway Studio.
+- **How an arrow is matched** (`server/relations.ts`):
+  - **Ends:** each end resolves through its identity: a gene by UniProt accession or symbol; a family or set by each member; a cluster by its identified members; a chemical by its ChEBI ID; a process by a SIGNOR phenotype of the same name.
+  - **Complexes:** SIGNOR complexes and families that hold a shape count too, said so ("via SIGNOR complex IKK, which holds IKBKB"), because SIGNOR often records a step at the complex level.
+  - **Effect:** the drawn effect is read from the arrow: a bar or "inhibits" is inhibition; an arrowhead that activates (or has no other meaning) is activation; binding is binding.
+- **Results:**
+  - **Agrees:** recorded with the same effect.
+  - **Recorded:** no effect to compare.
+  - **Opposite effect, or only the other way round:** a card to look at.
+  - **Not recorded.**
+  - **Can't be checked:** an end not identified; or both ends the same molecule, a move or a change of state.
+  - **"Not recorded" is never called wrong:** figures often draw one arrow for several steps, and databases are incomplete.
+- **Only identities the user has accepted or confirmed are used,** so the check grows as step 1 is answered. Each card says what each end was checked as ("IKBKB (cluster: 1 of 3 shapes identified)"), because a partly identified cluster can make a step look reversed.
+- **Each record is shown in the database's words:** effect, mechanism, direct or not, human or not, the curator's sentence, with links to the record and its PubMed references. Records repeated per modified residue are folded into one ("and 5 more like it").
+- **On Guo** (identities as the matcher proposes them): 24 of 47 arrows checkable; 12 agree, 10 recorded, 1 only the other way round (CYLD ⊣ IKKβ: SIGNOR records IKBKB phosphorylating CYLD), 1 not recorded. On Yu, OmniPath records TRAF6 → NEMO as inhibition, against the figure's activation: a real point to discuss, not a verdict.
+- **The summary and the cards to look at go into the Finish report,** with the user's notes.
 
 **Finish: the report (user, 2026-11-17).** It answers two questions from the brief with the run's own data: would you know if something was changed unintentionally, and is the figure actually simpler?
 - **An independent fidelity check** (`src/report/account.ts`): it doesn't trust the code that applies changes. It reads the change list for what each change says it did to each item, then compares the model's reading with the finished figure item by item. Anything different with no change to explain it is reported as unaccounted for, at the top: a shape gone, a label altered, an arrow dropped, reversed, re-pointed, or with its head or meaning changed.

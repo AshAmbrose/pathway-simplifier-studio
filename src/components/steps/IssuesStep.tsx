@@ -7,12 +7,15 @@
  *  - Unlabelled part: type a name (names written in the figure are suggested), keep it unlabelled, or leave it out.
  *  - Colour or styling that carries meaning: "Seen", with an optional note of what it means. No key is drawn.
  *  - What each shape is: matched to database records, confirmed or chosen here (IdentityCards.tsx).
+ *  - Arrows against curated records: SIGNOR and OmniPath on each arrow between identified shapes (ArrowChecks.tsx).
  */
 import { useState } from 'react';
 import { cleanText, nameOf } from '../../edit/describe.ts';
 import type { Judged, OtherClass } from '../../identify/candidates.ts';
 import type { Issue } from '../../simplify/issues.ts';
 import { chosenIdentity, IdentitySection } from './IdentityCards.tsx';
+import { ArrowChecksSection } from './ArrowChecks.tsx';
+import type { ArrowCheck } from '../../relations/types.ts';
 import type { AppliedEdit, Edit, Extraction, Simplify } from '../../types/extraction.ts';
 import { Check } from 'lucide-react';
 import { NameField } from '../EditPopover.tsx';
@@ -54,9 +57,9 @@ export function issueStatus(x: Extraction, i: Issue, edits: AppliedEdit[], decis
   return null;
 }
 
-const TITLES: Record<Issue['kind'], string> = { typo: 'Possible typos', unlabelled: 'Unlabelled parts', meaning: 'Colour and styling with a meaning', identity: 'What each shape is' };
+const TITLES: Record<Issue['kind'], string> = { typo: 'Possible typos', unlabelled: 'Unlabelled parts', meaning: 'Colour and styling with a meaning', identity: 'What each shape is', relation: 'Arrows against curated records' };
 
-export function IssuesStep({ x, issues, edits, decisions, names, active, onSettle, onHover, onSelect, identity }: {
+export function IssuesStep({ x, issues, edits, decisions, names, active, onSettle, onHover, onSelect, identity, arrows }: {
   /** The figure before this step: the reconstruction with every correction. */
   x: Extraction;
   issues: Issue[];
@@ -75,10 +78,17 @@ export function IssuesStep({ x, issues, edits, decisions, names, active, onSettl
   /** "What each shape is": the shapes looked up so far and what the databases said (IdentityCards.tsx). */
   identity: { issues: Issue[]; judged: Map<string, Judged>; pending: number; total: number; onRetry: (i: Issue) => void;
     onSearch: (i: Issue, q: { text: string; cls: OtherClass } | null) => void; searching: Set<string> };
+  /** "Arrows against curated records" (ArrowChecks.tsx): the figure as step 1 leaves it, the results, and the arrows to look at. */
+  arrows: { x: Extraction; results: ArrowCheck[]; issues: Issue[]; pending: boolean; ends: (arrowId: string) => { from: string; to: string } };
 }) {
   const open = issues.filter((i) => !issueStatus(x, i, edits, decisions)).length
     + identity.issues.filter((i) => !chosenIdentity(i, edits, identity.judged)).length;
-  const count = issues.length + identity.issues.length;
+  const arrowSection = arrows.results.length > 0 && (
+    <ArrowChecksSection key="relation" x={arrows.x} results={arrows.results} issues={arrows.issues} decisions={decisions} active={active} pending={arrows.pending} ends={arrows.ends}
+      onSeen={(i, note) => onSettle(i, null, note === null ? null : { kind: 'seen', note: note || null })} onHover={onHover} onSelect={onSelect} />
+  );
+  const count = issues.length + identity.issues.length + arrows.issues.length;
+  const openArrows = arrows.issues.filter((i) => !decisions[i.key]).length;
   const identitySection = (identity.total > 0) && (
     <IdentitySection key="identity" issues={identity.issues} judged={identity.judged} pending={identity.pending} total={identity.total} edits={edits} active={active}
       onSettle={(i, e) => onSettle(i, e, null)} onHover={onHover} onSelect={onSelect} onRetry={identity.onRetry} onSearch={identity.onSearch} searching={identity.searching} />
@@ -86,9 +96,10 @@ export function IssuesStep({ x, issues, edits, decisions, names, active, onSettl
   if (issues.length === 0 && !identitySection) return <p className={body}>Nothing to check: the model flagged no typos or colour meanings, and every shape has a label. Go on to the next step.</p>;
   return (
     <div>
-      <p className={`${body} mb-4`}><b className="num font-semibold text-ink">{count - open} of {count}</b> dealt with. None has to be: anything left open stays as it is. Click one to see it on the figure.</p>
-      {(['typo', 'unlabelled', 'identity', 'meaning'] as const).map((kind) => {
+      <p className={`${body} mb-4`}><b className="num font-semibold text-ink">{count - open - openArrows} of {count}</b> dealt with. None has to be: anything left open stays as it is. Click one to see it on the figure.</p>
+      {(['typo', 'unlabelled', 'identity', 'relation', 'meaning'] as const).map((kind) => {
         if (kind === 'identity') return identitySection;
+        if (kind === 'relation') return arrowSection;
         const list = issues.filter((i) => i.kind === kind);
         if (!list.length) return null;
         return (

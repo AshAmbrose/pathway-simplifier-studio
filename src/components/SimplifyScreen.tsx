@@ -13,10 +13,12 @@
  *  - Which step is open is held by RunScreen, so the step bar here and on Check is one journey.
  */
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { identify, type RunRecord } from '../api.ts';
+import { checkRelations, identify, type RunRecord } from '../api.ts';
 import { judge, judgeSearchedAs, OTHER_CLASSES, type Judged, type OtherClass } from '../identify/candidates.ts';
 import type { Identity, LabelLookup } from '../identify/types.ts';
 import { accountFor } from '../report/account.ts';
+import { drawnSign, endIdentity, endText, type ArrowCheck } from '../relations/types.ts';
+import { checkSummary, TO_LOOK } from './steps/ArrowChecks.tsx';
 import { FinishReport } from './FinishReport.tsx';
 import { applyEdits, dependents } from '../edit/applyEdits.ts';
 import { cleanText, describeEdit, nameOf } from '../edit/describe.ts';
@@ -198,10 +200,25 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     for (const i of identityIssues) { const id = chosenIdentity(i, issueEdits, judged); if (id) for (const s2 of i.ids ?? [i.id]) m.set(s2, id); }
     return m;
   }, [identityIssues, issueEdits, judged]);
+  // Step 1, arrows against curated records: every arrow of the figure as step 1 leaves it, its ends' identities
+  // looked up in the local SIGNOR and OmniPath snapshots. Run again (shortly after) whenever an identity changes.
+  const [arrowChecks, setArrowChecks] = useState<ArrowCheck[]>([]);
+  const [checking, setChecking] = useState(false);
+  const arrowQuery = useMemo(() => JSON.stringify(issuesAfter.arrows.map((a) => ({ id: a.id, from: endIdentity(issuesAfter, a.from, knownIdentities), to: endIdentity(issuesAfter, a.to, knownIdentities), sign: drawnSign(a) }))), [issuesAfter, knownIdentities]);
+  useEffect(() => {
+    let live = true;
+    setChecking(true);
+    const t = setTimeout(() => {
+      checkRelations({ arrows: JSON.parse(arrowQuery) }).then((r) => { if (live) { setArrowChecks(r.results); setChecking(false); } }).catch(() => { if (live) setChecking(false); });
+    }, 700);
+    return () => { live = false; clearTimeout(t); };
+  }, [arrowQuery]);
+  const relationIssues = useMemo((): Issue[] => arrowChecks.filter((r) => TO_LOOK.has(r.status))
+    .map((r) => ({ key: `relation:${r.id}`, kind: 'relation', id: r.id, asWritten: null, suggestion: null, basis: r.why })), [arrowChecks]);
   const pendingLookups = new Set(targets.map((t) => lookupKey(t.label, t.kind)).filter((k) => !lookups.has(k))).size;
   const lookupTotal = new Set(targets.map((t) => lookupKey(t.label, t.kind))).size;
   /** Every step 1 issue in panel order, and whether one is settled: the drawing's issues, then what each shape is. */
-  const allIssues = useMemo(() => [...issues.filter((i) => i.kind !== 'meaning'), ...identityIssues, ...issues.filter((i) => i.kind === 'meaning')], [issues, identityIssues]);
+  const allIssues = useMemo(() => [...issues.filter((i) => i.kind !== 'meaning'), ...identityIssues, ...relationIssues, ...issues.filter((i) => i.kind === 'meaning')], [issues, identityIssues, relationIssues]);
   const issueDone = (i: Issue) => (i.kind === 'identity' ? !!chosenIdentity(i, stepEdits, judged) : !!issueStatus(before.extraction, i, stepEdits, s.issues));
   const tracing = useMemo(() => traceRoutes(focusBase), [focusBase]);
   const hidden = useMemo(() => focusHidden(focusBase, tracing, s.focus), [focusBase, tracing, s.focus]);
@@ -253,7 +270,8 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     const sim = r.simplify ?? EMPTY_SIMPLIFY;
     // A shape can have a name fix and an identity: settling one never touches the other's change.
     const ids = i.ids ?? [i.id];
-    const mine = (e: AppliedEdit) => stepOf(e.source) === 'issues' && ids.includes(e.id) && i.kind !== 'meaning' && (e.op === 'identify') === (i.kind === 'identity');
+    // Colour meanings and arrows to look at are only acknowledged: they never own a change.
+    const mine = (e: AppliedEdit) => stepOf(e.source) === 'issues' && ids.includes(e.id) && i.kind !== 'meaning' && i.kind !== 'relation' && (e.op === 'identify') === (i.kind === 'identity');
     const issuesRec = { ...sim.issues };
     delete issuesRec[i.key];
     if (decision) issuesRec[i.key] = decision;
@@ -511,7 +529,8 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
         </div>
       )}
       {showReport && (
-        <FinishReport name={run.name} report={accountFor(base, ordered, knownIdentities)} extra={[]} finished={finished}
+        <FinishReport name={run.name} report={accountFor(base, ordered, knownIdentities)} finished={finished}
+          extra={arrowChecks.length ? [checkSummary(arrowChecks), ...arrowChecks.filter((r) => TO_LOOK.has(r.status)).map((r) => `To look at: ${nameOf(issuesAfter, r.id)}: ${r.why}${r.records[0] ? ` (${r.records[0].source} ${r.records[0].id})` : ''}${s.issues[`relation:${r.id}`]?.note ? `; your note: ${s.issues[`relation:${r.id}`]!.note}` : ''}`)] : []}
           onDownloadSvg={downloadSvg} onClose={() => setShowReport(false)} onHover={setHoverIds} />
       )}
       {openQuestions > 0 && (
@@ -541,7 +560,9 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
               onSettle={settleIssue} onHover={setHoverIds} onSelect={(i) => { setActiveIssue(i.key); show(i.ids ?? [i.id]); }}
               identity={{ issues: identityIssues, judged, pending: pendingLookups, total: lookupTotal,
                 onSearch: searchAgain, searching: new Set([...searchedAs].filter(([, v]) => !v.lookup).map(([k]) => k)),
-                onRetry: (i) => { const t = targets.find((v) => v.id === i.id); if (t) { setLookups((m) => { const n = new Map(m); n.delete(lookupKey(t.label, t.kind)); return n; }); void ask(t.label, t.kind); } } }} />
+                onRetry: (i) => { const t = targets.find((v) => v.id === i.id); if (t) { setLookups((m) => { const n = new Map(m); n.delete(lookupKey(t.label, t.kind)); return n; }); void ask(t.label, t.kind); } } }}
+              arrows={{ x: issuesAfter, results: arrowChecks, issues: relationIssues, pending: checking,
+                ends: (id) => { const a = issuesAfter.arrows.find((v) => v.id === id); return a ? { from: endText(issuesAfter, a.from, knownIdentities), to: endText(issuesAfter, a.to, knownIdentities) } : { from: '', to: '' }; } }} />
           )}
           {step === 'focus' && focusStale && (
             <div className={`${warnNote} mb-4`}>
