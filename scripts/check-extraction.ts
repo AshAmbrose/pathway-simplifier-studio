@@ -36,7 +36,7 @@ import { measure } from '../src/layout/measures.ts';
 import { DEFAULT_LAYOUT } from '../src/layout/value.ts';
 import { STYLE_RED } from '../src/edit/applyEdits.ts';
 import { getRun, listRuns } from '../server/runs.ts';
-import { identityOf, identityText, judge } from '../src/identify/candidates.ts';
+import { identityOf, identityText, judge, judgeSearchedAs } from '../src/identify/candidates.ts';
 import { genericWord, spellings, splitLabel } from '../src/identify/normalise.ts';
 import type { DbRecord, Hit, TermLookup } from '../src/identify/types.ts';
 
@@ -386,6 +386,8 @@ else {
   const mine = applyEdits(base, [E('identify', 'e1', null, JSON.stringify({ kind: 'family', records: [], how: ['Named by you'], by: 'you', yours: { text: 'protein kinase C', kind: 'A family of genes' } }))]);
   check(!mine.failed.length && mine.extraction.elements[0].identity?.yours?.text === 'protein kinase C' && /your words; no database record/.test(identityText(mine.extraction.elements[0].identity!)),
     'identify: the user\'s own words can be stored, said to be theirs, with no database record claimed');
+  const zap = judgeSearchedAs({ label: 'ZAP70', kind: 'protein', parts: [part('ZAP70', [{ record: rec('HGNC', 'HGNC:12858', 'ZAP70'), field: 'approved symbol', matched: 'ZAP70' }])] }, 'ZAP', { text: 'ZAP70', cls: 'molecule' });
+  check(zap.status === 'confirm' && zap.proposal?.by === 'you' && zap.label === 'ZAP', 'identify: an exact symbol found under the user\'s words ("ZAP" as ZAP70) waits to be confirmed, never taken as found');
   const bad = applyEdits(base, [E('identify', 'e1', null, JSON.stringify({ kind: 'molecule', records: [{ db: 'Made-up DB', id: 'x' }] }))]);
   check(bad.failed.length === 1 && !bad.extraction.elements[0].identity, 'identify: an identity not in the expected form is refused, and nothing is set');
 }

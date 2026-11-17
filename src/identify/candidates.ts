@@ -103,6 +103,17 @@ export function judge(l: LabelLookup): Judged {
   return { label: l.label, status, parts, proposal };
 }
 
+/**
+ * What a search under the user's own words ("Other") is shown as. Even an exact symbol found that way ("ZAP" searched
+ * as ZAP70) waits for the user to confirm: it rests on their knowledge, not on the label as drawn, and only a
+ * confirmed answer is stored (an exact match is never saved as a change, so it would vanish on reload).
+ */
+export function judgeSearchedAs(l: LabelLookup, label: string, searchedAs: NonNullable<Judged['searchedAs']>): Judged {
+  const j = judge(l);
+  const parts = j.parts.map((p) => (p.status === 'exact' ? { ...p, status: 'confirm' as const } : p));
+  return { ...j, label, parts, status: j.status === 'exact' ? 'confirm' : j.status, proposal: j.proposal ? { ...j.proposal, by: 'you' } : null, searchedAs };
+}
+
 /** The identity from one chosen option per part (index into its options; a generic part takes its class term). */
 export function identityOf(parts: PartChoice[], chosen: number[], by: Identity['by'], searchedAs?: Judged['searchedAs']): Identity {
   const picked = parts.map((p, i) => (p.status === 'generic'

@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { identify, type RunRecord } from '../api.ts';
-import { judge, OTHER_CLASSES, type Judged, type OtherClass } from '../identify/candidates.ts';
+import { judge, judgeSearchedAs, OTHER_CLASSES, type Judged, type OtherClass } from '../identify/candidates.ts';
 import type { LabelLookup } from '../identify/types.ts';
 import { applyEdits, dependents } from '../edit/applyEdits.ts';
 import { cleanText, describeEdit, nameOf } from '../edit/describe.ts';
@@ -177,7 +177,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     const m = new Map<string, Judged>();
     for (const t of targets) {
       const again = searchedAs.get(t.label);
-      if (again?.lookup) { m.set(t.id, { ...judge(again.lookup), label: t.label, searchedAs: { text: again.text, cls: again.cls } }); continue; }
+      if (again?.lookup) { m.set(t.id, judgeSearchedAs(again.lookup, t.label, { text: again.text, cls: again.cls })); continue; }
       const l = lookups.get(lookupKey(t.label, t.kind));
       if (l && l.parts.length) m.set(t.id, judge(l));
     }
