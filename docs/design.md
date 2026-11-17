@@ -239,6 +239,14 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **One consistent style (`restyle`), off by default:** five fills by kind, black arrows, red for inhibition. It says what it replaces, including the colour meanings noted in step 1.
 - **The before → after numbers** are measured the way Organize Layout scores itself: arrows crossing, arrows behind a shape, and arrows pointing up (feedback counted apart).
 
+**Finish: the report (user, 2026-11-17).** It answers two questions from the brief with the run's own data: would you know if something was changed unintentionally, and is the figure actually simpler?
+- **An independent fidelity check** (`src/report/account.ts`): it doesn't trust the code that applies changes. It reads the change list for what each change says it did to each item, then compares the model's reading with the finished figure item by item. Anything different with no change to explain it is reported as unaccounted for, at the top: a shape gone, a label altered, an arrow dropped, reversed, re-pointed, or with its head or meaning changed.
+  - **It follows the same rules the changes do:** arrows going with a left-out shape or cluster, re-pointed when their end is merged or collapsed (a cluster through to the one shape it was left with), and drawn once when merging makes two arrows the same.
+  - **Tested both ways** (`npm run check:extraction`): every practice run with changes is fully accounted for, and a deliberately faulty apply that silently drops an arrow, reverses one and renames a shape is caught three times out of three.
+- **Simpler, in numbers:** shapes, arrows, clusters and compartments as read, after Check, and finished (Guo with the canonical routes: shapes 82 → 25, arrows 47 → 18, clusters 20 → 4).
+- **Every shape and arrow, grouped by what happened,** with the step and, for shapes, what they were identified as. Exact symbol matches count as identified here even though they are not stored as changes.
+- **Download:** the report as Markdown, and the figure as SVG.
+
 ## 8. Internal ids stay off the screen
 **Decision:** the model's ids for shapes and arrows ("e5", "a_tx_1") are never shown. The model sometimes writes them into its questions and reasons ("drawn twice (e19 and e26)"). A bracketed list of ids is dropped; any other id is replaced by the item's name as written.
 
