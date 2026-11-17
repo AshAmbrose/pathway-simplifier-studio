@@ -23,15 +23,9 @@ import { fitMeasures } from '../layout/solvers/fit.ts';
 import { DEFAULT_LAYOUT, type LayoutValue } from '../layout/value.ts';
 import { toScene, type Scene } from '../render/toScene.ts';
 import { traceRoutes } from '../simplify/routes.ts';
-import { MarkerDefs, SceneSvg, type SceneUi } from './SceneSvg.tsx';
+import { MarkerDefs, SceneSvg, stillUi } from './SceneSvg.tsx';
 import { meta } from './ui.ts';
 
-const noop = () => {};
-const still: SceneUi = {
-  unit: 1, hot: null, onHover: noop, marks: new Map(), selected: null, touched: new Set(), pins: [], quiet: false, picking: false,
-  editable: false, drawing: false, placing: false, onPlace: noop, onNewArrow: noop, onSelect: noop, onPin: noop, onMoveBadge: noop,
-  onArrowEnd: noop, onArrowEndFree: noop, onMoveNode: noop,
-};
 
 function Pane({ title, scene, m, note }: { title: string; scene: Scene | null; m: Measures | null; note?: string }) {
   return (
@@ -44,7 +38,7 @@ function Pane({ title, scene, m, note }: { title: string; scene: Scene | null; m
       <div className="h-[calc(100vh-9rem)] rounded border border-line bg-white">
         {scene ? (
           <svg viewBox={`0 0 ${scene.width} ${scene.height}`} className="h-full w-full" preserveAspectRatio="xMidYMid meet">
-            <MarkerDefs /><SceneSvg scene={scene} ui={{ ...still, unit: scene.width / 600 }} />
+            <MarkerDefs /><SceneSvg scene={scene} ui={stillUi(scene.width / 600)} />
           </svg>
         ) : <p className={`${meta} p-4`}>{note ?? 'Working…'}</p>}
       </div>

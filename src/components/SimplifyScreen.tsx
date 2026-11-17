@@ -530,8 +530,9 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
       )}
       {showReport && (
         <FinishReport name={run.name} report={accountFor(base, ordered, knownIdentities)} finished={finished}
+          imageUrl={imageUrl} finalScene={toScene(applyEdits(base, ordered).extraction, W, H)}
           extra={arrowChecks.length ? [checkSummary(arrowChecks), ...arrowChecks.filter((r) => TO_LOOK.has(r.status)).map((r) => `To look at: ${nameOf(issuesAfter, r.id)}: ${r.why}${r.records[0] ? ` (${r.records[0].source} ${r.records[0].id})` : ''}${s.issues[`relation:${r.id}`]?.note ? `; your note: ${s.issues[`relation:${r.id}`]!.note}` : ''}`)] : []}
-          onDownloadSvg={downloadSvg} onClose={() => setShowReport(false)} onHover={setHoverIds} />
+          onClose={() => setShowReport(false)} onHover={setHoverIds} />
       )}
       {openQuestions > 0 && (
         <div className={`${warnNote} mb-2 flex items-center justify-between`}>

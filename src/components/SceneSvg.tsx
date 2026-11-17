@@ -58,6 +58,14 @@ export interface SceneUi {
 }
 
 /** The arrowhead shapes (arrow, bar, open), shared by every arrow; each takes its line's colour. */
+const noop = () => {};
+/** Settings for a picture that is only looked at (the comparison page, the Finish report): no marks, nothing clickable. */
+export const stillUi = (unit: number): SceneUi => ({
+  unit, hot: null, onHover: noop, marks: new Map(), selected: null, touched: new Set(), pins: [], quiet: false, picking: false,
+  editable: false, drawing: false, placing: false, onPlace: noop, onNewArrow: noop, onSelect: noop, onPin: noop, onMoveBadge: noop,
+  onArrowEnd: noop, onArrowEndFree: noop, onMoveNode: noop,
+});
+
 export function MarkerDefs() {
   return (
     <defs>

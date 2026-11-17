@@ -1,5 +1,7 @@
 /**
  * The Finish report: the figure as the model read it against the finished figure.
+ *  - Original and finished side by side: the uploaded image and the finished figure, each with its counts;
+ *    "Larger" makes both taller. The SVG download is this finished figure, whichever step the report opened on.
  *  - Fidelity first: whether every shape and arrow is accounted for (src/report/account.ts), and any that changed
  *    with no change saying so, listed at the top.
  *  - Simpler, in numbers: shapes, arrows, clusters and compartments as read, after Check, and finished.
@@ -9,27 +11,50 @@
  * Opens on Finish, and from the header at any time.
  */
 import { AlertTriangle, Check, Download, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { Scene } from '../render/toScene.ts';
 import type { Report } from '../report/account.ts';
 import { reportMarkdown } from '../report/markdown.ts';
 import { CloseButton } from './Popover.tsx';
+import { MarkerDefs, SceneSvg, stillUi } from './SceneSvg.tsx';
 import { button, cta, ICON, meta, okNote, section, sectionTitle, warnNote } from './ui.ts';
 import { STEP_INFO } from './StepBar.tsx';
 
 const where = (w: string | null) => (w ? (w === 'Check' ? 'Check' : `${STEP_INFO[w as keyof typeof STEP_INFO]?.n ?? ''} ${STEP_INFO[w as keyof typeof STEP_INFO]?.name ?? w}`) : '');
 
-export function FinishReport({ name, report, extra, finished, onDownloadSvg, onClose, onHover }: {
+export function FinishReport({ name, report, extra, finished, imageUrl, finalScene, onClose, onHover }: {
   name: string;
+  /** The uploaded figure, and the finished figure (every change applied), for the side-by-side view. */
+  imageUrl: string;
+  finalScene: Scene;
   report: Report;
   /** Further lines for the summary (the arrow check, when it has run). */
   extra: string[];
   /** Opened by Finish (true) or from the header (false). */
   finished: boolean;
-  onDownloadSvg: () => void;
   onClose: () => void;
   onHover: (ids: string[] | null) => void;
 }) {
   const c = report.counts;
+  const [large, setLarge] = useState(false);
+  const finalSvg = useRef<SVGSVGElement>(null);
+  /** Saves the finished figure drawn here as an SVG file (not the step on screen behind the report). */
+  const downloadSvg = () => {
+    const svg = finalSvg.current;
+    if (!svg) return;
+    const copy = svg.cloneNode(true) as SVGSVGElement;
+    copy.setAttribute('width', String(Math.round(finalScene.width)));
+    copy.setAttribute('height', String(Math.round(finalScene.height)));
+    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    copy.removeAttribute('class');
+    const blob = new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${name.replace(/[^\w-]+/g, '-')}-simplified.svg`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const frame = `relative flex ${large ? 'h-[70vh]' : 'h-[340px]'} items-center justify-center overflow-hidden rounded border border-line bg-white`;
   const downloadMd = () => {
     const blob = new Blob([reportMarkdown(name, report, extra)], { type: 'text/markdown' });
     const a = document.createElement('a');
@@ -62,6 +87,25 @@ export function FinishReport({ name, report, extra, finished, onDownloadSvg, onC
         )}
 
         <section className={`${section} mt-5`}>
+          <h3 className={`${sectionTitle} flex items-baseline justify-between`}>Original and finished
+            <button className="text-meta font-normal text-ink-2 underline decoration-line-2 underline-offset-4 hover:text-ink" onClick={() => setLarge((v) => !v)}>{large ? 'Smaller' : 'Larger'}</button></h3>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <figure>
+              <div className={frame}><img src={imageUrl} alt="The uploaded figure" className="max-h-full max-w-full object-contain" /></div>
+              <figcaption className={`${meta} num mt-1`}>Original, as uploaded · {c.read.shapes} shapes, {c.read.arrows} arrows as read</figcaption>
+            </figure>
+            <figure>
+              <div className={frame}>
+                <svg ref={finalSvg} viewBox={`0 0 ${finalScene.width} ${finalScene.height}`} className="h-full w-full" preserveAspectRatio="xMidYMid meet">
+                  <MarkerDefs /><SceneSvg scene={finalScene} ui={stillUi(finalScene.width / 600)} />
+                </svg>
+              </div>
+              <figcaption className={`${meta} num mt-1`}>Finished · {c.finished.shapes} shapes, {c.finished.arrows} arrows</figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section className={`${section} mt-5`}>
           <h3 className={sectionTitle}>Simpler, in numbers</h3>
           <table className="num mt-2 w-full text-body">
             <thead><tr className={meta}><th className="text-left font-normal" /><th className="text-right font-normal">As read</th><th className="text-right font-normal">After Check</th><th className="text-right font-normal">Finished</th><th className="text-right font-normal">Change</th></tr></thead>
@@ -88,7 +132,7 @@ export function FinishReport({ name, report, extra, finished, onDownloadSvg, onC
 
         <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-line pt-4">
           <button className={cta} onClick={downloadMd}><FileText size={ICON} />Download report</button>
-          <button className={button} onClick={onDownloadSvg}><Download size={ICON} />Download figure (SVG)</button>
+          <button className={button} onClick={downloadSvg}><Download size={ICON} />Download finished figure (SVG)</button>
           <span className={meta}>The report is Markdown: every shape and arrow, what happened to it, and where.</span>
         </div>
       </div>
