@@ -36,6 +36,13 @@ export const identify = (label: string, kind: string) =>
 /** Each arrow between identified shapes, looked up in the local SIGNOR and OmniPath snapshots (server/relations.ts). */
 export const checkRelations = (q: RelationQuery) =>
   call<{ ready: boolean; snapshots: { signor?: string; omnipath?: string }; results: ArrowCheck[] }>('/api/relations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(q) });
+/** The Finish report printed to PDF by the local Chrome (server/pdf.ts); null if no Chrome was found. */
+export async function reportPdf(html: string): Promise<Blob | null> {
+  const res = await fetch('/api/report-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ html }) });
+  if (res.status === 501) return null;
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Request failed (${res.status}).`);
+  return res.blob();
+}
 /**
  * Saves the change list, naming the version it was built on. If the run was saved somewhere else since,
  * nothing is written and the newer review comes back as `stale`.
