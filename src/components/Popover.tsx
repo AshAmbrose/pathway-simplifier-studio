@@ -2,6 +2,7 @@
  * A pop-up placed beside a box on the reconstruction: on whichever side has room, never over the box itself.
  * It follows the box as the view moves.
  */
+import { X } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { BoxPx } from '../render/edgePorts.ts';
 import type { Placement } from './PairedViewer.tsx';
@@ -37,12 +38,12 @@ export function Popover({ anchor, place, width = 300, children }: { anchor: BoxP
 
   return (
     <div ref={ref} style={{ left, top, width: w, maxHeight: place.paneH - EDGE * 2 }}
-      className="pointer-events-auto absolute overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 shadow-xl dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+      className="pointer-events-auto absolute overflow-y-auto rounded border border-line-2 bg-panel p-4 text-body text-ink shadow-[0_8px_24px_rgb(0_0_0/0.14)]">
       {children}
     </div>
   );
 }
 
 export function CloseButton({ onClose }: { onClose: () => void }) {
-  return <button aria-label="Close" className="-mr-1 -mt-1 rounded px-1.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200" onClick={onClose}>×</button>;
+  return <button aria-label="Close" className="-mr-1 -mt-1 rounded p-1 text-ink-3 hover:bg-sunk hover:text-ink" onClick={onClose}><X size={16} /></button>;
 }

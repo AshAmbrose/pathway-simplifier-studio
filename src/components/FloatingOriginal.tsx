@@ -11,8 +11,8 @@ export function FloatingOriginal({ src, onClose }: { src: string; onClose: () =>
   const drag = useRef<{ dx: number; dy: number } | null>(null);
   return (
     <div role="dialog" aria-label="Original figure" style={{ left: pos.x, top: pos.y, width: 420, resize: 'both', minWidth: 220, minHeight: 120 }}
-      className="fixed z-40 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl dark:border-slate-600 dark:bg-slate-800">
-      <div className="flex cursor-move select-none items-center justify-between border-b border-slate-200 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:text-slate-400"
+      className="fixed z-40 overflow-hidden rounded border border-line-2 bg-panel shadow-[0_8px_24px_rgb(0_0_0/0.18)]">
+      <div className="flex cursor-move select-none items-center justify-between border-b border-line px-3 py-1.5 text-meta font-semibold text-ink-3"
         onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y }; }}
         onPointerMove={(e) => {
           const d = drag.current;

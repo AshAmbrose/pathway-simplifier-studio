@@ -6,6 +6,8 @@
  * Every step edits one change list, held here and saved here, so moving back and forth never loses anything.
  * Where you are is kept in the address (?step=focus), so a reload comes back to it.
  */
+import { ArrowLeft } from 'lucide-react';
+import { button, ICON } from './ui.ts';
 import { useEffect, useRef, useState } from 'react';
 import { saveReview, type RunRecord } from '../api.ts';
 import { EMPTY_REVIEW, STEPS, type Review, type StepId } from '../types/extraction.ts';
@@ -13,7 +15,7 @@ import { ReviewScreen } from './ReviewScreen.tsx';
 import { SimplifyScreen } from './SimplifyScreen.tsx';
 import { StepBar, type JourneyStep } from './StepBar.tsx';
 
-const chip = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800';
+const chip = button;
 
 function stepParam(): JourneyStep {
   const s = new URL(location.href).searchParams.get('step');
@@ -55,22 +57,22 @@ export function RunScreen({ run, imageUrl, onBack }: { run: RunRecord; imageUrl:
 
   const top = (
     <>
-      <button className={chip} onClick={() => { setStep('check'); onBack(); }}>← All figures</button>
-      <h1 className="text-lg font-semibold tracking-tight">{run.name}</h1>
+      <button className={chip} onClick={() => { setStep('check'); onBack(); }}><ArrowLeft size={ICON} />All figures</button>
+      <h1 className="text-page font-semibold text-ink">{run.name}</h1>
     </>
   );
   // From Check, "Continue" goes to the first simplification step not yet done or skipped.
   const status = review.simplify?.steps ?? {};
   const firstOpen = STEPS.find((k) => !status[k]) ?? 'issues';
   const checkBar = (
-    <StepBar current="check" status={status} choices={0} onJump={setStep} onNext={() => setStep(firstOpen)}
+    <StepBar current="check" status={status} choices={0} nextIsAction={openQuestions === 0} onJump={setStep} onNext={() => setStep(firstOpen)}
       note={openQuestions ? `${openQuestions} question${openQuestions === 1 ? '' : 's'} still open (you can come back to ${openQuestions === 1 ? 'it' : 'them'})` : null} />
   );
   const notices = (
     <>
-      {saveError && <div className="mb-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">Your last change was not saved: {saveError}</div>}
+      {saveError && <div className="mb-2 rounded bg-warn-wash px-3 py-1.5 text-body text-bad">Your last change was not saved: {saveError}</div>}
       {reloaded && (
-        <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+        <div className="mb-2 flex items-center justify-between rounded bg-warn-wash px-3 py-1.5 text-body text-warn-ink">
           <span>This run was changed somewhere else (another tab, or an older copy of this page). The newer changes are now shown, and your last change was not applied over them.</span>
           <button className="ml-3 shrink-0 underline" onClick={() => setReloaded(false)}>OK</button>
         </div>

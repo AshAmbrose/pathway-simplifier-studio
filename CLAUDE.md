@@ -19,6 +19,10 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 - **Nothing is hidden.** Problems, and changes that can no longer apply, are listed, never dropped. What simplification leaves out is listed with its reason and can be restored.
 
 ## Working rules
+- **Design work uses Impeccable** (`.claude/skills/impeccable`, `npx impeccable`), with [PRODUCT.md](PRODUCT.md) as its product brief:
+  - its anonymous telemetry stays off;
+  - don't use its live mode, which runs an agent with approvals and sandboxing off;
+  - the drawn figure (`SceneSvg.tsx`, `toScene.ts`) is content, not interface, so design passes leave its colours alone.
 - **Annotate code clearly:**
   - every file starts with a short plain-language comment saying what it's for;
   - comment any function or block whose purpose isn't obvious from its name;
@@ -50,5 +54,6 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 | `src/components/StepBar.tsx` | The step bar across the top: the whole journey, with Back, Skip and Next. |
 | `src/components/ReviewScreen.tsx` | Check: the two views, pins, pop-ups, adding shapes and arrows, the change list. |
 | `src/components/SimplifyScreen.tsx`, `steps/` | The simplification steps: the before → after views, and one panel per step. |
+| `src/components/ui.ts`, `src/index.css` | The visual system in code: colour roles for light and dark, the type scale, and the shared button, section and note styles. See [DESIGN.md](DESIGN.md). |
 | `src/components/SceneSvg.tsx` | Drawing the reconstruction and the marks on top of it (pins, outlines, handles). |
 | `scripts/` | Offline checks, practice runs, spend, and the paid re-test of the prompt. |

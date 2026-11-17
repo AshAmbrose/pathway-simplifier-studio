@@ -13,8 +13,8 @@ import { anchorOf, boxOf, colour, hitTest, wrapLabel } from '../render/toScene.t
 import type { BoxPx } from '../render/edgePorts.ts';
 import { readableTextColors } from '../render/textContrast.ts';
 
-const HL = '#f97316';
-const SEL = '#2563eb';
+const HL = '#e8590c'; // the interface accent: what you're looking at (hover, the item a question or step is about)
+const SEL = '#14171b'; // ink: the shape or arrow selected for editing, and its handles
 const FADED = 0.2;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 

@@ -154,13 +154,13 @@ export function PairedViewer({ ref, width, height, rightSize, left, right, leftT
 
   const pane_ = (i: number, content: ReactNode, title: string) => (
     <div className="flex min-w-0 flex-1 flex-col" data-pane={i ? 'right' : 'left'}>
-      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{title}</div>
+      <div className="mb-1.5 text-body font-medium text-ink-2">{title}</div>
       <div className="relative">
         <svg
           ref={(el) => { svgs.current[i] = el; }}
           viewBox={`${viewOf(i).x} ${viewOf(i).y} ${viewOf(i).w} ${viewOf(i).h}`}
           preserveAspectRatio="xMidYMid meet"
-          className="block h-[70vh] w-full cursor-grab touch-none select-none rounded-xl border border-slate-200 bg-white shadow-sm active:cursor-grabbing dark:border-slate-700"
+          className="block h-[calc(100vh-13.5rem)] min-h-[420px] w-full cursor-grab touch-none select-none rounded border border-line bg-white active:cursor-grabbing"
           onPointerDown={(e) => {
             if (e.button !== 0) return;
             cancelAnimationFrame(anim.current[which(i)]);
@@ -187,7 +187,7 @@ export function PairedViewer({ ref, width, height, rightSize, left, right, leftT
         >
           {content}
         </svg>
-        {i === 1 && overlay && <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">{overlay(placement)}</div>}
+        {i === 1 && overlay && <div className="pointer-events-none absolute inset-0 overflow-hidden rounded">{overlay(placement)}</div>}
       </div>
     </div>
   );
@@ -199,16 +199,16 @@ export function PairedViewer({ ref, width, height, rightSize, left, right, leftT
         {pane_(0, left(unitOf(0)), leftTitle)}
         {pane_(1, right(unitOf(1)), rightTitle)}
       </div>
-      <div className="mt-1.5 flex h-5 items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-        {hint ? <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{hint}</span>
+      <div className="mt-2 flex h-6 items-center justify-between gap-3 text-meta text-ink-3">
+        {hint ? <span className="truncate text-body font-medium text-ink">{hint}</span>
           : <span className="truncate">{help ?? 'Scroll to zoom · drag to pan · click a shape or arrow to fix it'}</span>}
         <span className="flex shrink-0 items-center gap-2">
           <select aria-label="Zoom" value="" onChange={(e) => e.target.value && zoomTo(Number(e.target.value))}
-            className="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
+            className="num rounded border border-line-2 bg-panel px-2 py-0.5 text-meta text-ink">
             <option value="" disabled>Zoom {Math.round(level * 100)}%</option>
             {[[1, 'Fit (100%)'], [1.5, '150%'], [2, '200%'], [3, '300%'], [4, '400%']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
           </select>
-          <button className="underline hover:text-slate-800 dark:hover:text-slate-200" onClick={resetAll}>Reset view</button>
+          <button className="underline decoration-line-2 underline-offset-4 hover:text-ink" onClick={resetAll}>Reset view</button>
         </span>
       </div>
     </div>
