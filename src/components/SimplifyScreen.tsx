@@ -15,7 +15,9 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { identify, type RunRecord } from '../api.ts';
 import { judge, judgeSearchedAs, OTHER_CLASSES, type Judged, type OtherClass } from '../identify/candidates.ts';
-import type { LabelLookup } from '../identify/types.ts';
+import type { Identity, LabelLookup } from '../identify/types.ts';
+import { accountFor } from '../report/account.ts';
+import { FinishReport } from './FinishReport.tsx';
 import { applyEdits, dependents } from '../edit/applyEdits.ts';
 import { cleanText, describeEdit, nameOf } from '../edit/describe.ts';
 import { layOutAsync } from '../layout/adapt.ts';
@@ -29,7 +31,7 @@ import { collapseEdit, listClusters } from '../simplify/clusters.ts';
 import { findRepeats, type RepeatGroup } from '../simplify/repeats.ts';
 import { focusHidden, items, setItem, toggleShape, traceRoutes } from '../simplify/routes.ts';
 import { EMPTY_SIMPLIFY, STEPS, type AppliedEdit, type Edit, type Review, type Simplify, type StepId } from '../types/extraction.ts';
-import { Check, ChevronDown, Download, Image as ImageIcon, ListChecks } from 'lucide-react';
+import { Check, ChevronDown, Download, FileText, Image as ImageIcon, ListChecks } from 'lucide-react';
 import { body, button, ICON, meta, okNote, quiet, warnNote } from './ui.ts';
 import { PairedViewer, type ViewerHandle } from './PairedViewer.tsx';
 import { ImageLayer, MarkerDefs, SceneSvg, type Mark, type SceneUi } from './SceneSvg.tsx';
@@ -83,6 +85,8 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const [draft, setDraft] = useState<ClusterDraft | null>(null);
   const [layoutSel, setLayoutSel] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
+  // The report: opened by Finish, or from the header at any time.
+  const [showReport, setShowReport] = useState(false);
   // The original beside the canvas: folded by default, and kept open or folded across steps and visits (this
   // viewer's own setting, so it lives in the browser, not in the run).
   const [showOriginal, setShowOriginalState] = useState(() => { try { return localStorage.getItem('pss.originalOpen') === '1'; } catch { return false; } });
@@ -97,7 +101,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
 
   // Escape, or a click anywhere outside it, closes the change list; Escape also lets go of the highlighted issue.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowChanges(false); setActiveIssue(null); setActiveRepeat(null); setDraft(null); setLayoutSel(null); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowChanges(false); setShowReport(false); setActiveIssue(null); setActiveRepeat(null); setDraft(null); setLayoutSel(null); } };
     const onDown = (e: PointerEvent) => { if (changesBox.current && !changesBox.current.contains(e.target as Node)) setShowChanges(false); };
     window.addEventListener('keydown', onKey);
     window.addEventListener('pointerdown', onDown);
@@ -138,16 +142,19 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const asked = useRef(new Set<string>());
   const lookupKey = (label: string, kind: string) => `${kind}|${label}`;
   // One entry per label: shapes drawn with the same name (TRAF6 three times) are looked up and answered together.
+  // Worked out on every step, from the figure as step 1 leaves it, because the Finish report and the arrow check
+  // need what each shape is too (the lookups are cached, so this costs nothing after the first time).
+  const issueEdits = useMemo(() => ordered.filter((e) => stepOf(e.source) === 'issues'), [ordered]);
+  const issuesAfter = useMemo(() => applyEdits(issueBase, issueEdits).extraction, [issueBase, issueEdits]);
   const targets = useMemo(() => {
-    if (step !== 'issues') return [];
     const by = new Map<string, { id: string; ids: string[]; label: string; kind: string }>();
-    for (const e of after.extraction.elements) {
+    for (const e of issuesAfter.elements) {
       if (!e.label || ['heading', 'symbol', 'dna'].includes(e.kind)) continue;
       const have = by.get(e.label);
       if (have) have.ids.push(e.id); else by.set(e.label, { id: e.id, ids: [e.id], label: e.label, kind: e.kind });
     }
     return [...by.values()];
-  }, [step, after]);
+  }, [issuesAfter]);
   // "Other": a label searched again under the user's own words and kind ("CARMA" as CARMA1, a gene or protein).
   const [searchedAs, setSearchedAs] = useState<Map<string, { text: string; cls: OtherClass; lookup: LabelLookup | null }>>(new Map());
   const searchAgain = (i: Issue, q: { text: string; cls: OtherClass } | null) => {
@@ -185,6 +192,12 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   }, [targets, lookups, searchedAs]);
   const identityIssues = useMemo((): Issue[] => targets.filter((t) => judged.has(t.id))
     .map((t) => ({ key: `identity:${t.label}`, kind: 'identity', id: t.id, ids: t.ids, asWritten: t.label, suggestion: null, basis: null })), [targets, judged]);
+  /** What each shape is, as step 1 stands: chosen there, or an exact match taken as found. For the report. */
+  const knownIdentities = useMemo(() => {
+    const m = new Map<string, Identity>();
+    for (const i of identityIssues) { const id = chosenIdentity(i, issueEdits, judged); if (id) for (const s2 of i.ids ?? [i.id]) m.set(s2, id); }
+    return m;
+  }, [identityIssues, issueEdits, judged]);
   const pendingLookups = new Set(targets.map((t) => lookupKey(t.label, t.kind)).filter((k) => !lookups.has(k))).size;
   const lookupTotal = new Set(targets.map((t) => lookupKey(t.label, t.kind))).size;
   /** Every step 1 issue in panel order, and whether one is settled: the drawing's issues, then what each shape is. */
@@ -319,7 +332,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const next = () => {
     if (BUILT.includes(step)) setSimplify((v) => ({ ...v, steps: { ...v.steps, [step]: 'done' } }));
     if (at < STEPS.length - 1) go(STEPS[at + 1]);
-    else setFinished(true);
+    else { setFinished(true); setShowReport(true); }
   };
   /**
    * Saves the simplified figure as an SVG file: the right view's picture, whole, without the on-screen marks.
@@ -451,6 +464,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
       <header className="mb-2 flex flex-wrap items-center gap-3">
         {top}
         <span className="flex-1" />
+        <button className={chip} aria-pressed={showReport} onClick={() => setShowReport(true)}><FileText size={ICON} />Report</button>
         <button className={chip} aria-pressed={showOriginal} onClick={() => setShowOriginal((v) => !v)}><ImageIcon size={ICON} />{showOriginal ? 'Hide original' : 'Original'}</button>
         <div className="relative" ref={changesBox}>
           <button className={chip} aria-expanded={showChanges} onClick={() => setShowChanges((v) => !v)}><ListChecks size={ICON} /><span className="num">{simplifications}</span> change{simplifications === 1 ? '' : 's'}<ChevronDown size={ICON} className="text-ink-3" /></button>
@@ -486,14 +500,19 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
         </div>
       </header>
       {notices}
-      {finished && (
+      {finished && !showReport && (
         <div className={`${okNote} mb-2 flex flex-wrap items-center justify-between gap-2`}>
-          <span className="flex items-center gap-2"><Check size={ICON} />Simplification finished and saved. An editing canvas for final tweaks is planned; for now you can download the figure.</span>
+          <span className="flex items-center gap-2"><Check size={ICON} />Simplification finished and saved.</span>
           <span className="flex shrink-0 items-center gap-3">
+            <button className={button} onClick={() => setShowReport(true)}><FileText size={ICON} />Report</button>
             <button className={button} onClick={downloadSvg}><Download size={ICON} />Download SVG</button>
             <button className={quiet} onClick={() => setFinished(false)}>Close</button>
           </span>
         </div>
+      )}
+      {showReport && (
+        <FinishReport name={run.name} report={accountFor(base, ordered, knownIdentities)} extra={[]} finished={finished}
+          onDownloadSvg={downloadSvg} onClose={() => setShowReport(false)} onHover={setHoverIds} />
       )}
       {openQuestions > 0 && (
         <div className={`${warnNote} mb-2 flex items-center justify-between`}>

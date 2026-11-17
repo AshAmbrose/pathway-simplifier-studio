@@ -32,7 +32,11 @@ A step bar across the top walks you through: **Check**, then **1 Issues → 2 Fo
      - A table shows before → after: arrows crossing, behind a shape, and pointing up.
      - Optional: one consistent style, and hiding the member names under collapsed shapes. Any rule that doesn't help can be switched off.
      - Afterwards, click a shape on the right and drag it to fine-tune.
-   - **Finish** marks the simplification done and offers the figure as an SVG download. An editing canvas for final tweaks is planned next.
+   - **Finish** marks the simplification done and opens the **report** (also under **Report** in the header, at any time):
+     - **Fidelity first:** whether every shape and arrow the model read is accounted for: unchanged, or a change in the list says what happened to it. Anything changed with no change saying so (a shape gone, an arrow reversed, a label altered) is listed at the top.
+     - **Simpler, in numbers:** shapes, arrows, clusters and compartments as read, after Check, and finished.
+     - **Every shape and arrow, grouped by what happened:** kept, renamed, left out (with the reason), merged, collapsed, re-pointed, added, with the step it happened in and what each shape was identified as.
+     - Download it as Markdown, and the figure as SVG. An editing canvas for final tweaks is planned.
 
 ## Scripts
 | Command | What it does |

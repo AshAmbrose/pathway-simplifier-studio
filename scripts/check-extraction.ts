@@ -16,6 +16,8 @@
  *     Redraw: panels become columns (Wnt OFF | ON, Guo canonical | non-canonical), and Guo's main line runs into the nucleus.
  * 10. step 1's identification, offline: label spellings and splitting, the matcher on answers shaped like the
  *     services' (no network), and a malformed identity is refused.
+ * 11. the Finish report: every shape and arrow accounted for on the practice runs (local data/, if present), and a
+ *     faulty apply that drops, reverses or renames silently is caught.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems } from '../src/types/extraction.ts';
@@ -36,6 +38,7 @@ import { measure } from '../src/layout/measures.ts';
 import { DEFAULT_LAYOUT } from '../src/layout/value.ts';
 import { STYLE_RED } from '../src/edit/applyEdits.ts';
 import { getRun, listRuns } from '../server/runs.ts';
+import { accountFor } from '../src/report/account.ts';
 import { identityOf, identityText, judge, judgeSearchedAs } from '../src/identify/candidates.ts';
 import { genericWord, spellings, splitLabel } from '../src/identify/normalise.ts';
 import type { DbRecord, Hit, TermLookup } from '../src/identify/types.ts';
@@ -390,6 +393,28 @@ else {
   check(zap.status === 'confirm' && zap.proposal?.by === 'you' && zap.label === 'ZAP', 'identify: an exact symbol found under the user\'s words ("ZAP" as ZAP70) waits to be confirmed, never taken as found');
   const bad = applyEdits(base, [E('identify', 'e1', null, JSON.stringify({ kind: 'molecule', records: [{ db: 'Made-up DB', id: 'x' }] }))]);
   check(bad.failed.length === 1 && !bad.extraction.elements[0].identity, 'identify: an identity not in the expected form is refused, and nothing is set');
+}
+
+// 11. The Finish report's fidelity check: everything accounted for on real practice runs; silent changes caught.
+{
+  const runsHere = listRuns().filter((r) => /practice/.test(r.id)).map((r) => getRun(r.id)!).filter((r) => (r.review?.edits ?? []).length > 0);
+  const off = runsHere.map((r) => ({ name: r.name, n: accountFor(r.extraction, inOrder(r.review!.edits)).unaccounted })).filter((v) => v.n > 0);
+  if (runsHere.length) check(off.length === 0, `report: every shape and arrow is accounted for on ${runsHere.length} practice runs with changes${off.length ? ': ' + off.map((v) => `${v.name} (${v.n})`).join(', ') : ''}`);
+  // A faulty apply that silently drops one arrow, reverses another and renames a shape: all three must show.
+  const sneaky: typeof applyEdits = (x, es) => {
+    const out = applyEdits(x, es);
+    const y = structuredClone(out.extraction);
+    y.arrows = y.arrows.filter((a) => a.id !== 'a2');
+    const a1 = y.arrows.find((a) => a.id === 'a1')!; [a1.from, a1.to] = [a1.to, a1.from];
+    y.elements[2].label = 'Sneaky';
+    return { ...out, extraction: y };
+  };
+  const caught = accountFor(base, [], new Map(), sneaky);
+  check(caught.unaccounted === 3 && caught.arrows.some((v) => v.id === 'a2' && v.fate === 'unaccounted') && caught.arrows.some((v) => v.id === 'a1' && v.fate === 'unaccounted')
+    && caught.shapes.some((v) => v.fate === 'unaccounted' && /Sneaky/.test(v.detail)), 'report: an arrow dropped, an arrow reversed and a shape renamed with no change saying so are all reported as unaccounted');
+  const honest = accountFor(base, [{ ...E('hide', 'e2', null, 'not on a chosen pathway'), key: 'k1', source: 'step:focus', at: '' }]);
+  check(honest.unaccounted === 0 && honest.shapes.find((v) => v.id === 'e2')?.fate === 'left out' && honest.arrows.every((v) => v.fate === 'went with a shape' || v.fate === 'kept'),
+    'report: a shape left out in Focus is "left out" with its reason, and its arrows "went with" it');
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
