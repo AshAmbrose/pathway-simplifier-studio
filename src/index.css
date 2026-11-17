@@ -1,12 +1,103 @@
+/*
+ * The app's visual system ("precise instrument", see DESIGN.md): cool neutral greys, 1px hairlines instead of
+ * boxes, one workhorse face with tabular figures, ink for primary actions, and one orange used only for "this
+ * is what you're looking at" (the same orange that outlines items on the figures).
+ * Colours are named roles, defined once for light and once for dark, so components never need dark: variants.
+ * The drawn figures (SceneSvg) keep their own colours: they are content, not interface.
+ */
 @import "tailwindcss";
+@import "@fontsource-variable/public-sans";
 
-:root { color-scheme: light dark; }
-body {
-  margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
+:root {
+  color-scheme: light dark;
+  --paper: #f3f4f6;       /* the field everything sits on */
+  --panel: #ffffff;       /* panels, inputs, menus */
+  --sunk: #e9ebee;        /* a second neutral layer: hover, inset */
+  --ink: #14171b;         /* primary text, primary buttons */
+  --ink-2: #424954;       /* secondary text */
+  --ink-3: #5f6773;       /* meta text: still at least 4.5:1 on panel and paper */
+  --line: #d6dadf;        /* hairlines */
+  --line-2: #878e98;      /* control borders: at least 3:1 on panel */
+  --on-ink: #ffffff;      /* text on ink */
+  --accent: #e8590c;      /* selection, current step, focus */
+  --accent-ink: #b8430a;  /* accent as text */
+  --accent-wash: #fff1e8; /* a selected row */
+  --ok: #2b7a4b;
+  --ok-wash: #eaf6ef;
+  --warn-ink: #7a4a00;
+  --warn-wash: #fdf3d8;
+  --bad: #b42318;
 }
 @media (prefers-color-scheme: dark) {
-  body { background: #0f172a; color: #e2e8f0; }
+  :root {
+    --paper: #111316;
+    --panel: #191c20;
+    --sunk: #22262b;
+    --ink: #eceef1;
+    --ink-2: #b9bfc8;
+    --ink-3: #959daa;
+    --line: #2d3238;
+    --line-2: #6c7480;
+    --on-ink: #111316;
+    --accent: #ff7a33;
+    --accent-ink: #ff9a5c;
+    --accent-wash: #33210f;
+    --ok: #63c98e;
+    --ok-wash: #142a1d;
+    --warn-ink: #f2cf7a;
+    --warn-wash: #2e2410;
+    --bad: #ff8a80;
+  }
 }
+
+@theme inline {
+  --font-sans: "Public Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-sunk: var(--sunk);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-on-ink: var(--on-ink);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-wash: var(--accent-wash);
+  --color-ok: var(--ok);
+  --color-ok-wash: var(--ok-wash);
+  --color-warn-ink: var(--warn-ink);
+  --color-warn-wash: var(--warn-wash);
+  --color-bad: var(--bad);
+  /* A tight product scale (about 1.2 between steps): meta 12, body 14, section 16, step title 19, page 23. */
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.1rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.35rem;
+  --text-section: 1rem;
+  --text-section--line-height: 1.4rem;
+  --text-title: 1.1875rem;
+  --text-title--line-height: 1.6rem;
+  --text-page: 1.4375rem;
+  --text-page--line-height: 1.9rem;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.35rem;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The parts the browser draws still carry the design. */
+::selection { background: var(--accent-wash); color: var(--ink); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+input, textarea { caret-color: var(--accent); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--ink); }
+* { scrollbar-color: var(--line-2) transparent; scrollbar-width: thin; }
+a { text-underline-offset: 3px; }
+/* Counts, scores and measures read like readings. */
+.num { font-variant-numeric: tabular-nums; }

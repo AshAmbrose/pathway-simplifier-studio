@@ -27,7 +27,9 @@ import { collapseEdit, listClusters } from '../simplify/clusters.ts';
 import { findRepeats, type RepeatGroup } from '../simplify/repeats.ts';
 import { focusHidden, items, setItem, toggleShape, traceRoutes } from '../simplify/routes.ts';
 import { EMPTY_SIMPLIFY, STEPS, type AppliedEdit, type Edit, type Review, type Simplify, type StepId } from '../types/extraction.ts';
+import { Check, ChevronDown, Download, Image as ImageIcon, ListChecks } from 'lucide-react';
 import { FloatingOriginal } from './FloatingOriginal.tsx';
+import { body, button, ICON, meta, okNote, quiet, warnNote } from './ui.ts';
 import { PairedViewer, type ViewerHandle } from './PairedViewer.tsx';
 import { ImageLayer, MarkerDefs, SceneSvg, type Mark, type SceneUi } from './SceneSvg.tsx';
 import { STEP_INFO, StepBar, stepTitle, type JourneyStep } from './StepBar.tsx';
@@ -37,7 +39,7 @@ import { RepeatsStep } from './steps/RepeatsStep.tsx';
 import { IssuesStep } from './steps/IssuesStep.tsx';
 import { LayoutStep, type StyleReplaces } from './steps/LayoutStep.tsx';
 
-const chip = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800';
+const chip = button;
 const BUILT: StepId[] = ['issues', 'focus', 'repeats', 'clusters', 'layout'];
 const noop = () => {};
 
@@ -339,34 +341,34 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const info = STEP_INFO[step];
 
   return (
-    <div className="mx-auto max-w-[1800px] px-5 py-4">
-      <header className="mb-3 flex flex-wrap items-center gap-3">
+    <div className="mx-auto max-w-[1800px] px-5 py-3">
+      <header className="mb-2 flex flex-wrap items-center gap-3">
         {top}
         <span className="flex-1" />
-        <button className={chip} aria-pressed={showOriginal} onClick={() => setShowOriginal((v) => !v)}>{showOriginal ? 'Hide original' : 'Original'}</button>
+        <button className={chip} aria-pressed={showOriginal} onClick={() => setShowOriginal((v) => !v)}><ImageIcon size={ICON} />{showOriginal ? 'Hide original' : 'Original'}</button>
         <div className="relative" ref={changesBox}>
-          <button className={chip} onClick={() => setShowChanges((v) => !v)}>{simplifications} change{simplifications === 1 ? '' : 's'} ▾</button>
+          <button className={chip} aria-expanded={showChanges} onClick={() => setShowChanges((v) => !v)}><ListChecks size={ICON} /><span className="num">{simplifications}</span> change{simplifications === 1 ? '' : 's'}<ChevronDown size={ICON} className="text-ink-3" /></button>
           {showChanges && (
-            <div className="absolute right-0 z-20 mt-1 max-h-[60vh] w-96 overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 text-sm shadow-xl dark:border-slate-600 dark:bg-slate-800">
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+            <div className="absolute right-0 z-20 mt-1 max-h-[60vh] w-[26rem] overflow-y-auto rounded border border-line-2 bg-panel p-4 text-body shadow-[0_8px_24px_rgb(0_0_0/0.14)]">
+              <p className={meta}>
                 Built on {corrections} correction{corrections === 1 ? '' : 's'} made in Check. <button className="underline" onClick={backToCheck}>Back to Check</button>
               </p>
-              {simplifications === 0 && <p className="mt-2 text-slate-500 dark:text-slate-400">No simplifications yet. The figure is exactly the corrected reconstruction.</p>}
+              {simplifications === 0 && <p className="mt-2 text-ink-3">No simplifications yet. The figure is exactly the corrected reconstruction.</p>}
               {STEPS.map((k) => {
                 const list = described.filter((d) => stepOf(d.e.source) === k);
                 if (!list.length) return null;
                 return (
-                  <section key={k} className="mt-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{stepTitle(k)}</h3>
-                    <ul className="mt-1 space-y-1">
+                  <section key={k} className="mt-4">
+                    <h3 className="font-semibold text-ink">{stepTitle(k)}</h3>
+                    <ul className="mt-1 divide-y divide-line border-y border-line">
                       {list.map(({ e, text }) => (
-                        <li key={e.key} className="flex items-start justify-between gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700"
+                        <li key={e.key} className="flex items-start justify-between gap-3 py-2 hover:bg-sunk"
                           onMouseEnter={() => setHoverIds([e.id])} onMouseLeave={() => setHoverIds(null)}>
                           <div>
-                            <div className={failed.has(e.key) ? 'text-slate-400 line-through' : ''}>{text}</div>
-                            {failed.has(e.key) && <div className="text-xs text-slate-500 dark:text-slate-400">could not be applied: {failed.get(e.key)}</div>}
+                            <div className={failed.has(e.key) ? 'text-ink-3 line-through' : ''}>{text}</div>
+                            {failed.has(e.key) && <div className={meta}>could not be applied: {failed.get(e.key)}</div>}
                           </div>
-                          <button className="shrink-0 text-xs underline" onClick={() => undo(e)}>Undo</button>
+                          <button className={`${quiet} shrink-0`} onClick={() => undo(e)}>Undo</button>
                         </li>
                       ))}
                     </ul>
@@ -379,31 +381,32 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
       </header>
       {notices}
       {finished && (
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100">
-          <span>✓ Simplification finished and saved. The editing canvas for final tweaks comes in the next update; for now you can download the figure.</span>
-          <span className="flex shrink-0 gap-3">
-            <button className="font-semibold underline" onClick={downloadSvg}>Download SVG</button>
-            <button className="underline" onClick={() => setFinished(false)}>Close</button>
+        <div className={`${okNote} mb-2 flex flex-wrap items-center justify-between gap-2`}>
+          <span className="flex items-center gap-2"><Check size={ICON} />Simplification finished and saved. An editing canvas for final tweaks is planned; for now you can download the figure.</span>
+          <span className="flex shrink-0 items-center gap-3">
+            <button className={button} onClick={downloadSvg}><Download size={ICON} />Download SVG</button>
+            <button className={quiet} onClick={() => setFinished(false)}>Close</button>
           </span>
         </div>
       )}
       {openQuestions > 0 && (
-        <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-          <span>{openQuestions} question{openQuestions === 1 ? ' is' : 's are'} still open in Check. You can carry on: answers given there will show up here.</span>
-          <button className="ml-3 shrink-0 underline" onClick={backToCheck}>Back to Check</button>
+        <div className={`${warnNote} mb-2 flex items-center justify-between`}>
+          <span><span className="num">{openQuestions}</span> question{openQuestions === 1 ? ' is' : 's are'} still open in Check. You can carry on: answers given there will show up here.</span>
+          <button className={`${quiet} ml-3 shrink-0 text-warn-ink`} onClick={backToCheck}>Back to Check</button>
         </div>
       )}
 
       <StepBar current={step} status={s.steps} choices={choices} onJump={go} onBack={() => go(at > 0 ? STEPS[at - 1] : 'check')}
         onSkip={() => { clearStep(step, 'skipped'); if (at < STEPS.length - 1) go(STEPS[at + 1]); }} onNext={next} onReset={() => clearStep(step, null)} />
 
-      <div className="mt-3 flex flex-col gap-4 lg:flex-row">
-        <aside className="w-full shrink-0 rounded-xl border border-slate-200 bg-slate-100 p-3 lg:max-h-[78vh] lg:w-[360px] lg:overflow-y-auto dark:border-slate-700 dark:bg-slate-900/80">
-          <h2 className="text-base font-semibold">{stepTitle(step)}</h2>
-          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">{info.what}</p>
-          {step === 'focus' && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">Traced from the figure as it stands after Check and step ①, so your fixes, names and left-out parts are already included.</p>}
+      <div className="mt-4 flex flex-col gap-6 lg:flex-row">
+        {/* The step's panel reads as a document: its title, what it does, then its sections divided by hairlines. */}
+        <aside className="w-full shrink-0 lg:max-h-[calc(100vh-11rem)] lg:w-[380px] lg:overflow-y-auto lg:pr-2">
+          <h2 className="text-title font-semibold text-ink">{stepTitle(step)}</h2>
+          <p className={`${body} mb-4 mt-1`}>{info.what}</p>
+          {step === 'focus' && <p className={`${meta} -mt-2 mb-4`}>Traced from the figure as it stands after Check and step 1, so your fixes, names and left-out parts are already included.</p>}
           {stepFailures.length > 0 && (
-            <div className="mb-3 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+            <div className={`${warnNote} mb-4`}>
               {stepFailures.length} choice{stepFailures.length === 1 ? '' : 's'} in this step no longer appl{stepFailures.length === 1 ? 'ies' : 'y'}, usually because something changed in Check:
               <ul className="mt-1 list-disc pl-5">{stepFailures.map((e) => <li key={e.key}>{described.find((d) => d.e.key === e.key)?.text}: {failed.get(e.key)}</li>)}</ul>
             </div>
@@ -413,9 +416,9 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
               onSettle={settleIssue} onHover={setHoverIds} onSelect={(i) => { setActiveIssue(i.key); show([i.id]); }} />
           )}
           {step === 'focus' && focusStale && (
-            <div className="mb-3 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+            <div className={`${warnNote} mb-4`}>
               The figure changed since these choices were made (in Check, or in an earlier step). They now leave out {hidden.size} shape{hidden.size === 1 ? '' : 's'}; the picture still shows the {focusEdits.length} left out before.
-              <button className="ml-1 font-semibold underline" onClick={() => setFocus(s.focus)}>Update</button>
+              <button className={`${quiet} ml-1 font-semibold text-warn-ink`} onClick={() => setFocus(s.focus)}>Update</button>
             </div>
           )}
           {step === 'focus' && (
@@ -451,7 +454,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
               onMode={(mode) => setLayoutOpts({ ...lopts, mode, off: [] })}
               onRestyle={setRestyle} onUndoMoves={undoMoves} onHover={setHoverIds} onShow={show} />
           )}
-          {!BUILT.includes(step) && <p className="text-sm text-slate-600 dark:text-slate-300">This step comes in a later update. Skip it, or press Next: nothing changes.</p>}
+          {!BUILT.includes(step) && <p className={body}>This step comes in a later update. Skip it, or press Next: nothing changes.</p>}
         </aside>
         <div className="min-w-0 flex-1">
           {/* A new step starts with the whole picture in view (keyed by step, so zoom and pan reset). */}
@@ -462,7 +465,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
             width={W}
             height={H}
             leftTitle={step === 'issues' ? 'Original' : 'Before this step'}
-            rightTitle={`After ${stepTitle(step)}`}
+            rightTitle={`After ${STEP_INFO[step].name.toLowerCase()}`}
             hint={hint}
             help={step === 'layout' ? 'Scroll to zoom · drag to pan · after laying out, click a shape on the right and drag it to move it' : step === 'focus' ? 'Scroll to zoom · drag to pan · click a shape to leave it out or bring it back' : 'Scroll to zoom · drag to pan · faded = left out by this step'}
             left={(unit) => step === 'issues'

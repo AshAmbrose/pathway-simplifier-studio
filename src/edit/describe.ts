@@ -11,7 +11,7 @@ export function nameOf(x: Extraction, id: string | null): string {
   const e = x.elements.find((v) => v.id === id);
   if (e) return e.label ?? (e.id.startsWith('new-') ? '(new shape)' : `(${e.kind}, no label)`);
   const g = x.groups.find((v) => v.id === id);
-  if (g) return g.label ?? `[${g.members.map((m) => nameOf(x, m)).join(' + ')}]`;
+  if (g) return g.label ?? g.members.map((m) => nameOf(x, m)).join(' + ');
   const a = x.arrows.find((v) => v.id === id);
   if (a) return `${nameOf(x, a.from)} ${a.head === 'bar' ? '⊣' : '→'} ${nameOf(x, a.to)}`;
   // An arrow end that is not on a shape.

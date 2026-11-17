@@ -67,7 +67,7 @@ export const RULES = [
   { key: 'blocks', name: 'Keep clusters and touching shapes together', why: 'A cluster, or a ligand on its receptor, moves as one block, its rows kept as drawn.' },
   { key: 'order', name: 'Start from the original order', why: 'Left to right, shapes start in the order the figure draws them.' },
   { key: 'panels', name: 'Panels side by side', why: "The figure's parts become columns under their headings; parts are never mixed." },
-  { key: 'spines', name: 'Your routes as the main lines', why: 'The routes traced in step ② are preferred for the straight top-to-bottom lines.' },
+  { key: 'spines', name: 'Your routes as the main lines', why: 'The routes traced in step 2 are preferred for the straight top-to-bottom lines.' },
   { key: 'fit', name: 'Names fit their shapes', why: 'A shape widens to fit its name, so text stays readable.' },
   { key: 'sizes', name: 'One size per kind', why: 'Proteins, receptors, genes and outcomes each share one height.' },
   { key: 'grid', name: 'Even grid', why: 'Shapes snap to one grid, with even gaps.' },

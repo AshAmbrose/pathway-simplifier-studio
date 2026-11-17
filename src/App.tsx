@@ -26,7 +26,7 @@ export default function App() {
   if (run) return <RunScreen key={run.id} run={run} imageUrl={runImageUrl(run.id)} onBack={() => show(null)} />;
   return (
     <>
-      {error && <div className="mx-auto mt-4 max-w-4xl px-4 text-sm text-red-700 dark:text-red-300">{error}</div>}
+      {error && <div className="mx-auto mt-4 max-w-4xl px-4 text-body text-bad">{error}</div>}
       <UploadScreen onDone={show} onOpen={open} />
     </>
   );

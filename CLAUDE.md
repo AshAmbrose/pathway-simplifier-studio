@@ -54,5 +54,6 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 | `src/components/StepBar.tsx` | The step bar across the top: the whole journey, with Back, Skip and Next. |
 | `src/components/ReviewScreen.tsx` | Check: the two views, pins, pop-ups, adding shapes and arrows, the change list. |
 | `src/components/SimplifyScreen.tsx`, `steps/` | The simplification steps: the before → after views, and one panel per step. |
+| `src/components/ui.ts`, `src/index.css` | The visual system in code: colour roles for light and dark, the type scale, and the shared button, section and note styles. See [DESIGN.md](DESIGN.md). |
 | `src/components/SceneSvg.tsx` | Drawing the reconstruction and the marks on top of it (pins, outlines, handles). |
 | `scripts/` | Offline checks, practice runs, spend, and the paid re-test of the prompt. |

@@ -13,7 +13,9 @@
  *  - What the layout couldn't do, or decided without the figure to go on, is listed.
  *  - After the layout, a shape can be selected and dragged; laying out again clears those moves.
  */
+import { Check, ChevronDown } from 'lucide-react';
 import { nameOf } from '../../edit/describe.ts';
+import { body, ICON, meta, primary, quiet, section, sectionTitle, warnNote } from '../ui.ts';
 import { RULES } from '../../layout/adapt.ts';
 import type { Measures } from '../../layout/measures.ts';
 import { COMPACT_RULES } from '../../layout/compact.ts';
@@ -21,8 +23,7 @@ import { TIDY_RULES } from '../../layout/tidy.ts';
 import type { LayoutMode, LayoutNotes, LayoutOptions } from '../../layout/value.ts';
 import type { Extraction } from '../../types/extraction.ts';
 
-const small = 'text-xs text-slate-600 dark:text-slate-300';
-const box = 'rounded-lg border border-slate-300 bg-white p-2.5 text-sm shadow-sm dark:border-slate-600 dark:bg-slate-800';
+const small = meta;
 
 /** What the consistent style would replace, for saying so before it is switched on. */
 export interface StyleReplaces { fills: number; arrowColours: number; textColours: number; meanings: string[] }
@@ -30,10 +31,10 @@ export interface StyleReplaces { fills: number; arrowColours: number; textColour
 function Row({ label, before, after, hint }: { label: string; before: number; after: number; hint?: string }) {
   const better = after < before, worse = after > before;
   return (
-    <tr className="border-t border-slate-200 dark:border-slate-700">
-      <td className="py-1 pr-2">{label}{hint && <div className="text-[11px] text-slate-500 dark:text-slate-400">{hint}</div>}</td>
-      <td className="py-1 text-right tabular-nums">{before}</td>
-      <td className={`py-1 text-right font-semibold tabular-nums ${better ? 'text-green-700 dark:text-green-400' : worse ? 'text-amber-700 dark:text-amber-400' : ''}`}>{after}</td>
+    <tr className="border-t border-line">
+      <td className="py-1.5 pr-2 text-ink">{label}{hint && <div className={meta}>{hint}</div>}</td>
+      <td className="num py-1.5 text-right align-top text-ink-2">{before}</td>
+      <td className={`num py-1.5 text-right align-top font-semibold ${better ? 'text-ok' : worse ? 'text-warn-ink' : 'text-ink'}`}>{after}</td>
     </tr>
   );
 }
@@ -69,7 +70,7 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
       {ids.map((id, i) => (
         <span key={id}>
           {i > 0 && ', '}
-          <button className="underline decoration-dotted" onMouseEnter={() => onHover([id])} onMouseLeave={() => onHover(null)} onClick={() => onShow([id])}>{nameOf(x, id)}</button>
+          <button className="text-ink underline decoration-line-2 decoration-dotted underline-offset-4" onMouseEnter={() => onHover([id])} onMouseLeave={() => onHover(null)} onClick={() => onShow([id])}>{nameOf(x, id)}</button>
         </span>
       ))}
     </li>
@@ -79,36 +80,39 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
   const verb = mode === 'compact' ? 'Compact' : mode === 'tidy' ? 'Tidy' : 'Redraw';
   const offHere = opts.off.filter((k) => rules.some((r) => r.key === k)).length;
   const anyNotes = notes.beside.length + notes.emptyRegions.length + notes.behind.length + notes.textClashes.length > 0;
+  const lead = {
+    compact: "Keeps the figure's arrangement (what sits left of, above or beside what) but re-spaces it on an even grid: empty space goes, compartments fit what is in them, shapes of one kind share one size, and the shape most routes lead into goes in the middle with its routes either side.",
+    tidy: 'Keeps the figure as its authors drew it, at the same size, and tidies it: shapes nearly in line are lined up, space left by what earlier steps took out is closed and cropped, overlapping shapes are moved clear, and arrows bow around shapes.',
+    cell: 'Redraws the figure from scratch as a cell, read top to bottom: compartments as rows, each part of the figure as a column, the main route into the nucleus as a straight line, regulators beside what they act on, outcomes underneath. Made for figures drawn from scratch, so a published figure often reads worse this way: check the numbers.',
+  }[mode];
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-1 rounded-lg border border-slate-300 bg-white p-1 dark:border-slate-600 dark:bg-slate-800" role="radiogroup" aria-label="How to lay out">
-        {([['compact', 'Compact'], ['tidy', 'Tidy as drawn'], ['cell', 'Redraw as a cell']] as const).map(([m, label]) => (
-          <button key={m} role="radio" aria-checked={mode === m} onClick={() => mode !== m && onMode(m)}
-            className={`rounded-md px-2 py-1.5 text-sm font-semibold ${mode === m ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700'}`}>{label}</button>
-        ))}
-      </div>
-      <section className={laidOut && !stale ? `${box} border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30` : 'rounded-lg border-2 border-blue-400 bg-blue-50 p-2.5 text-sm dark:border-blue-700 dark:bg-blue-950/40'}>
-        {!laidOut && mode === 'compact' && <p className="mb-2">Keeps the figure's arrangement (what sits left of, above or beside what) but re-spaces it on an even grid: empty space goes, compartments fit what is in them, shapes of one kind share one size, and the shape most routes lead into goes in the middle with its routes either side.</p>}
-        {!laidOut && mode === 'tidy' && <p className="mb-2">Keeps the figure as its authors drew it, at the same size, and tidies it: shapes nearly in line are lined up, space left by what earlier steps took out is closed and cropped, overlapping shapes are moved clear, and arrows bow around shapes.</p>}
-        {!laidOut && mode === 'cell' && <p className="mb-2">Redraws the figure from scratch as a cell, read top to bottom: compartments as rows, each part of the figure as a column, the main route into the nucleus as a straight line, regulators beside what they act on, outcomes underneath. Made for figures drawn from scratch, so a published figure often reads worse this way: check the numbers.</p>}
-        {laidOut && !stale && <p className="font-medium text-green-800 dark:text-green-300">✓ Laid out. Click a shape on the right, then drag it to fine-tune.</p>}
-        {laidOut && stale && <p className="mb-2 text-amber-900 dark:text-amber-200">The figure or the switches below changed since this layout was made, so it may not match.</p>}
+    <div>
+      <section className={section}>
+        <div className="grid grid-cols-3 gap-0.5 rounded bg-sunk p-0.5" role="radiogroup" aria-label="How to lay out">
+          {([['compact', 'Compact'], ['tidy', 'Tidy as drawn'], ['cell', 'Redraw as a cell']] as const).map(([m, label]) => (
+            <button key={m} role="radio" aria-checked={mode === m} onClick={() => mode !== m && onMode(m)}
+              className={`rounded-[3px] px-2 py-1.5 text-body ${mode === m ? 'bg-panel font-semibold text-ink shadow-[0_1px_2px_rgb(0_0_0/0.12)]' : 'text-ink-2 hover:text-ink'}`}>{label}</button>
+          ))}
+        </div>
+        {!laidOut && <p className={`${body} mt-3`}>{lead}</p>}
+        {laidOut && !stale && <p className="mt-3 flex items-start gap-2 text-body text-ok"><Check size={ICON} className="mt-0.5 shrink-0" />Laid out. Click a shape on the right, then drag it to fine-tune.</p>}
+        {laidOut && stale && <p className={`${warnNote} mt-3`}>The figure or the switches below changed since this layout was made, so it may not match.</p>}
         {(!laidOut || stale) && (
-          <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700" onClick={onLayout}>
+          <button className={`${primary} mt-3`} onClick={onLayout}>
             {laidOut ? `${verb} again` : mode === 'compact' ? 'Compact the figure' : mode === 'tidy' ? 'Tidy the figure' : 'Redraw as a cell'}
           </button>
         )}
         {moves > 0 && (
-          <p className={`mt-2 ${small}`}>
-            {moves} shape{moves === 1 ? '' : 's'} moved by hand{stale ? '; laying out again clears these moves' : ''}. <button className="underline" onClick={onUndoMoves}>Undo moves</button>
+          <p className={`${meta} mt-2`}>
+            <span className="num">{moves}</span> shape{moves === 1 ? '' : 's'} moved by hand{stale ? '; laying out again clears these moves' : ''}. <button className={quiet} onClick={onUndoMoves}>Undo moves</button>
           </p>
         )}
       </section>
 
-      <section className={box}>
-        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">How it reads</h3>
-        <table className="mt-1 w-full text-sm">
-          <thead><tr className="text-xs text-slate-500 dark:text-slate-400"><th className="text-left font-normal" /><th className="pl-3 text-right font-normal">Before</th><th className="pl-3 text-right font-normal">{laidOut ? 'After' : 'If laid out'}</th></tr></thead>
+      <section className={section}>
+        <h3 className={sectionTitle}>How it reads</h3>
+        <table className="mt-1 w-full text-body">
+          <thead><tr className={meta}><th className="text-left font-normal" /><th className="pl-3 text-right font-normal">Before</th><th className="pl-3 text-right font-normal">{laidOut ? 'After' : 'If laid out'}</th></tr></thead>
           <tbody>
             <Row label="Arrows crossing" before={before.crossings} after={after.crossings} />
             <Row label="Arrows behind a shape" before={before.behind} after={after.behind} />
@@ -118,37 +122,41 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
         </table>
       </section>
 
-      <section className={box}>
-        <label className="flex cursor-pointer items-start gap-2">
-          <input type="checkbox" className="mt-0.5" checked={restyled} onChange={(e) => onRestyle(e.target.checked)} />
+      <section className={section}>
+        <h3 className={sectionTitle}>Style</h3>
+        <label className="mt-2 flex cursor-pointer items-start gap-2.5">
+          <input type="checkbox" className="mt-1" checked={restyled} onChange={(e) => onRestyle(e.target.checked)} />
           <span>
-            <span className="font-medium">Use one consistent style</span>
-            <span className={`block ${small}`}>Fills by kind (at most five colours), black arrows, red for inhibition. Replaces {replaces.fills} fill colour{replaces.fills === 1 ? '' : 's'}{replaces.arrowColours ? `, ${replaces.arrowColours} arrow colour${replaces.arrowColours === 1 ? '' : 's'}` : ''}{replaces.textColours ? ` and ${replaces.textColours} text colour${replaces.textColours === 1 ? '' : 's'}` : ''}.</span>
-            {replaces.meanings.length > 0 && (
-              <span className="mt-1 block rounded bg-amber-50 p-1.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-                Colour or styling that you noted in step ① carries meaning would be replaced:
-                <span className="block">{replaces.meanings.map((m, i) => <span key={i} className="block">· {m}</span>)}</span>
-              </span>
-            )}
+            <span className="text-ink">Use one consistent style</span>
+            <span className={`block ${small}`}>Fills by kind (at most five colours), black arrows, red for inhibition. Replaces <span className="num">{replaces.fills}</span> fill colour{replaces.fills === 1 ? '' : 's'}{replaces.arrowColours ? `, ${replaces.arrowColours} arrow colour${replaces.arrowColours === 1 ? '' : 's'}` : ''}{replaces.textColours ? ` and ${replaces.textColours} text colour${replaces.textColours === 1 ? '' : 's'}` : ''}.</span>
           </span>
         </label>
+        {replaces.meanings.length > 0 && (
+          <div className={`${warnNote} mt-2`}>
+            Colour or styling you noted in step 1 as carrying meaning would be replaced:
+            <ul className="mt-1 list-disc pl-4">{replaces.meanings.map((m, i) => <li key={i}>{m}</li>)}</ul>
+          </div>
+        )}
         {hasSublabels && (
-          <label className="mt-2 flex cursor-pointer items-start gap-2">
-            <input type="checkbox" className="mt-0.5" checked={opts.sublabels} onChange={(e) => onSublabels(e.target.checked)} />
-            <span><span className="font-medium">Show member names under collapsed shapes</span><span className={`block ${small}`}>The small "A + B + C" line from step ④.</span></span>
+          <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+            <input type="checkbox" className="mt-1" checked={opts.sublabels} onChange={(e) => onSublabels(e.target.checked)} />
+            <span><span className="text-ink">Show member names under collapsed shapes</span><span className={`block ${small}`}>The small "A + B + C" line from step 4.</span></span>
           </label>
         )}
       </section>
 
-      <details className={box}>
-        <summary className="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-100">{mode === 'cell' ? 'Layout rules' : mode === 'tidy' ? 'Tidying rules' : 'Compacting rules'} ({rules.length - offHere} of {rules.length} on)</summary>
+      <details className={`${section} group`}>
+        <summary className="flex cursor-pointer list-none items-center justify-between">
+          <span className={sectionTitle}>{mode === 'cell' ? 'Layout rules' : mode === 'tidy' ? 'Tidying rules' : 'Compacting rules'}</span>
+          <span className={`${meta} flex items-center gap-1`}><span className="num">{rules.length - offHere} of {rules.length}</span> on<ChevronDown size={ICON} className="transition-transform group-open:rotate-180" /></span>
+        </summary>
         <p className={`mt-1 ${small}`}>{mode !== 'cell' ? "Switch off a rule that doesn't help this figure. Always on: shapes drawn together move together." : "Switch off a rule that doesn't help this figure. Always on: one reading direction, compartments as rows, regulators beside what they act on."}</p>
-        <ul className="mt-1.5 space-y-1.5">
+        <ul className="mt-2 space-y-2">
           {rules.map((r) => (
             <li key={r.key}>
-              <label className="flex cursor-pointer items-start gap-2">
-                <input type="checkbox" className="mt-0.5" checked={!opts.off.includes(r.key)} onChange={(e) => onRule(r.key, e.target.checked)} />
-                <span><span className="font-medium">{r.name}</span><span className={`block ${small}`}>{r.why}</span></span>
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input type="checkbox" className="mt-1" checked={!opts.off.includes(r.key)} onChange={(e) => onRule(r.key, e.target.checked)} />
+                <span><span className="text-ink">{r.name}</span><span className={`block ${small}`}>{r.why}</span></span>
               </label>
             </li>
           ))}
@@ -156,16 +164,16 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
       </details>
 
       {anyNotes && (
-        <section className="rounded-lg border border-dashed border-slate-400 bg-slate-100 p-2.5 text-sm dark:border-slate-500 dark:bg-slate-900">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">{laidOut ? 'Worth a look' : 'Laying out would leave'}</h3>
-          <ul className="mt-1 list-disc space-y-1 pl-4 text-sm">
+        <section className={section}>
+          <h3 className={sectionTitle}>{laidOut ? 'Worth a look' : 'Laying out would leave'}</h3>
+          <ul className={`${body} mt-1 list-disc space-y-1 pl-4`}>
             {notes.beside.length > 0 && (
               <li>
                 No compartment in the figure, so placed beside its most-connected partner:{' '}
                 {notes.beside.map((b, i) => (
                   <span key={b.id}>
                     {i > 0 && ', '}
-                    <button className="underline decoration-dotted" onMouseEnter={() => onHover([b.id])} onMouseLeave={() => onHover(null)} onClick={() => onShow([b.id])}>{nameOf(x, b.id)}</button>
+                    <button className="text-ink underline decoration-line-2 decoration-dotted underline-offset-4" onMouseEnter={() => onHover([b.id])} onMouseLeave={() => onHover(null)} onClick={() => onShow([b.id])}>{nameOf(x, b.id)}</button>
                     {b.partner ? ` (beside ${nameOf(x, b.partner)})` : ' (nothing to go by: in the cytoplasm)'}
                   </span>
                 ))}

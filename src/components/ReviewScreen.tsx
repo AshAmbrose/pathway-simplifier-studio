@@ -10,6 +10,8 @@
  *  - This is the Check step. It shows and edits only the corrections (answers and fixes by hand). Simplification
  *    changes in the same list are left as they are; they are shown in the simplification steps.
  */
+import { ArrowRight, ChevronDown, ListChecks, Spline, SquarePlus } from 'lucide-react';
+import { button, ICON, meta, note, primary, quiet } from './ui.ts';
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { RunRecord } from '../api.ts';
 import { applyEdits, dependents, optionState } from '../edit/applyEdits.ts';
@@ -67,6 +69,16 @@ function sampleColour(img: HTMLImageElement | null, b: BoxPx): string | null {
 }
 
 const src = (i: number) => `q${i}`;
+
+/** The two arrow heads of pathway notation, drawn: an arrowhead (activates) and a bar (inhibits). */
+function HeadIcon({ head }: { head: 'arrow' | 'bar' }) {
+  return (
+    <svg width="16" height="10" viewBox="0 0 16 10" aria-hidden className="shrink-0">
+      <line x1="1" y1="5" x2={head === 'arrow' ? 11 : 13} y2="5" stroke="currentColor" strokeWidth="1.6" />
+      {head === 'arrow' ? <path d="M10 1.5 L15 5 L10 8.5 Z" fill="currentColor" /> : <line x1="14" y1="1" x2="14" y2="9" stroke="currentColor" strokeWidth="2" />}
+    </svg>
+  );
+}
 
 export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top, notices }: {
   run: RunRecord; imageUrl: string;
@@ -340,54 +352,54 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
   const point = (c: { x: number; y: number }): BoxPx => ({ x: c.x, y: c.y, width: 0, height: 0 });
   const anchorBox = check ? point(check) : question && qi !== null ? boxFor(involved(qi)) : selId ? boxOf(settledScene, selId) ?? boxOf(scene, selId) : null;
   const openCount = base.clarify.length - nAnswered;
-  const chip = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800';
+  const chip = button;
   const nSteps = fullReview.edits.length - review.edits.length;
   const checkRegion = check ? regionAt(settledScene, check.x, check.y) : null;
 
   return (
-    <div className="mx-auto max-w-[1800px] px-5 py-4">
-      <header className="mb-3 flex flex-wrap items-center gap-3">
+    <div className="mx-auto max-w-[1800px] px-5 py-3">
+      <header className="mb-2 flex flex-wrap items-center gap-3">
         {top}
         <span className="flex-1" />
         {!asExtracted && (
-          <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white p-0.5 dark:border-slate-600 dark:bg-slate-900" role="group" aria-label="Add to the reconstruction">
-            {([['place', '+ Shape', 'Add a shape the model missed'], ['draw', '+ Arrow', 'Draw an arrow from a shape']] as const).map(([m, label, title]) => (
+          <div className="flex items-center gap-0.5 rounded bg-sunk p-0.5" role="group" aria-label="Add to the reconstruction">
+            {([['place', 'Shape', 'Add a shape the model missed', SquarePlus], ['draw', 'Arrow', 'Draw an arrow from a shape', Spline]] as const).map(([m, label, title, Icon]) => (
               <button key={m} title={title} aria-pressed={mode === m} onClick={() => toggleMode(m)}
-                className={`rounded-md px-3 py-1 text-sm font-medium ${mode === m ? 'bg-blue-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>{label}</button>
+                className={`inline-flex items-center gap-1.5 rounded-[3px] px-3 py-1 text-body ${mode === m ? 'bg-ink font-medium text-on-ink' : 'text-ink hover:bg-panel'}`}><Icon size={ICON} />Add {label.toLowerCase()}</button>
             ))}
           </div>
         )}
         {base.clarify.length > 0 && (
-          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300" title="Questions the model asked about this figure">
-            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"><div className="h-full rounded-full bg-green-600 transition-all" style={{ width: `${(nAnswered / base.clarify.length) * 100}%` }} /></div>
-            {nAnswered} of {base.clarify.length} answered
+          <div className="num flex items-center gap-2 text-body text-ink-2" title="Questions the model asked about this figure">
+            <div className="h-1 w-20 overflow-hidden rounded-full bg-sunk"><div className="h-full rounded-full bg-ink transition-all" style={{ width: `${(nAnswered / base.clarify.length) * 100}%` }} /></div>
+            {nAnswered} of {base.clarify.length} questions answered
           </div>
         )}
         {openCount > 0 && !asExtracted && (
-          <button className="rounded-lg bg-orange-500 px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-600" onClick={() => { const j = nextOpen(qi ?? -1); if (j !== null) openQuestion(j); }}>
-            {qi === null && nAnswered === 0 ? 'Start the questions →' : 'Next question →'}
+          <button className={primary} onClick={() => { const j = nextOpen(qi ?? -1); if (j !== null) openQuestion(j); }}>
+            {qi === null && nAnswered === 0 ? 'Start the questions' : 'Next question'}<ArrowRight size={ICON} />
           </button>
         )}
         <div className="relative">
-          <button className={chip} onClick={() => setShowChanges((v) => !v)}>{changeList.length} change{changeList.length === 1 ? '' : 's'} ▾</button>
+          <button className={chip} aria-expanded={showChanges} onClick={() => setShowChanges((v) => !v)}><ListChecks size={ICON} /><span className="num">{changeList.length}</span> change{changeList.length === 1 ? '' : 's'}<ChevronDown size={ICON} className="text-ink-3" /></button>
           {showChanges && (
-            <div className="absolute right-0 z-20 mt-1 max-h-[60vh] w-96 overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 text-sm shadow-xl dark:border-slate-600 dark:bg-slate-800">
+            <div className="absolute right-0 z-20 mt-1 max-h-[60vh] w-[26rem] overflow-y-auto rounded border border-line-2 bg-panel p-4 text-body shadow-[0_8px_24px_rgb(0_0_0/0.14)]">
               <label className="flex items-center gap-2"><input type="checkbox" checked={asExtracted} onChange={(e) => { setAsExtracted(e.target.checked); close(); setPick(null); setCheck(null); }} /> Show as extracted (hide my changes)</label>
-              {changeList.length === 0 ? <p className="mt-2 text-slate-500 dark:text-slate-400">No changes yet. The reconstruction is exactly what the model read.</p> : (
-                <ul className="mt-2 space-y-1.5">
+              {changeList.length === 0 ? <p className="mt-2 text-ink-3">No changes yet. The reconstruction is exactly what the model read.</p> : (
+                <ul className="mt-3 divide-y divide-line border-y border-line">
                   {changeList.map(({ edit, text, failed }) => { const deps = !isAnswer(edit.source) ? dependents(review.edits, edit.key).length : 0; return (
-                    <li key={edit.key} className="flex items-start justify-between gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700">
+                    <li key={edit.key} className="flex items-start justify-between gap-3 py-2">
                       <div>
-                        <div className={failed ? 'text-slate-400 line-through' : ''}>{text}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">{!isAnswer(edit.source) ? 'by hand' : `answer to question ${Number(edit.source.slice(1)) + 1}`}{failed ? ` · could not be applied: ${failed}` : ''}</div>
+                        <div className={failed ? 'text-ink-3 line-through' : ''}>{text}</div>
+                        <div className={meta}>{!isAnswer(edit.source) ? 'by hand' : `answer to question ${Number(edit.source.slice(1)) + 1}`}{failed ? ` · could not be applied: ${failed}` : ''}</div>
                       </div>
-                      <button className="shrink-0 text-xs underline" title={deps ? `Also undoes ${deps} later change${deps === 1 ? '' : 's'} that depend on it` : !isAnswer(edit.source) ? 'Undo this change' : 'Clear this answer'} onClick={() => undo(edit)}>{deps ? `Undo (+${deps})` : 'Undo'}</button>
+                      <button className={`${quiet} shrink-0`} title={deps ? `Also undoes ${deps} later change${deps === 1 ? '' : 's'} that depend on it` : !isAnswer(edit.source) ? 'Undo this change' : 'Clear this answer'} onClick={() => undo(edit)}>{deps ? `Undo (+${deps})` : 'Undo'}</button>
                     </li>
                   ); })}
                 </ul>
               )}
-              {changeList.length > 1 && <button className="mt-2 text-xs underline text-red-700 dark:text-red-400" onClick={() => { setReview((r) => ({ ...r, edits: r.edits.filter((e) => !isCorrection(e.source)), answers: {} })); close(); }}>Undo every correction</button>}
-              {nSteps > 0 && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Plus {nSteps} simplification change{nSteps === 1 ? '' : 's'}, listed in the simplification steps.</p>}
+              {changeList.length > 1 && <button className={`${quiet} mt-3 text-bad`} onClick={() => { setReview((r) => ({ ...r, edits: r.edits.filter((e) => !isCorrection(e.source)), answers: {} })); close(); }}>Undo every correction</button>}
+              {nSteps > 0 && <p className={`${meta} mt-2`}>Plus {nSteps} simplification change{nSteps === 1 ? '' : 's'}, listed in the simplification steps.</p>}
             </div>
           )}
         </div>
@@ -408,27 +420,27 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
           close();
         }}
         banner={mode && !check ? (
-          <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white">
+          <div className="mb-2 flex items-center justify-between rounded bg-ink px-3 py-2 text-body text-on-ink">
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {mode === 'place' ? 'Click where the new shape goes, on either picture (or drag out a box to size it).' : <>
                 <span className="flex items-center gap-1" role="group" aria-label="Head of the arrows you draw">
-                  {([['arrow', '→ Arrow', 'Activates, leads to'], ['bar', '⊣ Bar', 'Inhibits']] as const).map(([h, label, title]) => (
+                  {([['arrow', 'Arrow', 'Activates, leads to'], ['bar', 'Bar', 'Inhibits']] as const).map(([h, label, title]) => (
                     <button key={h} title={title} aria-pressed={drawHead === h} onClick={() => setDrawHead(h)}
-                      className={`rounded-md px-2 py-0.5 text-sm ${drawHead === h ? 'bg-white font-semibold text-blue-700' : 'bg-blue-500/40 hover:bg-blue-500/70'}`}>{label}</button>
+                      className={`inline-flex items-center gap-1.5 rounded-[3px] px-2 py-0.5 text-body ${drawHead === h ? 'bg-panel font-semibold text-ink' : 'text-on-ink hover:bg-on-ink/15'}`}><HeadIcon head={h} />{label}</button>
                   ))}
                 </span>
                 Drag from the shape where it starts to where it ends (a shape, or an empty spot). For a whole cluster, hover it and drag from its grey “cluster” tab.
               </>}
             </span>
-            <button className="underline" onClick={() => setMode(null)}>{mode === 'draw' ? 'Done (Esc)' : 'Cancel (Esc)'}</button>
+            <button className="underline underline-offset-4" onClick={() => setMode(null)}>{mode === 'draw' ? 'Done (Esc)' : 'Cancel (Esc)'}</button>
           </div>
         ) : pick ? (
-          <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white">
-            <span>{pick.prompt}</span><button className="underline" onClick={() => setPick(null)}>Cancel (Esc)</button>
+          <div className="mb-2 flex items-center justify-between rounded bg-ink px-3 py-2 text-body text-on-ink">
+            <span>{pick.prompt}</span><button className="underline underline-offset-4" onClick={() => setPick(null)}>Cancel (Esc)</button>
           </div>
         ) : asExtracted ? (
-          <div className="mb-2 rounded-lg bg-slate-200 px-3 py-1.5 text-sm dark:bg-slate-700">Showing the model's own reading. Your changes are hidden, not lost.
-            <button className="ml-2 underline" onClick={() => setAsExtracted(false)}>Show my changes</button></div>
+          <div className={`${note} mb-2`}>Showing the model's own reading. Your changes are hidden, not lost.
+            <button className={`${quiet} ml-2`} onClick={() => setAsExtracted(false)}>Show my changes</button></div>
         ) : null}
         left={(unit) => <ImageLayer scene={scene} src={imageUrl} ui={ui(unit)} />}
         right={(unit) => <><MarkerDefs /><SceneSvg scene={scene} ui={ui(unit)} /></>}

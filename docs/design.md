@@ -171,3 +171,26 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 
 ## 8. Internal ids stay off the screen
 **Decision:** the model's ids for shapes and arrows ("e5", "a_tx_1") are never shown. The model sometimes writes them into its questions and reasons ("drawn twice (e19 and e26)"). A bracketed list of ids is dropped; any other id is replaced by the item's name as written.
+
+## 9. Visual design: a precise instrument
+**Decision:** the interface is quiet and exact so the figures dominate. The full system is in [DESIGN.md](../DESIGN.md):
+- cool neutral greys and 1px hairlines instead of boxes;
+- one typeface (Public Sans, self-hosted) with tabular figures for counts and measures;
+- ink for primary actions;
+- one orange used only for "what you're looking at": the current step, the selected row, hover outlines on the figures.
+
+Colours are named roles defined once per theme in `src/index.css`. Shared control styles are in `src/components/ui.ts`.
+
+**Why:**
+- **The first version read as generic and AI-made.** A design critique with [Impeccable](https://github.com/pbakaus/impeccable) scored it 26/40 and found:
+  - boxes inside boxes;
+  - a coloured left border on cards;
+  - grey text below contrast standards in dark mode;
+  - 11px text;
+  - symbols used as icons;
+  - a blue accent that competed with the figures' own blues.
+- **The figures are content.** The interface around them should never compete with or recolour them, so figure panes stay white in both themes.
+
+**How it's checked:**
+- Impeccable's automated checker runs clean on the code. On the running app, only labels inside the drawn figures remain flagged; they are figure content and zoomable.
+- Every text pair is at least 4.5:1 in both themes, and control borders at least 3:1.

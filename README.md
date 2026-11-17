@@ -10,19 +10,19 @@ You check the copy beside the original and fix anything the model got wrong. The
 3. `npm run dev`, then open the address it prints.
 
 ## Using it
-A step bar across the top walks you through: **Check**, then **① Issues → ② Focus → ③ Repeats → ④ Clusters → ⑤ Layout**. Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures. Each step opens with the whole picture in view. Arrows are drawn straight; where several meet one side of a shape, their ends are spread along it.
+A step bar across the top walks you through: **Check**, then **1 Issues → 2 Focus → 3 Repeats → 4 Clusters → 5 Layout**. Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures. Each step opens with the whole picture in view. Arrows are drawn straight; where several meet one side of a shape, their ends are spread along it.
 
 1. **Upload** a PNG, JPEG or WebP figure. One model call reads it, and the result is saved, so reopening it is free.
 2. **Answer the questions.** Numbered pins mark where the model wasn't sure. Pick an answer, and both views move on to the next question.
 3. **Fix** anything else: click a shape or arrow to rename it, re-point it, change it or remove it.
 4. **Add** what's missing: use "+ Shape" and "+ Arrow". A new shape takes its colour from the figure. To draw an arrow from or to a whole cluster, hover it and use its grey "cluster" tab, or select the cluster and drag from its blue dots.
 5. **Review your changes:** the list at the top shows each one in plain words, with undo, and "Show as extracted" shows the model's own reading.
-6. **Simplify:** press **Continue to simplify →**. Five steps follow in order, and any can be skipped. Each shows the figure before the step on the left and after it on the right. "Original" opens the uploaded figure in a small window. "← Back" from step ① returns to Check.
-   - **① Issues:** shown beside the original. Click a card to outline its item on both pictures. Fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.
-   - **② Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
-   - **③ Repeats:** merge copies of a molecule drawn more than once in the same place and state. If the figure has panels, say first whether they are different conditions (copies stay apart) or one picture.
-   - **④ Clusters:** open a cluster, tick the shapes that should become one, name it and press Collapse. Its members' names stay small under the new name.
-   - **⑤ Layout:** three ways, chosen at the top of the step.
+6. **Simplify:** press **Continue to simplify →**. Five steps follow in order, and any can be skipped. Each shows the figure before the step on the left and after it on the right. "Original" opens the uploaded figure in a small window. "Back" from step 1 returns to Check.
+   - **1 Issues:** shown beside the original. Click a card to outline its item on both pictures. Fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.
+   - **2 Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
+   - **3 Repeats:** merge copies of a molecule drawn more than once in the same place and state. If the figure has panels, say first whether they are different conditions (copies stay apart) or one picture.
+   - **4 Clusters:** open a cluster, tick the shapes that should become one, name it and press Collapse. Its members' names stay small under the new name.
+   - **5 Layout:** three ways, chosen at the top of the step.
      - **Compact** (the default) keeps the figure's arrangement but re-spaces it on an even grid. Compartments fit what's in them, and shapes of one kind share one size. Where several routes meet in one shape, that shape goes in the middle of them, with what follows it straight down. Otherwise the longest route runs straight down the middle, with everything else packed beside it.
      - **Tidy as drawn** keeps the figure at its own size. It lines up shapes that are nearly in line, closes and crops the space earlier steps left, moves overlapping shapes clear, and bows arrows around shapes.
      - **Redraw as a cell** rebuilds it top to bottom: compartments as rows, panels as columns, and the route into the nucleus as a straight line.
@@ -44,3 +44,4 @@ A step bar across the top walks you through: **Check**, then **① Issues → �
 ## More
 - [docs/design.md](docs/design.md): the design decisions and why.
 - [CLAUDE.md](CLAUDE.md): rules for working on the code.
+- [DESIGN.md](DESIGN.md): the visual system (colours, type, components), and [PRODUCT.md](PRODUCT.md): who it's for and what it must keep.

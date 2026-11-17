@@ -1,6 +1,7 @@
 /**
- * Step 1 panel: each issue as a small card, grouped by kind (each kind has its own colour). Click a card to
- * select it: its item is outlined in orange on both views and brought into view. Once settled, a card shows what was decided, with "Change".
+ * Step 1 panel: each issue as a row, grouped by kind under a heading. Click a row to select it: its item is
+ * outlined in orange on both views (and the row marked in the same orange) and brought into view. Once settled, a
+ * row shows what was decided, with "Change".
  *  - Typo: use the suggested spelling, type your own, or keep it as written.
  *  - Unlabelled part: type a name (names written in the figure are suggested), keep it unlabelled, or leave it out.
  *  - Colour or styling that carries meaning: "Seen", with an optional note of what it means. No key is drawn.
@@ -9,11 +10,13 @@ import { useState } from 'react';
 import { cleanText, nameOf } from '../../edit/describe.ts';
 import type { Issue } from '../../simplify/issues.ts';
 import type { AppliedEdit, Edit, Extraction, Simplify } from '../../types/extraction.ts';
+import { Check } from 'lucide-react';
 import { NameField } from '../EditPopover.tsx';
+import { body, button, ICON, meta, quiet, row, section, sectionTitle } from '../ui.ts';
 
 type Decision = Simplify['issues'][string];
-const btn = 'rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-800 hover:border-blue-500 hover:bg-blue-50 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600';
-const input = 'w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-500 dark:bg-slate-900';
+const btn = `${button} px-2 py-1`;
+const input = 'w-full rounded border border-line-2 bg-panel px-2 py-1 text-body';
 
 /** The text an issue is about, as it stands before this step: a shape's or cluster's name, or an arrow's text. */
 function textOf(x: Extraction, id: string): { exists: boolean; text: string | null } {
@@ -48,12 +51,6 @@ export function issueStatus(x: Extraction, i: Issue, edits: AppliedEdit[], decis
 }
 
 const TITLES: Record<Issue['kind'], string> = { typo: 'Possible typos', unlabelled: 'Unlabelled parts', meaning: 'Colour and styling with a meaning' };
-/** A colour per kind of issue, on the card's left edge and the section heading, so the kinds are easy to tell apart. */
-const ACCENT: Record<Issue['kind'], { edge: string; dot: string }> = {
-  typo: { edge: 'border-l-amber-500', dot: 'bg-amber-500' },
-  unlabelled: { edge: 'border-l-violet-500', dot: 'bg-violet-500' },
-  meaning: { edge: 'border-l-sky-500', dot: 'bg-sky-500' },
-};
 
 export function IssuesStep({ x, issues, edits, decisions, names, active, onSettle, onHover, onSelect }: {
   /** The figure before this step: the reconstruction with every correction. */
@@ -73,20 +70,17 @@ export function IssuesStep({ x, issues, edits, decisions, names, active, onSettl
   onSelect: (i: Issue) => void;
 }) {
   const open = issues.filter((i) => !issueStatus(x, i, edits, decisions)).length;
-  if (issues.length === 0) return <p className="text-sm text-slate-600 dark:text-slate-300">Nothing to check: the model flagged no typos or colour meanings, and every shape has a label. Go on to the next step.</p>;
+  if (issues.length === 0) return <p className={body}>Nothing to check: the model flagged no typos or colour meanings, and every shape has a label. Go on to the next step.</p>;
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-600 dark:text-slate-300"><b className="text-slate-900 dark:text-white">{issues.length - open} of {issues.length}</b> dealt with. None has to be: anything left open stays as it is. Click a card to see its item on both pictures.</p>
+    <div>
+      <p className={`${body} mb-4`}><b className="num font-semibold text-ink">{issues.length - open} of {issues.length}</b> dealt with. None has to be: anything left open stays as it is. Click one to see it on both pictures.</p>
       {(['typo', 'unlabelled', 'meaning'] as const).map((kind) => {
         const list = issues.filter((i) => i.kind === kind);
         if (!list.length) return null;
         return (
-          <section key={kind}>
-            <h3 className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-              <span className={`h-2.5 w-2.5 rounded-full ${ACCENT[kind].dot}`} aria-hidden />{TITLES[kind]}
-              <span className="rounded-full bg-slate-200 px-1.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">{list.length}</span>
-            </h3>
-            <ul className="space-y-2">
+          <section key={kind} className={section}>
+            <h3 className={`${sectionTitle} mb-2 flex items-baseline justify-between`}>{TITLES[kind]}<span className={`${meta} num font-normal`}>{list.length}</span></h3>
+            <ul className="divide-y divide-line border-y border-line">
               {list.map((i) => <IssueCard key={i.key} x={x} i={i} status={issueStatus(x, i, edits, decisions)} names={names} active={active === i.key}
                 onSettle={onSettle} onHover={onHover} onSelect={onSelect} />)}
             </ul>
@@ -106,23 +100,21 @@ function IssueCard({ x, i, status, names, active, onSettle, onHover, onSelect }:
   const isArrow = x.arrows.some((a) => a.id === i.id);
   const rename = (v: string): Edit => ({ op: isArrow ? 'set_arrow_text' : 'set_label', id: i.id, to: null, value: v });
   const el = x.elements.find((e) => e.id === i.id);
+  // What a colour or styling note is on: a shape or arrow by its name, or the figure itself when the model pointed
+  // at something that isn't drawn as an item (its id is never shown).
+  const known = textOf(x, i.id).exists;
   const title = i.kind === 'typo' ? `"${i.asWritten ?? textOf(x, i.id).text ?? ''}"`
     : i.kind === 'unlabelled' ? `Unlabelled ${el?.kind ?? 'part'}`
-      : `${i.flag === 'colour carries meaning' ? 'Colour' : 'Styling'} on ${nameOf(x, i.id)}`;
-  // Open cards stand out (white, shadow); settled ones sit back (green tint); the selected one is ringed in the
-  // same orange as its outline on the pictures.
-  const look = active ? 'border-orange-500 ring-2 ring-orange-500/40 bg-orange-50 dark:bg-orange-950/40'
-    : status ? 'border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30'
-      : 'border-slate-300 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800';
+      : `${i.flag === 'colour carries meaning' ? 'Colour' : 'Line style'} ${known ? `on ${nameOf(x, i.id)}` : 'in the figure'}`;
   return (
-    <li data-issue={i.key} className={`cursor-pointer rounded-lg border border-l-4 p-2.5 text-sm ${ACCENT[i.kind].edge} ${look}`}
+    <li data-issue={i.key} className={row(active, !!status)}
       onClick={() => onSelect(i)} onMouseEnter={() => onHover([i.id])} onMouseLeave={() => onHover(null)}>
-      <div className="font-semibold text-slate-900 dark:text-white">{title}</div>
-      {i.basis && <div className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">{cleanText(x, i.basis)}</div>}
+      <div className="font-semibold text-ink">{title}</div>
+      {i.basis && <div className={`${meta} mt-0.5`}>{cleanText(x, i.basis)}</div>}
       {status ? (
-        <div className="mt-1.5 flex items-start justify-between gap-2 text-sm font-medium text-green-800 dark:text-green-300">
-          <span>✓ {status}</span>
-          <button className="shrink-0 text-xs font-normal text-slate-600 underline dark:text-slate-300" onClick={() => onSettle(i, null, null)}>Change</button>
+        <div className="mt-1.5 flex items-start justify-between gap-2 text-body text-ok">
+          <span className="flex items-start gap-1.5"><Check size={ICON} className="mt-0.5 shrink-0" />{status}</span>
+          <button className={`${quiet} shrink-0`} onClick={(e) => { e.stopPropagation(); onSettle(i, null, null); }}>Change</button>
         </div>
       ) : i.kind === 'typo' ? (
         <div className="mt-2 space-y-1.5">
