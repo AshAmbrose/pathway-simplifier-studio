@@ -14,6 +14,8 @@
  *     every shape on its canvas, overlaps no shapes from different units, and is the same every time.
  *     Tidy keeps shapes in place and never adds crossings; Guo with only canonical routes is cropped to that side.
  *     Redraw: panels become columns (Wnt OFF | ON, Guo canonical | non-canonical), and Guo's main line runs into the nucleus.
+ * 10. step 1's identification, offline: label spellings and splitting, the matcher on answers shaped like the
+ *     services' (no network), and a malformed identity is refused.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems } from '../src/types/extraction.ts';
@@ -34,6 +36,9 @@ import { measure } from '../src/layout/measures.ts';
 import { DEFAULT_LAYOUT } from '../src/layout/value.ts';
 import { STYLE_RED } from '../src/edit/applyEdits.ts';
 import { getRun, listRuns } from '../server/runs.ts';
+import { identityOf, identityText, judge, judgeSearchedAs } from '../src/identify/candidates.ts';
+import { genericWord, spellings, splitLabel } from '../src/identify/normalise.ts';
+import type { DbRecord, Hit, TermLookup } from '../src/identify/types.ts';
 
 let failed = 0;
 const check = (ok: boolean, what: string) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failed++; };
@@ -126,6 +131,9 @@ const cases: [Edit, (x: typeof base) => boolean][] = [
   [E('set_layout', 'layout', null, JSON.stringify(layOut(base, 1000, 800, traceRoutes(base), DEFAULT_LAYOUT))),
     (x) => x.canvas?.length === 2 && x.elements.every((e) => e.box[0] >= 0 && e.box[1] >= 0 && e.box[0] + e.box[2] <= 100.01 && e.box[1] + e.box[3] <= 100.01)],
   [E('restyle', 'style'), (x) => x.elements.every((e) => e.fill === '#bfdbfe') && x.arrows.every((a) => a.colour === (a.head === 'bar' ? STYLE_RED : null))],
+  // Step 1: what a shape is. The record goes on the shape; the label as drawn is untouched.
+  [E('identify', 'e1', null, JSON.stringify({ kind: 'molecule', records: [{ db: 'HGNC', id: 'HGNC:6859', name: 'MAP3K7', url: 'https://www.genenames.org/' }], how: ['HGNC lists "TAK1" as a previous symbol of MAP3K7'], by: 'you' })),
+    (x) => x.elements[0].identity?.records[0].name === 'MAP3K7' && x.elements[0].label === base.elements[0].label],
 ];
 check(cases.length === EDIT_OPS.length && new Set(cases.map(([e]) => e.op)).size === EDIT_OPS.length, `every kind of change has a test (${EDIT_OPS.length})`);
 for (const [e, ok] of cases) {
@@ -347,6 +355,41 @@ else {
         `Guo, canonical only, tidied: cropped (${fy.canvas?.[0]} × ${fy.canvas?.[1]} of ${W} × ${H} px), with CYLD and LUBAC still beside NEMO (distance × ${ratio.toFixed(2)})`);
     }
   }
+}
+
+// 10. Step 1's identification, offline: spellings, splitting, and the matcher on answers shaped like the services'.
+{
+  check(spellings('IκBα').includes('IKBA') && spellings('IKKβ').includes('IKKB') && spellings('IL-1β').includes('IL1B') && spellings('PKCθ').includes('PKCQ') && spellings('H₂O₂')[0] === 'H2O2',
+    'identify: Greek letters, sub-scripts and hyphens give the spellings gene symbols use (IκBα → IKBA, IL-1β → IL1B, PKCθ → PKCQ, H₂O₂ → H2O2)');
+  check(splitLabel('IRAK1/4', 'protein').join() === 'IRAK1,IRAK4' && splitLabel('TRAF2/5', 'protein').join() === 'TRAF2,TRAF5' && splitLabel('Elongin B/C complex', 'complex').join() === 'Elongin B,Elongin C'
+    && splitLabel('LTA LTB', 'ligand').join() === 'LTA,LTB' && splitLabel('Survival, inflammation, and immune response', 'phenotype').length === 1 && splitLabel('NEMO', 'protein').join() === 'NEMO',
+    'identify: labels naming several molecules split (IRAK1/4, TRAF2/5, Elongin B/C, LTA LTB); an outcome box and a single name do not');
+  check(genericWord('Receptor') === 'receptor' && genericWord('PTPs') === 'ptp' && genericWord('Cytokines') === 'cytokine' && genericWord('NEMO') === null, 'identify: class words are recognised (Receptor, PTPs, Cytokines), a name is not');
+  const rec = (db: DbRecord['db'], id: string, name: string): DbRecord => ({ db, id, name, url: 'https://example.org/' + id });
+  const part = (term: string, hits: Hit[], failed: string[] = []): TermLookup => ({ term, hits, tried: ['HGNC', 'UniProt'], failed, generic: null });
+  const one = (label: string, ...parts: TermLookup[]) => judge({ label, kind: 'protein', parts });
+  const nemo = one('NEMO', part('NEMO', [{ record: rec('HGNC', 'HGNC:5961', 'IKBKG'), field: 'alias', matched: 'NEMO' }, { record: { ...rec('UniProt', 'Q9Y6K9', 'IKBKG'), uniprot: ['Q9Y6K9'] }, field: 'gene synonym', matched: 'NEMO' }]));
+  check(nemo.status === 'confirm' && nemo.parts[0].options.length === 1 && nemo.parts[0].options[0].record.db === 'HGNC' && nemo.parts[0].options[0].record.uniprot?.[0] === 'Q9Y6K9' && /alias of IKBKG/.test(nemo.parts[0].options[0].why),
+    'identify: NEMO, an HGNC alias also named by UniProt, is one option to confirm (HGNC record, UniProt accession kept), said to be an alias');
+  const tak1 = one('TAK1', part('TAK1', [{ record: rec('HGNC', 'HGNC:7972', 'NR2C2'), field: 'alias', matched: 'TAK1' }, { record: rec('HGNC', 'HGNC:6859', 'MAP3K7'), field: 'previous symbol', matched: 'TAK1' }]));
+  check(tak1.status === 'decide' && tak1.proposal === null, 'identify: TAK1, listed by HGNC for NR2C2 and MAP3K7, is a choice with nothing proposed');
+  const lat = one('LAT', part('LAT', [{ record: rec('HGNC', 'HGNC:18874', 'LAT'), field: 'approved symbol', matched: 'LAT' }, { record: rec('HGNC', 'HGNC:30595', 'SPNS1'), field: 'alias', matched: 'LAT' }]));
+  check(lat.status === 'exact' && lat.proposal?.records[0].name === 'LAT' && lat.proposal.by === 'exact match', 'identify: an approved symbol is taken as found; another gene\'s alias does not compete with it');
+  const irak = one('IRAK1/4', part('IRAK1', [{ record: rec('HGNC', 'HGNC:6112', 'IRAK1'), field: 'approved symbol', matched: 'IRAK1' }]), part('IRAK4', [{ record: rec('HGNC', 'HGNC:17967', 'IRAK4'), field: 'approved symbol', matched: 'IRAK4' }]));
+  check(irak.status === 'exact' && irak.proposal?.kind === 'set' && irak.proposal.records.map((r) => r.name).join() === 'IRAK1,IRAK4', 'identify: IRAK1/4 is the set IRAK1 + IRAK4');
+  check(one('Zorblax', part('Zorblax', [])).status === 'not found' && one('X', part('X', [], ['HGNC'])).status === 'failed', 'identify: no record is "not found"; an unreachable service is "failed" (retry), never filled in');
+  const gexp = judge({ label: 'Gene expression', kind: 'process', parts: [part('Gene expression', [{ record: rec('GO', 'GO:0010467', 'gene expression'), field: 'term name', matched: 'gene expression' }])] });
+  check(gexp.status === 'exact' && gexp.proposal?.kind === 'process', 'identify: "Gene expression" is the GO term by its exact name, a process');
+  const again = identityOf(tak1.parts, [1], 'you', { text: 'TAK1 kinase', cls: 'molecule' });
+  check(again.records[0].name === 'MAP3K7' && again.how[0].startsWith('Searched as "TAK1 kinase" (your words)'), 'identify: a record found under the user\'s own words ("Other") says so in its reason');
+  check(identityOf(gexp.parts, [0], 'you', { text: 'gene expression', cls: 'class' }).kind === 'generic', 'identify: searched as a class of molecules, the identity is a class');
+  const mine = applyEdits(base, [E('identify', 'e1', null, JSON.stringify({ kind: 'family', records: [], how: ['Named by you'], by: 'you', yours: { text: 'protein kinase C', kind: 'A family of genes' } }))]);
+  check(!mine.failed.length && mine.extraction.elements[0].identity?.yours?.text === 'protein kinase C' && /your words; no database record/.test(identityText(mine.extraction.elements[0].identity!)),
+    'identify: the user\'s own words can be stored, said to be theirs, with no database record claimed');
+  const zap = judgeSearchedAs({ label: 'ZAP70', kind: 'protein', parts: [part('ZAP70', [{ record: rec('HGNC', 'HGNC:12858', 'ZAP70'), field: 'approved symbol', matched: 'ZAP70' }])] }, 'ZAP', { text: 'ZAP70', cls: 'molecule' });
+  check(zap.status === 'confirm' && zap.proposal?.by === 'you' && zap.label === 'ZAP', 'identify: an exact symbol found under the user\'s words ("ZAP" as ZAP70) waits to be confirmed, never taken as found');
+  const bad = applyEdits(base, [E('identify', 'e1', null, JSON.stringify({ kind: 'molecule', records: [{ db: 'Made-up DB', id: 'x' }] }))]);
+  check(bad.failed.length === 1 && !bad.extraction.elements[0].identity, 'identify: an identity not in the expected form is refused, and nothing is set');
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

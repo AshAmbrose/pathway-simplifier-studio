@@ -15,7 +15,7 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 - **Faithful first.** The input image is the starting point. Record what is drawn, exactly as drawn (typos, unlabelled shapes, odd styling), before anything is changed.
 - **The extraction is never altered.** Every answer, fix or simplification is a change in a list on top of it. Each change is shown in plain words and can be undone.
 - **During extraction and review, answers come only from what can be seen.** Options are the shapes drawn nearby. None is preferred on the basis of biology knowledge.
-  - This may be relaxed for simplification, where suggestions from prior knowledge are planned. They must always be labelled with their source. The steps built so far use only the drawing.
+  - This is relaxed for simplification, where prior knowledge always comes with its source. So far only step 1's "what each shape is" uses it: records from public databases, never from a model.
 - **Nothing is hidden.** Problems, and changes that can no longer apply, are listed, never dropped. What simplification leaves out is listed with its reason and can be restored.
 
 ## Working rules
@@ -47,6 +47,7 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 | `server/runs.ts`, `server/plugin.ts` | Saving and loading runs, and the local API. Saves are versioned so newer work is never overwritten. |
 | `server/aiLedger.ts` | A log of every AI call and its cost, and the daily budget. |
 | `src/edit/` | Applying the list of changes to the extraction, the order they apply in (`order.ts`), and describing each in plain words (`describe.ts`, which also keeps internal ids off the screen). |
+| `src/identify/`, `server/identify.ts` | Step 1's "what each shape is": label spellings and splitting (`normalise.ts`), what the user is asked and why (`candidates.ts`), and the live, cached lookups in HGNC, UniProt, Complex Portal, GO and ChEBI (server). |
 | `src/simplify/` | The simplification steps' logic, without any screen: step 1's issues, step 2's route tracing (and the figure's parts), step 3's repeats, step 4's clusters. Step 5's is in `src/layout/`. |
 | `src/layout/` | Step 5: compact (`compact.ts`, the default), tidy as drawn (`tidy.ts`), squeeze (`solvers/compaction.ts`, order kept, kiwi.js constraint solver), layered (`solvers/elk.ts`, ELK), redraw as a cell (BioPathway Studio's engine, copied and marked, fed by `adapt.ts`); `solvers/` also holds fCoSE (comparison page only) and the space measures (`fit.ts`); shared shape sizes (`shapes.ts`), arrow bows and text placement (`arrows.ts`), and the before → after measures. |
 | `src/render/` | Turning an extraction into shapes and arrows at their positions (the original's, or step 5's canvas). |

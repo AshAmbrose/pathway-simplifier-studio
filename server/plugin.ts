@@ -8,6 +8,8 @@
  *   GET  /api/runs/<id>/image   -> the uploaded image
  *   PUT  /api/runs/<id>/review  -> { review, version }   body { review, version }: the user's answers and fixes;
  *                                  409 with the newer review if the run was saved elsewhere since `version`
+ *   POST /api/identify          -> LabelLookup   body { label, kind }: what public databases say the label is
+ *                                  (server/identify.ts; only the label text is sent, answers are cached)
  *
  * Keys are read on the server from .env.local and never sent to the browser.
  */
@@ -15,6 +17,7 @@ import type { IncomingMessage } from 'node:http';
 import { loadEnv, type Plugin } from 'vite';
 import { localDay, spentOn } from './aiLedger.ts';
 import { ExtractError, extractFigure } from './extract.ts';
+import { identifyLabel } from './identify.ts';
 import { getRun, listRuns, runImage, saveReview, saveRun } from './runs.ts';
 
 const MAX_BODY = 15_000_000; // base64 of a ~11 MB image
@@ -79,6 +82,11 @@ export function apiPlugin(): Plugin {
             return json(200, rec);
           }
           if (url === '/api/runs' && req.method === 'GET') return json(200, listRuns());
+          if (url === '/api/identify' && req.method === 'POST') {
+            const body = await readJson(req, 10_000);
+            if (typeof body.label !== 'string' || !body.label.trim() || body.label.length > 200) throw new ExtractError('No label to look up.', 400);
+            return json(200, await identifyLabel(body.label, String(body.kind ?? 'other')));
+          }
           const rv = url.match(/^\/api\/runs\/([^/]+)\/review$/);
           if (rv && req.method === 'PUT') {
             // Body: { review, version } where version is the one the changes were built on.

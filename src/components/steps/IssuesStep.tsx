@@ -6,10 +6,13 @@
  *  - Typo: use the suggested spelling, type your own, or keep it as written.
  *  - Unlabelled part: type a name (names written in the figure are suggested), keep it unlabelled, or leave it out.
  *  - Colour or styling that carries meaning: "Seen", with an optional note of what it means. No key is drawn.
+ *  - What each shape is: matched to database records, confirmed or chosen here (IdentityCards.tsx).
  */
 import { useState } from 'react';
 import { cleanText, nameOf } from '../../edit/describe.ts';
+import type { Judged, OtherClass } from '../../identify/candidates.ts';
 import type { Issue } from '../../simplify/issues.ts';
+import { chosenIdentity, IdentitySection } from './IdentityCards.tsx';
 import type { AppliedEdit, Edit, Extraction, Simplify } from '../../types/extraction.ts';
 import { Check } from 'lucide-react';
 import { NameField } from '../EditPopover.tsx';
@@ -51,9 +54,9 @@ export function issueStatus(x: Extraction, i: Issue, edits: AppliedEdit[], decis
   return null;
 }
 
-const TITLES: Record<Issue['kind'], string> = { typo: 'Possible typos', unlabelled: 'Unlabelled parts', meaning: 'Colour and styling with a meaning' };
+const TITLES: Record<Issue['kind'], string> = { typo: 'Possible typos', unlabelled: 'Unlabelled parts', meaning: 'Colour and styling with a meaning', identity: 'What each shape is' };
 
-export function IssuesStep({ x, issues, edits, decisions, names, active, onSettle, onHover, onSelect }: {
+export function IssuesStep({ x, issues, edits, decisions, names, active, onSettle, onHover, onSelect, identity }: {
   /** The figure before this step: the reconstruction with every correction. */
   x: Extraction;
   issues: Issue[];
@@ -69,13 +72,23 @@ export function IssuesStep({ x, issues, edits, decisions, names, active, onSettl
   onHover: (ids: string[] | null) => void;
   /** A click anywhere on a card selects it: its item is outlined on both pictures and brought into view. */
   onSelect: (i: Issue) => void;
+  /** "What each shape is": the shapes looked up so far and what the databases said (IdentityCards.tsx). */
+  identity: { issues: Issue[]; judged: Map<string, Judged>; pending: number; total: number; onRetry: (i: Issue) => void;
+    onSearch: (i: Issue, q: { text: string; cls: OtherClass } | null) => void; searching: Set<string> };
 }) {
-  const open = issues.filter((i) => !issueStatus(x, i, edits, decisions)).length;
-  if (issues.length === 0) return <p className={body}>Nothing to check: the model flagged no typos or colour meanings, and every shape has a label. Go on to the next step.</p>;
+  const open = issues.filter((i) => !issueStatus(x, i, edits, decisions)).length
+    + identity.issues.filter((i) => !chosenIdentity(i, edits, identity.judged)).length;
+  const count = issues.length + identity.issues.length;
+  const identitySection = (identity.total > 0) && (
+    <IdentitySection key="identity" issues={identity.issues} judged={identity.judged} pending={identity.pending} total={identity.total} edits={edits} active={active}
+      onSettle={(i, e) => onSettle(i, e, null)} onHover={onHover} onSelect={onSelect} onRetry={identity.onRetry} onSearch={identity.onSearch} searching={identity.searching} />
+  );
+  if (issues.length === 0 && !identitySection) return <p className={body}>Nothing to check: the model flagged no typos or colour meanings, and every shape has a label. Go on to the next step.</p>;
   return (
     <div>
-      <p className={`${body} mb-4`}><b className="num font-semibold text-ink">{issues.length - open} of {issues.length}</b> dealt with. None has to be: anything left open stays as it is. Click one to see it on both pictures.</p>
-      {(['typo', 'unlabelled', 'meaning'] as const).map((kind) => {
+      <p className={`${body} mb-4`}><b className="num font-semibold text-ink">{count - open} of {count}</b> dealt with. None has to be: anything left open stays as it is. Click one to see it on the figure.</p>
+      {(['typo', 'unlabelled', 'identity', 'meaning'] as const).map((kind) => {
+        if (kind === 'identity') return identitySection;
         const list = issues.filter((i) => i.kind === kind);
         if (!list.length) return null;
         return (
@@ -108,8 +121,9 @@ function IssueCard({ x, i, status, names, active, onSettle, onHover, onSelect }:
     : i.kind === 'unlabelled' ? `Unlabelled ${el?.kind ?? 'part'}`
       : `${i.flag === 'colour carries meaning' ? 'Colour' : 'Line style'} ${known ? `on ${nameOf(x, i.id)}` : 'in the figure'}`;
   return (
+    // Any click inside a card makes it the one being worked on (captured first, so its buttons still act).
     <li data-issue={i.key} className={row(active, !!status)}
-      onClick={() => onSelect(i)} onMouseEnter={() => onHover([i.id])} onMouseLeave={() => onHover(null)}>
+      onClickCapture={() => { if (!active) onSelect(i); }} onMouseEnter={() => onHover([i.id])} onMouseLeave={() => onHover(null)}>
       <div className="flex items-start justify-between gap-2">
         <div className="font-semibold text-ink">{title}</div>
         {!status && <span className={toDecide}><span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />To decide</span>}

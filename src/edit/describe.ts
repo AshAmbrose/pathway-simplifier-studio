@@ -1,4 +1,6 @@
 /** Names and plain-words descriptions, for the change list and the pop-ups. */
+import { identityText } from '../identify/candidates.ts';
+import type { Identity } from '../identify/types.ts';
 import type { Edit, Extraction } from '../types/extraction.ts';
 import { OPEN, parsePoint } from './applyEdits.ts';
 
@@ -49,6 +51,11 @@ export function describeEdit(before: Extraction, e: Edit): string {
     case 'merge_into': return `${n(e.id)} (a repeat) merged into the other ${n(e.to)}`;
     case 'set_layout': return 'Figure laid out again as a cell, top to bottom';
     case 'restyle': return 'One consistent style: fills by kind, black arrows, red bars';
+    case 'identify': {
+      let v: Identity | null = null;
+      try { v = JSON.parse(e.value ?? 'null'); } catch { /* described without the record */ }
+      return v ? `${n(e.id)} identified as ${identityText(v)}` : `${n(e.id)} identified`;
+    }
     case 'collapse': {
       let spec: { members?: string[]; label?: string } = {};
       try { spec = JSON.parse(e.value ?? '{}'); } catch { /* described below without names */ }

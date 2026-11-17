@@ -3,6 +3,7 @@
  * A change that can't be applied (its shape is gone, the badge isn't there, …) is skipped and reported,
  * never silently dropped, and the changes after it still run.
  */
+import { IdentitySchema } from '../identify/types.ts';
 import type { LayoutValue } from '../layout/value.ts';
 import { HEADS, LINES, MEANINGS, type Edit, type Extraction, type Option } from '../types/extraction.ts';
 
@@ -340,6 +341,16 @@ function applyOne(x: Extraction, e: Edit, key: string, touched: Set<string>): st
         a.textAt = r.textAt;
         if (r.ends) a.ends = r.ends;
       }
+      return null;
+    }
+    case 'identify': {
+      const s = el(e.id);
+      if (!s) return `shape "${e.id}" is not there`;
+      let v: unknown;
+      try { v = JSON.parse(e.value ?? ''); } catch { return 'the identity is not readable'; }
+      const parsed = IdentitySchema.safeParse(v);
+      if (!parsed.success) return 'the identity is not in the expected form';
+      s.identity = parsed.data;
       return null;
     }
     case 'restyle': {

@@ -13,7 +13,9 @@
  *  - Which step is open is held by RunScreen, so the step bar here and on Check is one journey.
  */
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import type { RunRecord } from '../api.ts';
+import { identify, type RunRecord } from '../api.ts';
+import { judge, judgeSearchedAs, OTHER_CLASSES, type Judged, type OtherClass } from '../identify/candidates.ts';
+import type { LabelLookup } from '../identify/types.ts';
 import { applyEdits, dependents } from '../edit/applyEdits.ts';
 import { cleanText, describeEdit, nameOf } from '../edit/describe.ts';
 import { layOutAsync } from '../layout/adapt.ts';
@@ -35,6 +37,7 @@ import { STEP_INFO, StepBar, stepTitle, type JourneyStep } from './StepBar.tsx';
 import { ClustersStep, type ClusterDraft } from './steps/ClustersStep.tsx';
 import { FocusStep } from './steps/FocusStep.tsx';
 import { RepeatsStep } from './steps/RepeatsStep.tsx';
+import { chosenIdentity } from './steps/IdentityCards.tsx';
 import { IssuesStep, issueStatus } from './steps/IssuesStep.tsx';
 import { LayoutStep, type StyleReplaces } from './steps/LayoutStep.tsx';
 
@@ -128,6 +131,65 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const issueBase = useMemo(() => applyEdits(base, JSON.parse(issuesIn)).extraction, [base, issuesIn]);
   const focusBase = useMemo(() => applyEdits(base, JSON.parse(focusIn)).extraction, [base, focusIn]);
   const issues = useMemo(() => findIssues(issueBase), [issueBase]);
+
+  // Step 1, what each shape is: every labelled shape (by its name after this step's fixes) looked up in public
+  // databases through the local server, a few at a time; answers are kept for the visit (and cached on the server).
+  const [lookups, setLookups] = useState<Map<string, LabelLookup>>(new Map());
+  const asked = useRef(new Set<string>());
+  const lookupKey = (label: string, kind: string) => `${kind}|${label}`;
+  // One entry per label: shapes drawn with the same name (TRAF6 three times) are looked up and answered together.
+  const targets = useMemo(() => {
+    if (step !== 'issues') return [];
+    const by = new Map<string, { id: string; ids: string[]; label: string; kind: string }>();
+    for (const e of after.extraction.elements) {
+      if (!e.label || ['heading', 'symbol', 'dna'].includes(e.kind)) continue;
+      const have = by.get(e.label);
+      if (have) have.ids.push(e.id); else by.set(e.label, { id: e.id, ids: [e.id], label: e.label, kind: e.kind });
+    }
+    return [...by.values()];
+  }, [step, after]);
+  // "Other": a label searched again under the user's own words and kind ("CARMA" as CARMA1, a gene or protein).
+  const [searchedAs, setSearchedAs] = useState<Map<string, { text: string; cls: OtherClass; lookup: LabelLookup | null }>>(new Map());
+  const searchAgain = (i: Issue, q: { text: string; cls: OtherClass } | null) => {
+    const label = i.asWritten ?? '';
+    if (!q) { setSearchedAs((m) => { const n = new Map(m); n.delete(label); return n; }); return; }
+    setSearchedAs((m) => new Map(m).set(label, { ...q, lookup: null }));
+    const kind = OTHER_CLASSES.find((c) => c[0] === q.cls)![2];
+    identify(q.text, kind)
+      .catch((): LabelLookup => ({ label: q.text, kind, parts: [{ term: q.text, hits: [], tried: ['the local server'], failed: ['the local server'], generic: null }] }))
+      .then((lookup) => setSearchedAs((m) => (m.get(label)?.text === q.text ? new Map(m).set(label, { ...q, lookup }) : m)));
+  };
+  const ask = (label: string, kind: string) => {
+    asked.current.add(lookupKey(label, kind));
+    return identify(label, kind)
+      .catch((): LabelLookup => ({ label, kind, parts: [{ term: label, hits: [], tried: ['the local server'], failed: ['the local server'], generic: null }] }))
+      .then((r) => setLookups((m) => new Map(m).set(lookupKey(label, kind), r)));
+  };
+  useEffect(() => {
+    const todo = [...new Map(targets.map((t) => [lookupKey(t.label, t.kind), t])).values()].filter((t) => !asked.current.has(lookupKey(t.label, t.kind)));
+    let live = true;
+    (async () => {
+      for (let k = 0; k < todo.length && live; k += 4) await Promise.all(todo.slice(k, k + 4).map((t) => ask(t.label, t.kind)));
+    })();
+    return () => { live = false; };
+  }, [targets]); // eslint-disable-line react-hooks/exhaustive-deps
+  const judged = useMemo(() => {
+    const m = new Map<string, Judged>();
+    for (const t of targets) {
+      const again = searchedAs.get(t.label);
+      if (again?.lookup) { m.set(t.id, judgeSearchedAs(again.lookup, t.label, { text: again.text, cls: again.cls })); continue; }
+      const l = lookups.get(lookupKey(t.label, t.kind));
+      if (l && l.parts.length) m.set(t.id, judge(l));
+    }
+    return m;
+  }, [targets, lookups, searchedAs]);
+  const identityIssues = useMemo((): Issue[] => targets.filter((t) => judged.has(t.id))
+    .map((t) => ({ key: `identity:${t.label}`, kind: 'identity', id: t.id, ids: t.ids, asWritten: t.label, suggestion: null, basis: null })), [targets, judged]);
+  const pendingLookups = new Set(targets.map((t) => lookupKey(t.label, t.kind)).filter((k) => !lookups.has(k))).size;
+  const lookupTotal = new Set(targets.map((t) => lookupKey(t.label, t.kind))).size;
+  /** Every step 1 issue in panel order, and whether one is settled: the drawing's issues, then what each shape is. */
+  const allIssues = useMemo(() => [...issues.filter((i) => i.kind !== 'meaning'), ...identityIssues, ...issues.filter((i) => i.kind === 'meaning')], [issues, identityIssues]);
+  const issueDone = (i: Issue) => (i.kind === 'identity' ? !!chosenIdentity(i, stepEdits, judged) : !!issueStatus(before.extraction, i, stepEdits, s.issues));
   const tracing = useMemo(() => traceRoutes(focusBase), [focusBase]);
   const hidden = useMemo(() => focusHidden(focusBase, tracing, s.focus), [focusBase, tracing, s.focus]);
   // Steps 3 and 4 work on the figure just before them; the parts come from the same tracing as step 2.
@@ -166,21 +228,25 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
    */
   const settleIssue = (i: Issue, edit: Edit | null, decision: Simplify['issues'][string] | null) => {
     if (edit || decision) {
-      const open = (v: Issue) => v.key !== i.key && !issueStatus(before.extraction, v, stepEdits, s.issues);
-      const at = issues.findIndex((v) => v.key === i.key);
-      const next = [...issues.slice(at + 1), ...issues.slice(0, at)].find(open);
+      const open = (v: Issue) => v.key !== i.key && !issueDone(v);
+      const at = allIssues.findIndex((v) => v.key === i.key);
+      const next = [...allIssues.slice(at + 1), ...allIssues.slice(0, at)].find(open);
       setActiveIssue(next?.key ?? null);
-      if (next) { show([next.id]); document.querySelector(`[data-issue="${CSS.escape(next.key)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      if (next) { show(next.ids ?? [next.id]); document.querySelector(`[data-issue="${CSS.escape(next.key)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
     } else setActiveIssue(i.key);
     settleIssueRecord(i, edit, decision);
   };
   const settleIssueRecord = (i: Issue, edit: Edit | null, decision: Simplify['issues'][string] | null) => setReview((r) => {
     const sim = r.simplify ?? EMPTY_SIMPLIFY;
-    const mine = (e: AppliedEdit) => stepOf(e.source) === 'issues' && e.id === i.id && i.kind !== 'meaning';
+    // A shape can have a name fix and an identity: settling one never touches the other's change.
+    const ids = i.ids ?? [i.id];
+    const mine = (e: AppliedEdit) => stepOf(e.source) === 'issues' && ids.includes(e.id) && i.kind !== 'meaning' && (e.op === 'identify') === (i.kind === 'identity');
     const issuesRec = { ...sim.issues };
     delete issuesRec[i.key];
     if (decision) issuesRec[i.key] = decision;
-    return { ...r, edits: [...r.edits.filter((e) => !mine(e)), ...(edit ? [stamp('issues')(edit)] : [])], simplify: { ...sim, issues: issuesRec } };
+    // An identity goes on every shape with the label, one change each (so each can still be undone on its own).
+    const added = edit ? (i.kind === 'identity' ? ids.map((id) => stamp('issues')({ ...edit, id })) : [stamp('issues')(edit)]) : [];
+    return { ...r, edits: [...r.edits.filter((e) => !mine(e)), ...added], simplify: { ...sim, issues: issuesRec } };
   });
 
   /** Step 2: new choices; its changes are rebuilt from them (an unchanged "left out" keeps its key). */
@@ -295,7 +361,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   // Step 1 opens with its first undecided issue selected and in view, so it's clear what to look at first.
   useEffect(() => {
     if (step !== 'issues' || activeIssue) return;
-    const first = issues.find((i) => !issueStatus(before.extraction, i, stepEdits, s.issues));
+    const first = allIssues.find((i) => !issueDone(i));
     if (!first) return;
     setActiveIssue(first.key);
     requestAnimationFrame(() => show([first.id]));
@@ -305,7 +371,9 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   /** A click on a shape: in step 1, open its issue; in step 2, add it or drop it. */
   const select = (id: string) => {
     if (step === 'issues') {
-      const i = issues.find((v) => v.id === id);
+      // A shape's drawing issue (a typo) first, then what it is.
+      const has = (v: Issue) => (v.ids ?? [v.id]).includes(id);
+      const i = allIssues.find((v) => has(v) && v.kind !== 'identity' && !issueDone(v)) ?? allIssues.find(has);
       if (!i) return;
       setActiveIssue(i.key);
       document.querySelector(`[data-issue="${CSS.escape(i.key)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -333,8 +401,10 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     }
   };
   const marks = new Map<string, Mark>();
-  const activeId = issues.find((i) => i.key === activeIssue)?.id;
-  if (step === 'issues' && activeId) marks.set(activeId, 'about');
+  const activeIds = (() => { const a = allIssues.find((i) => i.key === activeIssue); return a ? a.ids ?? [a.id] : []; })();
+  // Step 1: shapes whose identity still needs the user get a dashed outline; the selected issue's a solid one.
+  if (step === 'issues') for (const i of identityIssues) if (!issueDone(i) && judged.get(i.id)?.status !== 'exact') for (const id of i.ids ?? [i.id]) marks.set(id, 'candidate');
+  if (step === 'issues') for (const id of activeIds) marks.set(id, 'about');
   if (step === 'repeats') for (const id of repeats?.groups.find((g) => g.key === activeRepeat)?.copies ?? []) marks.set(id, 'about');
   if (step === 'clusters' && draft) {
     for (const id of clusters.find((c) => c.id === draft.cluster)?.members ?? []) marks.set(id, 'candidate');
@@ -449,7 +519,10 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
           )}
           {step === 'issues' && (
             <IssuesStep x={before.extraction} issues={issues} edits={stepEdits} decisions={s.issues} names={names} active={activeIssue}
-              onSettle={settleIssue} onHover={setHoverIds} onSelect={(i) => { setActiveIssue(i.key); show([i.id]); }} />
+              onSettle={settleIssue} onHover={setHoverIds} onSelect={(i) => { setActiveIssue(i.key); show(i.ids ?? [i.id]); }}
+              identity={{ issues: identityIssues, judged, pending: pendingLookups, total: lookupTotal,
+                onSearch: searchAgain, searching: new Set([...searchedAs].filter(([, v]) => !v.lookup).map(([k]) => k)),
+                onRetry: (i) => { const t = targets.find((v) => v.id === i.id); if (t) { setLookups((m) => { const n = new Map(m); n.delete(lookupKey(t.label, t.kind)); return n; }); void ask(t.label, t.kind); } } }} />
           )}
           {step === 'focus' && focusStale && (
             <div className={`${warnNote} mb-4`}>

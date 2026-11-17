@@ -4,17 +4,21 @@
  *  - unlabelled parts: every shape with no label, flagged or not (DNA, symbols and headings aside, unless flagged);
  *  - colour or styling the model thinks carries meaning ("red dashed = negative regulation"). These are only
  *    acknowledged here; no key is drawn.
+ *  - what each shape is (kind 'identity'): one per labelled shape, made in SimplifyScreen once the databases have
+ *    answered (src/identify/, server/identify.ts), not here, because the lookups run on the server.
  * Counts and clusters are left to their own steps, and crossings to the layout step.
  */
 import type { Extraction } from '../types/extraction.ts';
 
-export type IssueKind = 'typo' | 'unlabelled' | 'meaning';
+export type IssueKind = 'typo' | 'unlabelled' | 'meaning' | 'identity';
 export interface Issue {
   /** Stable across visits, for the decisions saved with the run. */
   key: string;
   kind: IssueKind;
   /** The shape, group or arrow it is about. */
   id: string;
+  /** What each shape is: every shape with this label, answered together (the first is `id`). */
+  ids?: string[];
   asWritten: string | null;
   suggestion: string | null;
   /** The model's reason, in its words; or what makes it an issue. */
