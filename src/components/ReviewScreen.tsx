@@ -367,25 +367,6 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
       <header className="mb-2 flex flex-wrap items-center gap-3">
         {top}
         <span className="flex-1" />
-        {!asExtracted && (
-          <div className="flex items-center gap-0.5 rounded bg-sunk p-0.5" role="group" aria-label="Add to the reconstruction">
-            {([['place', 'Shape', 'Add a shape the model missed', SquarePlus], ['draw', 'Arrow', 'Draw an arrow from a shape', Spline]] as const).map(([m, label, title, Icon]) => (
-              <button key={m} title={title} aria-pressed={mode === m} onClick={() => toggleMode(m)}
-                className={`inline-flex items-center gap-1.5 rounded-[3px] px-3 py-1 text-body ${mode === m ? 'bg-ink font-medium text-on-ink' : 'text-ink hover:bg-panel'}`}><Icon size={ICON} />Add {label.toLowerCase()}</button>
-            ))}
-          </div>
-        )}
-        {base.clarify.length > 0 && (
-          <div className="num flex items-center gap-2 text-body text-ink-2" title="Questions the model asked about this figure">
-            <div className="h-1 w-20 overflow-hidden rounded-full bg-sunk"><div className="h-full rounded-full bg-ink transition-all" style={{ width: `${(nAnswered / base.clarify.length) * 100}%` }} /></div>
-            {nAnswered} of {base.clarify.length} questions answered
-          </div>
-        )}
-        {openCount > 0 && !asExtracted && (
-          <button className={cta} onClick={() => { const j = nextOpen(qi ?? -1); if (j !== null) openQuestion(j); }}>
-            {qi === null && nAnswered === 0 ? 'Start the questions' : 'Next question'}<ArrowRight size={ICON} />
-          </button>
-        )}
         <div className="relative">
           <button className={chip} aria-expanded={showChanges} onClick={() => setShowChanges((v) => !v)}><ListChecks size={ICON} /><span className="num">{changeList.length}</span> change{changeList.length === 1 ? '' : 's'}<ChevronDown size={ICON} className="text-ink-3" /></button>
           {showChanges && (
@@ -411,6 +392,30 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
         </div>
       </header>
       {notices}
+      {/* Under the steps: the questions (where to start) on the left, adding what the model missed on the right. */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-4">
+          {base.clarify.length > 0 && (
+            <div className="num flex items-center gap-2 text-body text-ink-2" title="Questions the model asked about this figure">
+              <div className="h-1 w-20 overflow-hidden rounded-full bg-sunk"><div className="h-full rounded-full bg-ink transition-all" style={{ width: `${(nAnswered / base.clarify.length) * 100}%` }} /></div>
+              {nAnswered} of {base.clarify.length} questions answered
+            </div>
+          )}
+          {openCount > 0 && !asExtracted && (
+            <button className={cta} onClick={() => { const j = nextOpen(qi ?? -1); if (j !== null) openQuestion(j); }}>
+              {qi === null && nAnswered === 0 ? 'Start the questions' : 'Next question'}<ArrowRight size={ICON} />
+            </button>
+          )}
+        </div>
+        {!asExtracted && (
+          <div className="flex items-center gap-0.5 rounded bg-sunk p-0.5" role="group" aria-label="Add to the reconstruction">
+            {([['place', 'Shape', 'Add a shape the model missed', SquarePlus], ['draw', 'Arrow', 'Draw an arrow from a shape', Spline]] as const).map(([m, label, title, Icon]) => (
+              <button key={m} title={title} aria-pressed={mode === m} onClick={() => toggleMode(m)}
+                className={`inline-flex items-center gap-1.5 rounded-[3px] px-3 py-1 text-body ${mode === m ? 'bg-ink font-medium text-on-ink' : 'text-ink hover:bg-panel'}`}><Icon size={ICON} />Add {label.toLowerCase()}</button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <PairedViewer
         ref={viewer}

@@ -1,7 +1,8 @@
 /**
  * Step 1 panel: each issue as a row, grouped by kind under a heading. Click a row to select it: its item is
  * outlined in orange on both views (and the row marked in the same orange) and brought into view. Once settled, a
- * row shows what was decided, with "Change".
+ * row shows what was decided, with "Change". Clicks on a row's own controls don't also select the row, so settling
+ * one moves the selection on to the next undecided issue.
  *  - Typo: use the suggested spelling, type your own, or keep it as written.
  *  - Unlabelled part: type a name (names written in the figure are suggested), keep it unlabelled, or leave it out.
  *  - Colour or styling that carries meaning: "Seen", with an optional note of what it means. No key is drawn.
@@ -120,7 +121,7 @@ function IssueCard({ x, i, status, names, active, onSettle, onHover, onSelect }:
           <button className={`${quiet} shrink-0`} onClick={(e) => { e.stopPropagation(); onSettle(i, null, null); }}>Change</button>
         </div>
       ) : i.kind === 'typo' ? (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
           <div className="flex flex-wrap gap-1">
             {i.suggestion && <button className={btn} onClick={() => onSettle(i, rename(i.suggestion!), null)}>Use "{i.suggestion}"</button>}
             <button className={btn} onClick={() => onSettle(i, null, { kind: 'kept', note: null })}>Keep as written</button>
@@ -128,7 +129,7 @@ function IssueCard({ x, i, status, names, active, onSettle, onHover, onSelect }:
           <NameField value="" placeholder="Or type the right spelling…" names={names} onCommit={(v) => v && onSettle(i, rename(v), null)} />
         </div>
       ) : i.kind === 'unlabelled' ? (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
           <NameField value="" placeholder="Type a name…" names={names} onCommit={(v) => v && onSettle(i, rename(v), null)} />
           <div className="flex flex-wrap gap-1">
             <button className={btn} onClick={() => onSettle(i, null, { kind: 'kept', note: null })}>Keep unlabelled</button>
@@ -136,7 +137,7 @@ function IssueCard({ x, i, status, names, active, onSettle, onHover, onSelect }:
           </div>
         </div>
       ) : (
-        <div className="mt-2 flex gap-1">
+        <div className="mt-2 flex gap-1" onClick={(e) => e.stopPropagation()}>
           <input className={input} value={note} placeholder="What it means (optional)" onChange={(e) => setNote(e.target.value)}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') onSettle(i, null, { kind: 'seen', note: note.trim() || null }); }} />
           <button className={btn} onClick={() => onSettle(i, null, { kind: 'seen', note: note.trim() || null })}>Seen</button>

@@ -147,8 +147,21 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const stamp = (k: StepId) => (e: Edit): AppliedEdit => ({ ...e, key: newKey(), source: stepSource(k), at: new Date().toISOString() });
   const setSimplify = (f: (v: Simplify) => Simplify) => setReview((r) => ({ ...r, simplify: f(r.simplify ?? EMPTY_SIMPLIFY) }));
 
-  /** Step 1: settle an issue with a change, a decision, or neither (which reopens it). */
-  const settleIssue = (i: Issue, edit: Edit | null, decision: Simplify['issues'][string] | null) => setReview((r) => {
+  /**
+   * Step 1: settle an issue with a change, a decision, or neither (which reopens it). Settling one moves the
+   * highlight on to the next undecided issue (after it, then from the top), and brings it into view.
+   */
+  const settleIssue = (i: Issue, edit: Edit | null, decision: Simplify['issues'][string] | null) => {
+    if (edit || decision) {
+      const open = (v: Issue) => v.key !== i.key && !issueStatus(before.extraction, v, stepEdits, s.issues);
+      const at = issues.findIndex((v) => v.key === i.key);
+      const next = [...issues.slice(at + 1), ...issues.slice(0, at)].find(open);
+      setActiveIssue(next?.key ?? null);
+      if (next) { show([next.id]); document.querySelector(`[data-issue="${CSS.escape(next.key)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+    } else setActiveIssue(i.key);
+    settleIssueRecord(i, edit, decision);
+  };
+  const settleIssueRecord = (i: Issue, edit: Edit | null, decision: Simplify['issues'][string] | null) => setReview((r) => {
     const sim = r.simplify ?? EMPTY_SIMPLIFY;
     const mine = (e: AppliedEdit) => stepOf(e.source) === 'issues' && e.id === i.id && i.kind !== 'meaning';
     const issuesRec = { ...sim.issues };
