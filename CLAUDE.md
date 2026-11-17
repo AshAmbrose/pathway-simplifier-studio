@@ -19,6 +19,10 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 - **Nothing is hidden.** Problems, and changes that can no longer apply, are listed, never dropped. What simplification leaves out is listed with its reason and can be restored.
 
 ## Working rules
+- **Design work uses Impeccable** (`.claude/skills/impeccable`, `npx impeccable`), with [PRODUCT.md](PRODUCT.md) as its product brief:
+  - its anonymous telemetry stays off;
+  - don't use its live mode, which runs an agent with approvals and sandboxing off;
+  - the drawn figure (`SceneSvg.tsx`, `toScene.ts`) is content, not interface, so design passes leave its colours alone.
 - **Annotate code clearly:**
   - every file starts with a short plain-language comment saying what it's for;
   - comment any function or block whose purpose isn't obvious from its name;
