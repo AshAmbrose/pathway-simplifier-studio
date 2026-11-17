@@ -4,6 +4,7 @@
  */
 import type { RunRecord, RunSummary } from '../server/runs.ts';
 import type { LabelLookup } from './identify/types.ts';
+import type { ArrowCheck, RelationQuery } from './relations/types.ts';
 import type { Review } from './types/extraction.ts';
 
 export type { RunRecord, RunSummary };
@@ -32,6 +33,9 @@ export const extract = (body: { name: string; mimeType: string; data: string; wi
 /** What public databases say a label is (server/identify.ts). Only the label text and the shape's kind are sent. */
 export const identify = (label: string, kind: string) =>
   call<LabelLookup>('/api/identify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, kind }) });
+/** Each arrow between identified shapes, looked up in the local SIGNOR and OmniPath snapshots (server/relations.ts). */
+export const checkRelations = (q: RelationQuery) =>
+  call<{ ready: boolean; snapshots: { signor?: string; omnipath?: string }; results: ArrowCheck[] }>('/api/relations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(q) });
 /**
  * Saves the change list, naming the version it was built on. If the run was saved somewhere else since,
  * nothing is written and the newer review comes back as `stale`.

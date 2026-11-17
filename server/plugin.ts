@@ -8,6 +8,8 @@
  *   GET  /api/runs/<id>/image   -> the uploaded image
  *   PUT  /api/runs/<id>/review  -> { review, version }   body { review, version }: the user's answers and fixes;
  *                                  409 with the newer review if the run was saved elsewhere since `version`
+ *   POST /api/relations         -> { ready, snapshots, results }   body RelationQuery: each arrow between identified
+ *                                  shapes looked up in the local SIGNOR and OmniPath snapshots (server/relations.ts)
  *   POST /api/identify          -> LabelLookup   body { label, kind }: what public databases say the label is
  *                                  (server/identify.ts; only the label text is sent, answers are cached)
  *
@@ -18,6 +20,7 @@ import { loadEnv, type Plugin } from 'vite';
 import { localDay, spentOn } from './aiLedger.ts';
 import { ExtractError, extractFigure } from './extract.ts';
 import { identifyLabel } from './identify.ts';
+import { checkArrows } from './relations.ts';
 import { getRun, listRuns, runImage, saveReview, saveRun } from './runs.ts';
 
 const MAX_BODY = 15_000_000; // base64 of a ~11 MB image
@@ -82,6 +85,11 @@ export function apiPlugin(): Plugin {
             return json(200, rec);
           }
           if (url === '/api/runs' && req.method === 'GET') return json(200, listRuns());
+          if (url === '/api/relations' && req.method === 'POST') {
+            const body = await readJson(req, 4_000_000);
+            if (!Array.isArray(body.arrows)) throw new ExtractError('No arrows to check.', 400);
+            return json(200, checkArrows(body));
+          }
           if (url === '/api/identify' && req.method === 'POST') {
             const body = await readJson(req, 10_000);
             if (typeof body.label !== 'string' || !body.label.trim() || body.label.length > 200) throw new ExtractError('No label to look up.', 400);
