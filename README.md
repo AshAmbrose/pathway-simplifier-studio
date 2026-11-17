@@ -10,7 +10,7 @@ You check the copy beside the original and fix anything the model got wrong. The
 3. `npm run dev`, then open the address it prints.
 
 ## Using it
-A step bar across the top walks you through: **Check**, then **① Issues → ② Focus → ③ Repeats → ④ Clusters → ⑤ Layout**. Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures.
+A step bar across the top walks you through: **Check**, then **① Issues → ② Focus → ③ Repeats → ④ Clusters → ⑤ Layout**. Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures. Each step opens with the whole picture in view. Arrows are drawn straight; where several meet one side of a shape, their ends are spread along it.
 
 1. **Upload** a PNG, JPEG or WebP figure. One model call reads it, and the result is saved, so reopening it is free.
 2. **Answer the questions.** Numbered pins mark where the model wasn't sure. Pick an answer, and both views move on to the next question.
@@ -22,7 +22,14 @@ A step bar across the top walks you through: **Check**, then **① Issues → �
    - **② Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
    - **③ Repeats:** merge copies of a molecule drawn more than once in the same place and state. If the figure has panels, say first whether they are different conditions (copies stay apart) or one picture.
    - **④ Clusters:** open a cluster, tick the shapes that should become one, name it and press Collapse. Its members' names stay small under the new name.
-   - **⑤ Layout:** coming in a later update.
+   - **⑤ Layout:** three ways, chosen at the top of the step.
+     - **Compact** (the default) keeps the figure's arrangement but re-spaces it on an even grid. Compartments fit what's in them, and shapes of one kind share one size. Where several routes meet in one shape, that shape goes in the middle of them, with what follows it straight down. Otherwise the longest route runs straight down the middle, with everything else packed beside it.
+     - **Tidy as drawn** keeps the figure at its own size. It lines up shapes that are nearly in line, closes and crops the space earlier steps left, moves overlapping shapes clear, and bows arrows around shapes.
+     - **Redraw as a cell** rebuilds it top to bottom: compartments as rows, panels as columns, and the route into the nucleus as a straight line.
+     - A table shows before → after: arrows crossing, behind a shape, and pointing up.
+     - Optional: one consistent style, and hiding the member names under collapsed shapes. Any rule that doesn't help can be switched off.
+     - Afterwards, click a shape on the right and drag it to fine-tune.
+   - **Finish** marks the simplification done and offers the figure as an SVG download. An editing canvas for final tweaks is planned next.
 
 ## Scripts
 | Command | What it does |

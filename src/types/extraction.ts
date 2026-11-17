@@ -9,7 +9,7 @@
  *  - the reply is validated with it;
  *  - the TypeScript types below come from it.
  * The shape matches the chat-window test format (v1), so local/tools/score_runs.py can score app output too.
- * Boxes are [x, y, width, height] in percent of the image (0–100).
+ * Boxes are [x, y, width, height] in percent of the image (0–100); after step 5's layout, of its own canvas.
  */
 import { z } from 'zod';
 
@@ -63,6 +63,11 @@ export const CONFIDENCE = ['high', 'medium', 'low'] as const;
  *                     places move to the staying copy.
  *   collapse          id = the new shape's id ("col-…"), value = '{"members":[ids],"label":"…","sub":"A + B + C"|null}'.
  *                     One shape over the members' area replaces them; their arrows point at it.
+ *   set_layout        id = "layout", value = the new positions as JSON (see src/layout/adapt.ts, LayoutValue): every
+ *                     shape's box, the compartments and panels redrawn as one cell, each arrow's bend and text spot.
+ *                     Worked out by step 5 and stored, so the figure stays exactly as laid out.
+ *   restyle           id = "style": one consistent style. Shapes take a fill by kind (at most five colours);
+ *                     arrows are black, or red for a bar. Text colours go back to the default.
  * After merge_into and collapse, arrows that have become identical are drawn as one, an arrow from a shape to
  * itself is dropped, and clusters holding the same shapes become one.
  */
@@ -71,7 +76,7 @@ export const MODEL_EDIT_OPS = [
   'set_arrow_head', 'set_arrow_line', 'set_arrow_meaning', 'set_arrow_text', 'set_label', 'remove_element',
   'add_to_group', 'remove_from_group', 'set_box', 'add_element',
 ] as const;
-export const EDIT_OPS = [...MODEL_EDIT_OPS, 'hide', 'merge_into', 'collapse'] as const;
+export const EDIT_OPS = [...MODEL_EDIT_OPS, 'hide', 'merge_into', 'collapse', 'set_layout', 'restyle'] as const;
 const editFields = {
   id: z.string().describe('the shape, group or arrow the change applies to'),
   to: nullable(z.string()).describe('the other shape or group, for moves and arrow ends; otherwise null'),
@@ -105,6 +110,8 @@ export type StepId = (typeof STEPS)[number];
  *  - focus:  step 2's choices: routes and regulators ticked off, and shapes kept or dropped by clicking.
  *            The step's changes are worked out from these, so ticking a route back on restores it exactly.
  *  - panels: step 3's answer about the panels.
+ *  - layout: step 5's switches: compact, tidy as drawn, or redraw as a cell; the layout rules in use (all on unless switched off) and whether collapsed
+ *            shapes show their members' names. The positions themselves are in the step's set_layout change.
  */
 export const SimplifySchema = z.object({
   steps: z.record(z.string(), z.enum(['done', 'skipped'])),
@@ -112,6 +119,8 @@ export const SimplifySchema = z.object({
   focus: z.object({ off: z.array(z.string()), keep: z.array(z.string()), drop: z.array(z.string()) }),
   /** Step 3's question: are the figure's panels different conditions (repeats kept apart) or one picture? */
   panels: z.enum(['conditions', 'one']).nullable().optional(),
+  /** Step 5's switches. */
+  layout: z.object({ mode: z.enum(['compact', 'tidy', 'cell']).optional(), off: z.array(z.string()), sublabels: z.boolean() }).optional(),
 });
 export type Simplify = z.infer<typeof SimplifySchema>;
 export const EMPTY_SIMPLIFY: Simplify = { steps: {}, issues: {}, focus: { off: [], keep: [], drop: [] } };
@@ -171,6 +180,10 @@ export const ExtractionSchema = z.object({
      * compartment instead of a shape, as [x, y] in percent. `from`/`to` then hold the compartment's id, or "open".
      */
     ends: z.object({ from: nullable(z.array(z.number()).length(2)), to: nullable(z.array(z.number()).length(2)) }).optional(),
+    /** Set only by step 5's layout: how far the arrow bows (in percent of the picture's width) to keep clear of shapes. */
+    bend: z.number().optional(),
+    /** Set only by step 5's layout: where the arrow's text sits, [x, y] in percent, clear of shapes and lines. */
+    textAt: z.array(z.number()).length(2).nullable().optional(),
   })),
   flags: z.array(z.object({
     type: z.enum(FLAG_TYPES),
@@ -180,6 +193,11 @@ export const ExtractionSchema = z.object({
     basis: z.string(),
     confidence: z.enum(CONFIDENCE),
   })),
+  /**
+   * Set only by step 5's layout, never by the model: the laid-out picture's own [width, height]. Boxes are then
+   * in percent of it rather than of the original image.
+   */
+  canvas: z.array(z.number()).length(2).optional(),
   clarify: z.array(z.object({
     about: z.array(z.string()).describe('the element, group or arrow ids the question concerns'),
     question: z.string(),
@@ -208,6 +226,11 @@ export function extractionJsonSchema(): unknown {
   delete s.properties?.arrows?.items?.properties?.ends;
   // Nor for a collapsed shape's sub-label, which only simplification sets.
   delete s.properties?.elements?.items?.properties?.sublabel;
+  // Nor for the layout step's canvas, arrow bends and text spots.
+  delete s.properties?.canvas;
+  if (Array.isArray(s.required)) s.required = s.required.filter((k: string) => k !== 'canvas');
+  delete s.properties?.arrows?.items?.properties?.bend;
+  delete s.properties?.arrows?.items?.properties?.textAt;
   return s;
 }
 

@@ -66,7 +66,7 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 **Why:** a test run lost its changes. The page reloaded from an older copy during development and saved it over newer work. The same could happen with two tabs open on one run.
 
 ## 6. How it's tested
-- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, and step 2's routes on the saved test figures (untick → left out → tick back → restored).
+- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, step 2's routes on the saved test figures (untick → left out → tick back → restored), steps 3–4, and step 5 all three ways on each test figure, with every rule on and with each switched off: applies cleanly, no overlapping shapes, the same every time. Tidy keeps shapes in place and adds no crossings; Compact puts Guo's hub in the middle with no crossings.
 - **Practice runs:** a copy of a real extraction with shapes taken out, and a checker that says whether each was put back with the right name, place and arrows.
 - **Browser tests at human pace,** only on throwaway copies. A test that clicks instantly once missed a real fault: a pop-up that moved while the pointer hovered.
 
@@ -120,7 +120,54 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **Tidy-up after merging or collapsing,** limited to what the change touched: arrows that became identical are drawn once (BioPathway Studio's rule), an arrow from a shape to itself is dropped, clusters holding the same shapes become one, and a cluster left with one shape stops being a cluster.
 - **Until step 5,** a collapsed shape keeps the members' area, so shapes that weren't collapsed may overlap it.
 
-**Next:** step 5 (reorganise the layout, reusing BioPathway Studio's Organize Layout, with locations taken only from the original figure). Suggestions from prior knowledge may come later, always labelled with their source.
+**Step 5, Layout: three ways. Compact is the default; tidy as drawn and redraw as a cell are options.**
+- **How we got here:**
+  - The first version redrew every figure with BioPathway Studio's Organize Layout. On Guo kept to its canonical routes, it read worse than the original: tiny shapes, long diagonal arrows, and the wrong main line. Organize Layout is made for figures drawn from scratch.
+  - The second version only tidied the original. On Guo almost nothing changed, and on Yu the empty space, the oversized nucleus and the curly arrows stayed.
+  - So a middle ground, **Compact**, became the default.
+- **Compact** (`src/layout/compact.ts`) keeps the arrangement (what sits left of, above or beside what) but rebuilds the spacing. Shapes that travel together stay together, keeping their rows as drawn.
+  - **Rows and columns from the original:** shapes whose heights overlap by at least 40% share a row, and likewise widths for columns. They are then laid out with even gaps, so empty space disappears, and a staggered drawing doesn't become a staircase.
+  - **Hub in the middle** (your request): the first shape, going down, that nearly all routes lead into (NEMO in Guo) goes to the middle of those routes. What follows it runs straight down below it, and where that line splits (Guo's two outcomes), the shapes spread evenly below.
+    - Left-to-right order is kept, so this adds no crossings. An earlier attempt that moved whole routes to either side created up to 10.
+  - **Main route straight down** (when there is no hub): the longest chain of arrows going down, preferring one that reaches the nucleus, runs straight down the middle. Every other shape keeps the side it was drawn on and packs in beside it, nearest first. On Yu kept to route c, the original's slightly offset columns had turned the one chain into a zigzag.
+  - **Kept only where it reads at least as well:** Compact works the layout out both ways, with the main route straight and in its drawn columns, and keeps the straight one unless it has more crossings plus arrows behind shapes. On Wnt it would pull one panel's chain across both panels; on Hu it added arrows behind shapes.
+  - **Narrow:** beside the main line, nearest first, each shape takes the innermost column with its row free. A row holding only side shapes joins the row above or below when they fit and no arrow joins them, so side shapes don't open gaps in the line.
+  - **Pushes keep sides:** when two shapes overlap, the one off the main line moves outward, on the side it was drawn (Guo's Proteasome stays left of IκB).
+  - **Side branches step down:** a shape fed from the main line in the line's own row (IκB → Proteasome), and what it leads to in that row (→ Degradation), move to a row just below, beside the line on the side they were drawn, so the branch reads top to bottom and the line's own arrow continues straight down.
+  - **Every compartment is named** in the laid-out figure: one the figure leaves unnamed takes its kind's name ("Extracellular space", "Plasma membrane"). Each name sits in the first corner of its box clear of shapes, and a membrane band's name at its end.
+  - **Bands touch, as in a cell:** the membrane crosses its receptors where it did in the original, the space outside reaches down to it, and the cytoplasm starts just under it.
+  - **Bows ignore shapes drawn together with an arrow's ends** (an arrow to TAK1 may cross TAB2/3, which TAK1 is drawn on), and the measures count it the same way. No bow is deeper than about half the arrow's length, so short arrows don't loop.
+  - **One size per kind,** names fit their shapes.
+  - **Compartments and panels fit what's in them:** the nucleus shrinks to its contents, a band spans its panel, and the membrane stays a thin band through its receptors. Empty ones are left out and listed.
+  - **A DNA strand spans what its arrows join.**
+  - **Arrows:** bowed around shapes only if that adds no crossings, and arrow text kept clear.
+  - **On the test figures:** no new crossings on Yu, Guo or Wnt; arrows behind shapes go down on all four; on Guo kept to its canonical routes, NEMO sits between BCR and TNFR with IκB straight below.
+- **Arrows everywhere are straight lines** (`src/render/edgeGeometry.ts`). BioPathway Studio's port-to-port curves made arrows in published figures look curly. Where several arrows meet one side of a shape, their ends are spread along it in the order of the angle they arrive at (a bowed arrow arrives from its bow), so they can be told apart and don't cross. Arrows that meet at a shape still count as crossing if their lines cross away from it, and an arrow may bow to avoid that.
+- **In step 5 the two views zoom separately,** each fitting its own picture. The zoom menu and "Reset view" apply to both. Every step opens with the whole picture in view.
+- **Tidy as drawn** (`src/layout/tidy.ts`) keeps the authors' arrangement and scale. Shapes that travel together (a cluster, shapes drawn touching) move as one. Each rule can be switched off:
+  - **Line up:** shapes nearly in one row or column are put exactly in line (small moves only).
+  - **No overlaps:** a shape covering another, from a different cluster, is moved the shortest way clear (on Guo, TRAF6 under cIAP2, and Proteasome over p50).
+  - **Close gaps:** empty space wider than two shapes, left where step 2 took out a route, shrinks to that width.
+  - **Crop:** the picture shrinks to what is left. Compartments and panels move with the space around them, and grow only for a shape moved outside them.
+  - **Arrows around shapes:** an arrow passing behind a shape bows around it. A bow that would cross another arrow is not used.
+  - **Arrow text clear:** text sitting on a shape moves to a clear spot; text that is already clear stays where the figure put it.
+- **On the test figures,** tidying never adds crossings and reduces arrows behind shapes (Yu 4 → 1, Guo 2 → 0, Hu 4 → 2). The typical shape moves 1–4 px.
+- **A limit, kept visible:** Guo kept to its canonical routes still keeps the shared DNA strand and the second outcome box, because step 2 traces both routes to them. They hold the figure's width, so cropping takes little.
+- **Redraw as a cell** (`src/layout/adapt.ts`) feeds BioPathway Studio's engine (copied and marked: `cellLayout.ts`, `edgeLabelLayout.ts`) only from the figure:
+  - a shape's compartment is the one it is drawn in; a shape with none is placed beside its most-connected partner, and listed;
+  - the figure's own compartment names are kept;
+  - its main line is a route that leads to the nucleus or an outcome, so on Guo IκB runs straight into the nucleus and Proteasome → Degradation sits to one side.
+  - **Added rules, each switchable:**
+    - blocks for clusters;
+    - the original order;
+    - panels as columns, with regulators in the column of the routes they act on;
+    - names fit, one size per kind, an even grid;
+    - arrow text clear;
+    - a tidy-up so columns and shapes never overlap.
+  - It keeps its own canvas size, shrunk to fit beside the original.
+- **Stored as one change (`set_layout`).** The step says when the figure or the switches have changed since. Moves by hand are `set_box` changes on top, and undoing the layout takes them with it.
+- **One consistent style (`restyle`), off by default:** five fills by kind, black arrows, red for inhibition. It says what it replaces, including the colour meanings noted in step 1.
+- **The before → after numbers** are measured the way Organize Layout scores itself: arrows crossing, arrows behind a shape, and arrows pointing up (feedback counted apart).
 
 ## 8. Internal ids stay off the screen
 **Decision:** the model's ids for shapes and arrows ("e5", "a_tx_1") are never shown. The model sometimes writes them into its questions and reasons ("drawn twice (e19 and e26)"). A bracketed list of ids is dropped; any other id is replaced by the item's name as written.

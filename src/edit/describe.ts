@@ -47,6 +47,8 @@ export function describeEdit(before: Extraction, e: Edit): string {
     case 'add_element': return `Shape added${e.to ? ` in ${n(e.to).replace('open space in the ', 'the ')}` : ''}`;
     case 'hide': return `${n(e.id)} left out${e.value ? `: ${e.value}` : ''}`;
     case 'merge_into': return `${n(e.id)} (a repeat) merged into the other ${n(e.to)}`;
+    case 'set_layout': return 'Figure laid out again as a cell, top to bottom';
+    case 'restyle': return 'One consistent style: fills by kind, black arrows, red bars';
     case 'collapse': {
       let spec: { members?: string[]; label?: string } = {};
       try { spec = JSON.parse(e.value ?? '{}'); } catch { /* described below without names */ }

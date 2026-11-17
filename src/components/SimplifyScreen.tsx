@@ -8,13 +8,17 @@
  *  - Every choice is a change in the run's one change list, tagged with its step, applied after the corrections
  *    in step order, listed in plain words and undoable. A choice that no longer applies (say, its shape was
  *    removed in Check) is reported in its step, never dropped silently.
- *  - Step 5 arrives in a later update; for now it can only be skipped.
+ *  - Step 5 (Layout) lays the figure out again; there the right view shows the new layout, fitted into the same
+ *    frame as the original, and a selected shape can be dragged.
  *  - Which step is open is held by RunScreen, so the step bar here and on Check is one journey.
  */
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { RunRecord } from '../api.ts';
 import { applyEdits, dependents } from '../edit/applyEdits.ts';
-import { describeEdit, nameOf } from '../edit/describe.ts';
+import { cleanText, describeEdit, nameOf } from '../edit/describe.ts';
+import { layOut } from '../layout/adapt.ts';
+import { measure } from '../layout/measures.ts';
+import { DEFAULT_LAYOUT, type LayoutOptions, type LayoutValue } from '../layout/value.ts';
 import { inOrder, newKey, stepOf, stepSource } from '../edit/order.ts';
 import type { BoxPx } from '../render/edgePorts.ts';
 import { boxOf, toScene, union, type Scene } from '../render/toScene.ts';
@@ -31,9 +35,10 @@ import { ClustersStep, type ClusterDraft } from './steps/ClustersStep.tsx';
 import { FocusStep } from './steps/FocusStep.tsx';
 import { RepeatsStep } from './steps/RepeatsStep.tsx';
 import { IssuesStep } from './steps/IssuesStep.tsx';
+import { LayoutStep, type StyleReplaces } from './steps/LayoutStep.tsx';
 
 const chip = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800';
-const BUILT: StepId[] = ['issues', 'focus', 'repeats', 'clusters'];
+const BUILT: StepId[] = ['issues', 'focus', 'repeats', 'clusters', 'layout'];
 const noop = () => {};
 
 /** What resetting a step clears from the step record (its changes are cleared separately). */
@@ -41,6 +46,7 @@ const RESET: Partial<Record<StepId, (s: Simplify) => Simplify>> = {
   issues: (s) => ({ ...s, issues: {} }),
   focus: (s) => ({ ...s, focus: EMPTY_SIMPLIFY.focus }),
   repeats: (s) => ({ ...s, panels: null }),
+  layout: (s) => ({ ...s, layout: undefined }),
 };
 
 /** The figure after a step, with what that step left out added back underneath, to be drawn faintly. */
@@ -71,6 +77,8 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const [activeIssue, setActiveIssue] = useState<string | null>(null);
   const [activeRepeat, setActiveRepeat] = useState<string | null>(null);
   const [draft, setDraft] = useState<ClusterDraft | null>(null);
+  const [layoutSel, setLayoutSel] = useState<string | null>(null);
+  const [finished, setFinished] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const [showChanges, setShowChanges] = useState(false);
   const viewer = useRef<ViewerHandle>(null);
@@ -78,7 +86,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
 
   // Escape, or a click anywhere outside it, closes the change list; Escape also lets go of the highlighted issue.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowChanges(false); setActiveIssue(null); setActiveRepeat(null); setDraft(null); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowChanges(false); setActiveIssue(null); setActiveRepeat(null); setDraft(null); setLayoutSel(null); } };
     const onDown = (e: PointerEvent) => { if (changesBox.current && !changesBox.current.contains(e.target as Node)) setShowChanges(false); };
     window.addEventListener('keydown', onKey);
     window.addEventListener('pointerdown', onDown);
@@ -94,7 +102,12 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const after = useMemo(() => applyEdits(before.extraction, stepEdits), [before, stepEdits]);
   const beforeScene = useMemo(() => toScene(before.extraction, W, H), [before, W, H]);
   const afterScene = useMemo(() => toScene(after.extraction, W, H), [after, W, H]);
-  const right = useMemo(() => withGhosts(afterScene, beforeScene), [afterScene, beforeScene]);
+  // Nothing is left out by the layout, and its picture has its own size, so it shows no faded copies.
+  const right = useMemo(() => (afterScene.width === W && afterScene.height === H ? withGhosts(afterScene, beforeScene) : { scene: afterScene, ghosts: new Set<string>() }), [afterScene, beforeScene, W, H]);
+  // A laid-out picture (step 5) has its own size: the right view then zooms and pans on its own, fitting it.
+  const ownSize = right.scene.width !== W || right.scene.height !== H;
+  const fit = { k: 1, ox: 0, oy: 0 };
+  const toFrame = (b: BoxPx): BoxPx => ({ x: fit.ox + b.x * fit.k, y: fit.oy + b.y * fit.k, width: b.width * fit.k, height: b.height * fit.k });
 
   // Changes that can't be applied, from the whole list, by key: each is reported in its own step.
   const failed = useMemo(() => {
@@ -113,6 +126,19 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const stepTracing = useMemo(() => (step === 'repeats' ? traceRoutes(before.extraction) : null), [step, before]);
   const repeats = useMemo(() => (stepTracing ? findRepeats(before.extraction, stepTracing, s.panels !== 'one') : null), [stepTracing, before, s.panels]);
   const clusters = useMemo(() => (step === 'clusters' ? listClusters(before.extraction) : []), [step, before]);
+  // Step 5: the layout these switches would give, worked out from the figure just before the step. A stored layout
+  // that differs from it is out of date (the figure or the switches changed since).
+  const lopts: LayoutOptions = s.layout ?? DEFAULT_LAYOUT;
+  const layoutTracing = useMemo(() => (step === 'layout' ? traceRoutes(before.extraction) : null), [step, before]);
+  const proposal = useMemo(() => (layoutTracing ? JSON.stringify(layOut(before.extraction, W, H, layoutTracing, lopts)) : null), [layoutTracing, before, W, H, lopts]);
+  const layoutEdit = stepEdits.find((e) => e.op === 'set_layout');
+  const layoutStale = !!layoutEdit && !!proposal && layoutEdit.value !== proposal;
+  const layoutMoves = stepEdits.filter((e) => e.op === 'set_box');
+  const layoutNumbers = useMemo(() => {
+    if (step !== 'layout' || !proposal) return null;
+    const laid = layoutEdit ? afterScene : toScene(applyEdits(before.extraction, [{ op: 'set_layout', id: 'layout', to: null, value: proposal }]).extraction, W, H);
+    return { before: measure(beforeScene), after: measure(laid) };
+  }, [step, proposal, layoutEdit, afterScene, before, beforeScene, W, H]);
   const names = useMemo(() => [...new Set([...issueBase.elements, ...issueBase.groups].map((v) => v.label).filter((l): l is string => !!l && l.length > 1))].sort((a, b) => a.localeCompare(b)), [issueBase]);
 
   // --- changing the step record and the step's changes ---
@@ -158,6 +184,29 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     setDraft(null);
   };
 
+  /** Step 5: store the layout (worked out for these switches); moves made by hand on an older layout go with it. */
+  const layoutNow = (opts: LayoutOptions) => {
+    if (!layoutTracing) return;
+    const value = JSON.stringify(layOut(before.extraction, W, H, layoutTracing, opts));
+    setReview((r) => ({ ...r, edits: [...r.edits.filter((e) => !(stepOf(e.source) === 'layout' && (e.op === 'set_layout' || e.op === 'set_box'))),
+      stamp('layout')({ op: 'set_layout', id: 'layout', to: null, value })] }));
+  };
+  /** Step 5's switches. With a layout and no hand moves, it is redone straight away; otherwise it is marked out of date. */
+  const setLayoutOpts = (o: LayoutOptions) => {
+    setSimplify((v) => ({ ...v, layout: o }));
+    if (layoutEdit && !layoutMoves.length) layoutNow(o);
+  };
+  const setRestyle = (on: boolean) => setReview((r) => ({
+    ...r, edits: [...r.edits.filter((e) => !(stepOf(e.source) === 'layout' && e.op === 'restyle')), ...(on ? [stamp('layout')({ op: 'restyle', id: 'style', to: null, value: null })] : [])],
+  }));
+  const undoMoves = () => setReview((r) => ({ ...r, edits: r.edits.filter((e) => !(stepOf(e.source) === 'layout' && e.op === 'set_box')) }));
+  /** A box on the laid-out picture, in percent of its canvas. */
+  const toPercent = (b: BoxPx) => { const w = right.scene.width, h = right.scene.height; return [b.x / w * 100, b.y / h * 100, b.width / w * 100, b.height / h * 100].map((v) => Math.round(v * 100) / 100).join(','); };
+  /** Step 5: a shape dragged on the laid-out view. One move per shape: a new drag replaces its last. */
+  const moveNode = (id: string, b: BoxPx) => setReview((r) => ({
+    ...r, edits: [...r.edits.filter((e) => !(stepOf(e.source) === 'layout' && e.op === 'set_box' && e.id === id)), stamp('layout')({ op: 'set_box', id, to: null, value: toPercent(b) })],
+  }));
+
   /** Clears a step's changes and choices, and marks it as given (or forgets its mark). */
   const clearStep = (k: StepId, mark: 'skipped' | null) => setReview((r) => {
     const sim = (RESET[k] ?? ((v: Simplify) => v))(r.simplify ?? EMPTY_SIMPLIFY);
@@ -172,22 +221,47 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const focusStale = focusEdits.length !== hidden.size || focusEdits.some((e) => hidden.get(e.id) !== e.value);
 
   const choices = step === 'issues' ? stepEdits.length + Object.keys(s.issues).length : step === 'focus' ? hidden.size : stepEdits.length;
-  const go = (k: JourneyStep) => { onStep(k); setHoverIds(null); setActiveIssue(null); setActiveRepeat(null); setDraft(null); setShowChanges(false); };
+  const go = (k: JourneyStep) => { onStep(k); setHoverIds(null); setActiveIssue(null); setActiveRepeat(null); setDraft(null); setLayoutSel(null); setShowChanges(false); };
   const next = () => {
     if (BUILT.includes(step)) setSimplify((v) => ({ ...v, steps: { ...v.steps, [step]: 'done' } }));
     if (at < STEPS.length - 1) go(STEPS[at + 1]);
+    else setFinished(true);
+  };
+  /**
+   * Saves the simplified figure as an SVG file: the right view's picture, whole, without the on-screen marks.
+   * A stopgap until the editing canvas (the next update) takes over Finish.
+   */
+  const downloadSvg = () => {
+    const svg = document.querySelector('[data-pane="right"] svg');
+    if (!svg) return;
+    const copy = svg.cloneNode(true) as SVGSVGElement;
+    const w = right.scene.width, h = right.scene.height;
+    copy.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    copy.setAttribute('width', String(Math.round(w)));
+    copy.setAttribute('height', String(Math.round(h)));
+    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    copy.removeAttribute('class');
+    copy.querySelector('[data-scene]')?.parentElement?.setAttribute('transform', '');
+    const blob = new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${run.name.replace(/[^\w-]+/g, '-')}-simplified.svg`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
   /** Undo one change from the list. A "left out" from step 2 is undone by keeping that shape, so the step's choices stay true. */
   const undo = (e: AppliedEdit) => {
     if (stepOf(e.source) === 'focus') setFocus(toggleShape(s.focus, tracing, e.id, false));
+    // Undoing the layout takes the moves made on it too: they only make sense on that layout.
+    else if (e.op === 'set_layout') setReview((r) => ({ ...r, edits: r.edits.filter((v) => !(stepOf(v.source) === 'layout' && (v.op === 'set_layout' || v.op === 'set_box'))) }));
     // Anything later that only exists because of this change (a collapsed shape's later changes) goes with it.
     else setReview((r) => { const gone = new Set([e.key, ...dependents(r.edits, e.key).map((d) => d.key)]); return { ...r, edits: r.edits.filter((v) => !gone.has(v.key)) }; });
   };
 
   // --- on the pictures ---
   const show = (ids: string[]) => {
-    const boxes = ids.map((id) => boxOf(right.scene, id)).filter((b): b is BoxPx => !!b);
+    const boxes = ids.map((id) => boxOf(right.scene, id)).filter((b): b is BoxPx => !!b).map(toFrame);
     if (boxes.length) viewer.current?.focus(union(boxes, 0), { fill: 0.5, anchorX: 0.5 });
   };
   /** A click on a shape: in step 1, open its issue; in step 2, add it or drop it. */
@@ -205,6 +279,8 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
       if (!g) return;
       setActiveRepeat(g.key);
       document.querySelector(`[data-repeat="${CSS.escape(g.key)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else if (step === 'layout') {
+      setLayoutSel(layoutEdit && after.extraction.elements.some((v) => v.id === id) ? id : null);
     } else if (step === 'clusters') {
       if (!before.extraction.elements.some((v) => v.id === id)) {
         // A click on a cluster's outline opens its card.
@@ -227,17 +303,28 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     for (const id of draft.ticked) marks.set(id, 'about');
   }
   for (const id of hoverIds ?? []) marks.set(id, 'hover');
-  const ui = (unit: number, faded?: Set<string>): SceneUi => ({
-    unit, hot, onHover: setHot, marks, selected: null, touched: new Set(), pins: [], quiet: false, picking: false, editable: false,
+  // In step 5 the laid-out view (only) lets the selected shape be dragged.
+  const ui = (unit: number, faded?: Set<string>, laidOut = false): SceneUi => ({
+    unit, hot, onHover: setHot, marks, selected: laidOut ? layoutSel : null, touched: new Set(), pins: [], quiet: false, picking: false, editable: false,
     drawing: false, placing: false, onPlace: noop, onNewArrow: noop, onSelect: select, onPin: noop, onMoveBadge: noop,
-    onArrowEnd: noop, onArrowEndFree: noop, onMoveNode: noop, faded,
+    onArrowEnd: noop, onArrowEndFree: noop, onMoveNode: laidOut ? moveNode : noop, faded, movable: laidOut,
   });
   const hint = hot ? (() => {
     const name = after.extraction.elements.some((v) => v.id === hot) || after.extraction.arrows.some((v) => v.id === hot) ? nameOf(after.extraction, hot) : nameOf(before.extraction, hot);
+    if (step === 'layout' && layoutEdit && after.extraction.elements.some((v) => v.id === hot)) return `${name} · ${layoutSel === hot ? 'drag it to move it' : 'click, then drag to move it'}`;
     if (step === 'clusters' && draft && before.extraction.elements.some((v) => v.id === hot)) return `${name} · click to ${draft.ticked.includes(hot) ? 'untick' : 'tick'} it`;
     if (step !== 'focus' || !focusBase.elements.some((v) => v.id === hot)) return name;
     return `${name} · ${hidden.has(hot) ? 'left out: click to bring it back' : 'click to leave it out'}`;
   })() : null;
+
+  /** What the consistent style would replace: the figure's own colours, and colour meanings noted in step 1. */
+  const styleReplaces = (): StyleReplaces => {
+    const x = before.extraction;
+    const distinct = (v: (string | null)[]) => new Set(v.filter((c): c is string => !!c).map((c) => c.toLowerCase())).size;
+    const meanings = Object.entries(s.issues).filter(([k]) => k.startsWith('meaning:'))
+      .map(([k, d]) => d.note || cleanText(issueBase, issues.find((i) => i.key === k)?.basis)).filter(Boolean);
+    return { fills: distinct(x.elements.map((e) => e.fill)), arrowColours: distinct(x.arrows.map((a) => a.colour)), textColours: distinct(x.elements.map((e) => e.textColour)), meanings };
+  };
 
   // --- the change list, in plain words, grouped by step ---
   const described = useMemo(() => {
@@ -291,6 +378,15 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
         </div>
       </header>
       {notices}
+      {finished && (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100">
+          <span>✓ Simplification finished and saved. The editing canvas for final tweaks comes in the next update; for now you can download the figure.</span>
+          <span className="flex shrink-0 gap-3">
+            <button className="font-semibold underline" onClick={downloadSvg}>Download SVG</button>
+            <button className="underline" onClick={() => setFinished(false)}>Close</button>
+          </span>
+        </div>
+      )}
       {openQuestions > 0 && (
         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
           <span>{openQuestions} question{openQuestions === 1 ? ' is' : 's are'} still open in Check. You can carry on: answers given there will show up here.</span>
@@ -343,21 +439,41 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
             <ClustersStep x={before.extraction} clusters={clusters} edits={stepEdits} draft={draft} names={names}
               onDraft={setDraft} onCollapse={collapseNow} onUndo={undo} onHover={setHoverIds} onShow={show} />
           )}
+          {step === 'layout' && layoutNumbers && proposal && (
+            <LayoutStep x={before.extraction} laidOut={!!layoutEdit} stale={layoutStale} opts={lopts}
+              before={layoutNumbers.before} after={layoutNumbers.after}
+              notes={(JSON.parse(layoutEdit?.value ?? proposal) as LayoutValue).notes}
+              restyled={stepEdits.some((e) => e.op === 'restyle')} replaces={styleReplaces()} hasSublabels={before.extraction.elements.some((e) => e.sublabel)}
+              moves={layoutMoves.length}
+              onLayout={() => layoutNow(lopts)}
+              onRule={(k, on) => setLayoutOpts({ ...lopts, off: on ? lopts.off.filter((v) => v !== k) : [...lopts.off, k] })}
+              onSublabels={(on) => setLayoutOpts({ ...lopts, sublabels: on })}
+              onMode={(mode) => setLayoutOpts({ ...lopts, mode, off: [] })}
+              onRestyle={setRestyle} onUndoMoves={undoMoves} onHover={setHoverIds} onShow={show} />
+          )}
           {!BUILT.includes(step) && <p className="text-sm text-slate-600 dark:text-slate-300">This step comes in a later update. Skip it, or press Next: nothing changes.</p>}
         </aside>
         <div className="min-w-0 flex-1">
+          {/* A new step starts with the whole picture in view (keyed by step, so zoom and pan reset). */}
           <PairedViewer
+            key={step}
             ref={viewer}
+            rightSize={ownSize ? { width: right.scene.width, height: right.scene.height } : undefined}
             width={W}
             height={H}
             leftTitle={step === 'issues' ? 'Original' : 'Before this step'}
             rightTitle={`After ${stepTitle(step)}`}
             hint={hint}
-            help={step === 'focus' ? 'Scroll to zoom · drag to pan · click a shape to leave it out or bring it back' : 'Scroll to zoom · drag to pan · faded = left out by this step'}
+            help={step === 'layout' ? 'Scroll to zoom · drag to pan · after laying out, click a shape on the right and drag it to move it' : step === 'focus' ? 'Scroll to zoom · drag to pan · click a shape to leave it out or bring it back' : 'Scroll to zoom · drag to pan · faded = left out by this step'}
             left={(unit) => step === 'issues'
               ? <ImageLayer scene={beforeScene} src={imageUrl} ui={ui(unit)} />
               : <><MarkerDefs /><SceneSvg scene={beforeScene} ui={ui(unit)} /></>}
-            right={(unit) => <><MarkerDefs /><SceneSvg scene={right.scene} ui={ui(unit, right.ghosts)} /></>}
+            right={(unit) => (
+              <><MarkerDefs />
+                <g transform={`translate(${fit.ox} ${fit.oy}) scale(${fit.k})`}>
+                  <SceneSvg scene={right.scene} ui={ui(unit / fit.k, right.ghosts, step === 'layout' && !!layoutEdit)} />
+                </g>
+              </>)}
           />
         </div>
       </div>
