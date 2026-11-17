@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, ty
 import type { RunRecord } from '../api.ts';
 import { applyEdits, dependents } from '../edit/applyEdits.ts';
 import { cleanText, describeEdit, nameOf } from '../edit/describe.ts';
-import { layOut } from '../layout/adapt.ts';
+import { layOutAsync } from '../layout/adapt.ts';
 import { measure } from '../layout/measures.ts';
 import { DEFAULT_LAYOUT, type LayoutOptions, type LayoutValue } from '../layout/value.ts';
 import { inOrder, newKey, stepOf, stepSource } from '../edit/order.ts';
@@ -132,7 +132,14 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   // that differs from it is out of date (the figure or the switches changed since).
   const lopts: LayoutOptions = s.layout ?? DEFAULT_LAYOUT;
   const layoutTracing = useMemo(() => (step === 'layout' ? traceRoutes(before.extraction) : null), [step, before]);
-  const proposal = useMemo(() => (layoutTracing ? JSON.stringify(layOut(before.extraction, W, H, layoutTracing, lopts)) : null), [layoutTracing, before, W, H, lopts]);
+  // Worked out in the background: the layered layout (ELK) answers asynchronously. Until it answers, nothing shows.
+  const [proposal, setProposal] = useState<string | null>(null);
+  useEffect(() => {
+    if (!layoutTracing) { setProposal(null); return; }
+    let live = true;
+    layOutAsync(before.extraction, W, H, layoutTracing, lopts).then((v) => { if (live) setProposal(JSON.stringify(v)); });
+    return () => { live = false; };
+  }, [layoutTracing, before, W, H, lopts]);
   const layoutEdit = stepEdits.find((e) => e.op === 'set_layout');
   const layoutStale = !!layoutEdit && !!proposal && layoutEdit.value !== proposal;
   const layoutMoves = stepEdits.filter((e) => e.op === 'set_box');
@@ -200,9 +207,9 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   };
 
   /** Step 5: store the layout (worked out for these switches); moves made by hand on an older layout go with it. */
-  const layoutNow = (opts: LayoutOptions) => {
+  const layoutNow = async (opts: LayoutOptions) => {
     if (!layoutTracing) return;
-    const value = JSON.stringify(layOut(before.extraction, W, H, layoutTracing, opts));
+    const value = JSON.stringify(await layOutAsync(before.extraction, W, H, layoutTracing, opts));
     setReview((r) => ({ ...r, edits: [...r.edits.filter((e) => !(stepOf(e.source) === 'layout' && (e.op === 'set_layout' || e.op === 'set_box'))),
       stamp('layout')({ op: 'set_layout', id: 'layout', to: null, value })] }));
   };
@@ -470,7 +477,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
               before={layoutNumbers.before} after={layoutNumbers.after}
               notes={(JSON.parse(layoutEdit?.value ?? proposal) as LayoutValue).notes}
               restyled={stepEdits.some((e) => e.op === 'restyle')} replaces={styleReplaces()} hasSublabels={before.extraction.elements.some((e) => e.sublabel)}
-              moves={layoutMoves.length}
+              moves={layoutMoves.length} compareHref={`?compare=${encodeURIComponent(run.id)}`}
               onLayout={() => layoutNow(lopts)}
               onRule={(k, on) => setLayoutOpts({ ...lopts, off: on ? lopts.off.filter((v) => v !== k) : [...lopts.off, k] })}
               onSublabels={(on) => setLayoutOpts({ ...lopts, sublabels: on })}

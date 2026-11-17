@@ -1,5 +1,5 @@
 /**
- * Step 5 prototype: order-kept compaction. The authors' arrangement already reads well (the originals score as
+ * Step 5, "Squeeze": order-kept compaction. The authors' arrangement already reads well (the originals score as
  * well as any solver on crossings), so this keeps it and squeezes out the wasted space, the way chip layouts are
  * compacted. It is a set of linear rules handed to a constraint solver (kiwi.js, BSD-3-Clause, the Cassowary method):
  *

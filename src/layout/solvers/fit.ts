@@ -1,5 +1,5 @@
 /**
- * Measures for how a drawing uses its space (prototype), alongside crossings and the rest (measures.ts):
+ * Measures for how a drawing uses its space (comparison page and script), alongside crossings and the rest (measures.ts):
  *  - onScreen: how tall a typical shape is, in screen pixels, when the whole figure is fitted to a 1600 × 1000
  *    window; bigger means more readable text;
  *  - aspect: width ÷ height of the canvas;

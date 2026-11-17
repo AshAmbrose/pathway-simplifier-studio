@@ -1,5 +1,5 @@
 /**
- * Step 5 prototype: fCoSE, the compound spring embedder from the Cytoscape.js family (cytoscape-fcose, MIT), made
+ * Comparison page only: fCoSE, the compound spring embedder from the Cytoscape.js family (cytoscape-fcose, MIT), made
  * for biological pathways drawn as compound graphs.
  * The figure becomes a compound graph: panels hold compartments, compartments hold units (shapes that travel
  * together, fixed-size). Arrows are springs and shapes repel, starting from where the figure drew them (no random

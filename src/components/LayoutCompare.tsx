@@ -1,10 +1,12 @@
 /**
- * Prototype page (?compare=<run id>): one figure laid out three ways side by side, with the same measures, to
- * judge the general-purpose solvers against the current Compact before any of them goes into step 5.
+ * Comparison page (?compare=<run id>, linked from step 5): one figure laid out every way side by side, from the same
+ * input, with the same numbers. It records what was tried: our own rules (Compact), two general-purpose network
+ * layouts (ELK layered; fCoSE, Cytoscape's compound spring layout, kept here only), and order-kept compaction.
  *  - the figure as it stands before step 5 (every correction and earlier step applied);
  *  - Compact (src/layout/compact.ts);
  *  - ELK layered (src/layout/solvers/elk.ts);
- *  - order-kept compaction (src/layout/solvers/compaction.ts).
+ *  - fCoSE (src/layout/solvers/fcose.ts);
+ *  - Squeeze, order-kept compaction (src/layout/solvers/compaction.ts).
  * Under each: crossings and the rest (measures.ts), and how the drawing uses its space (solvers/fit.ts).
  * Nothing is saved; the page only reads the run.
  */
@@ -16,6 +18,7 @@ import { layOut } from '../layout/adapt.ts';
 import { measure, type Measures } from '../layout/measures.ts';
 import { elkLayout } from '../layout/solvers/elk.ts';
 import { compactionLayout } from '../layout/solvers/compaction.ts';
+import { fcoseLayout } from '../layout/solvers/fcose.ts';
 import { fitMeasures } from '../layout/solvers/fit.ts';
 import { DEFAULT_LAYOUT, type LayoutValue } from '../layout/value.ts';
 import { toScene, type Scene } from '../render/toScene.ts';
@@ -60,19 +63,21 @@ export function LayoutCompare({ runId }: { runId: string }) {
   const t = useMemo(() => (x ? traceRoutes(x) : null), [x]);
   const laid = (v: LayoutValue | null) => (x && v ? toScene(applyEdits(x, [{ op: 'set_layout', id: 'l', to: null, value: JSON.stringify(v) }]).extraction, W, H) : null);
   const compact = useMemo(() => (x && t ? layOut(x, W, H, t, DEFAULT_LAYOUT) : null), [x, t, W, H]);
+  const fcose = useMemo(() => (x && t ? fcoseLayout(x, W, H, t, DEFAULT_LAYOUT) : null), [x, t, W, H]);
   const squeezed = useMemo(() => (x && t ? compactionLayout(x, W, H, t, DEFAULT_LAYOUT) : null), [x, t, W, H]);
   useEffect(() => { if (x && t) elkLayout(x, W, H, t, DEFAULT_LAYOUT).then(setElk).catch((e) => setElkError((e as Error).message)); }, [x, t, W, H]);
   const panes: [string, Scene | null][] = [
     ['Before step 5', x ? toScene(x, W, H) : null],
     ['Compact (current)', laid(compact)],
     ['ELK layered', laid(elk)],
-    ['Order-kept compaction', laid(squeezed)],
+    ['fCoSE', laid(fcose)],
+    ['Squeeze (order kept)', laid(squeezed)],
   ];
   return (
     <div className="px-5 py-3">
       <h1 className="text-title font-semibold text-ink">Layout comparison: {run?.name ?? '…'}</h1>
-      <p className={`${meta} mb-3`}>Prototype. The same figure, laid out three ways from the same input. Nothing is saved.</p>
-      <div className="grid grid-cols-4 gap-4">
+      <p className={`${meta} mb-3`}>The same figure, laid out every way from the same input. Shape on screen: how tall a typical shape is when the whole figure fits a 1600 × 1000 window. Nothing is saved.</p>
+      <div className="grid grid-cols-5 gap-4">
         {panes.map(([title, scene]) => <Pane key={title} title={title} scene={scene} m={scene ? measure(scene) : null} note={title === 'ELK layered' && elkError ? `Failed: ${elkError}` : undefined} />)}
       </div>
     </div>

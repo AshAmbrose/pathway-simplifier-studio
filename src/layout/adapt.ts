@@ -23,6 +23,8 @@
  * own size (the canvas), so names are drawn at a readable size against their shapes. The screen shrinks it to
  * fit beside the original.
  */
+import { compactionLayout } from './solvers/compaction.ts';
+import { elkLayout } from './solvers/elk.ts';
 import type { Tracing } from '../simplify/routes.ts';
 import type { Element, Extraction, Region } from '../types/extraction.ts';
 import { layoutCell, neighbourMap, placeByPartner, BAND_NAME, type CompartmentType, type LEdge, type LNode } from './cellLayout.ts';
@@ -47,13 +49,20 @@ const KIND_NAME: Partial<Record<Region['kind'], string>> = {
  * its kind (as the model read it), so the cell reads on its own.
  */
 export function layOut(x: Extraction, W: number, H: number, t: Tracing, opts: LayoutOptions): LayoutValue {
-  const v = chooseLayout(x, W, H, t, opts);
-  return { ...v, regions: v.regions.map((r) => ({ ...r, label: r.label ?? KIND_NAME[r.kind] ?? null })) };
+  return named(chooseLayout(x, W, H, t, opts));
 }
+/** Any way of laying out, including ELK's ("layered"), which only answers asynchronously. */
+export async function layOutAsync(x: Extraction, W: number, H: number, t: Tracing, opts: LayoutOptions): Promise<LayoutValue> {
+  return opts.mode === 'layered' ? named(await elkLayout(x, W, H, t, opts)) : layOut(x, W, H, t, opts);
+}
+/** Compartments the figure leaves unnamed get their kind's name. */
+const named = (v: LayoutValue): LayoutValue => ({ ...v, regions: v.regions.map((r) => ({ ...r, label: r.label ?? KIND_NAME[r.kind] ?? null })) });
 
 function chooseLayout(x: Extraction, W: number, H: number, t: Tracing, opts: LayoutOptions): LayoutValue {
   if (opts.mode === 'cell') return layoutFigure(x, W, H, t, opts);
   if (opts.mode === 'tidy') return tidyFigure(x, W, H, t, opts);
+  if (opts.mode === 'kept') return compactionLayout(x, W, H, t, opts);
+  if (opts.mode === 'layered') throw new Error('The layered layout (ELK) answers asynchronously: use layOutAsync.');
   // Compact runs the main route straight down only where that reads at least as well: on a figure with panels side
   // by side (Wnt) or a dense one (Hu) it can add crossings or arrows behind shapes, and then the drawn columns stay.
   const straight = compactFigure(x, W, H, t, opts);

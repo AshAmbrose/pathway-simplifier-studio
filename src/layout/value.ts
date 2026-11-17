@@ -7,10 +7,14 @@
 import type { Extraction } from '../types/extraction.ts';
 
 /**
- * Step 5's switches: how to lay out (compact, the default; tidy as drawn; or redraw as a cell), the rules switched
- * off (all are on by default), and whether member names show under collapsed shapes.
+ * Step 5's switches: how to lay out, the rules switched off (all are on by default), and whether member names show
+ * under collapsed shapes. The ways to lay out:
+ *  - compact (the default, compact.ts) and tidy as drawn (tidy.ts): our own rules;
+ *  - squeeze (solvers/compaction.ts): the original's order kept exactly, gaps closed by a constraint solver;
+ *  - layered (solvers/elk.ts): ELK's general-purpose layered layout, ranked top to bottom;
+ *  - cell (adapt.ts): BioPathway Studio's Organize Layout, redrawn as a cell.
  */
-export type LayoutMode = 'compact' | 'tidy' | 'cell';
+export type LayoutMode = 'compact' | 'tidy' | 'kept' | 'layered' | 'cell';
 export interface LayoutOptions { mode?: LayoutMode; off: string[]; sublabels: boolean }
 export const DEFAULT_LAYOUT: LayoutOptions = { mode: 'compact', off: [], sublabels: true };
 

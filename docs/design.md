@@ -66,7 +66,7 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 **Why:** a test run lost its changes. The page reloaded from an older copy during development and saved it over newer work. The same could happen with two tabs open on one run.
 
 ## 6. How it's tested
-- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, step 2's routes on the saved test figures (untick → left out → tick back → restored), steps 3–4, and step 5 all three ways on each test figure, with every rule on and with each switched off: applies cleanly, no overlapping shapes, the same every time. Tidy keeps shapes in place and adds no crossings; Compact puts Guo's hub in the middle with no crossings.
+- **Offline checks** (`npm run check:extraction`): the formats, every kind of change, undo, saved runs loading, the order changes apply in, step 2's routes on the saved test figures (untick → left out → tick back → restored), steps 3–4, and step 5 on each test figure (Compact, Tidy and Squeeze), with every rule on and with each switched off: applies cleanly, no overlapping shapes, the same every time. Tidy keeps shapes in place and adds no crossings; Compact puts Guo's hub in the middle with no crossings; Squeeze keeps at least 90% of shape pairs in their original order.
 - **Practice runs:** a copy of a real extraction with shapes taken out, and a checker that says whether each was put back with the right name, place and arrows.
 - **Browser tests at human pace,** only on throwaway copies. A test that clicks instantly once missed a real fault: a pop-up that moved while the pointer hovered.
 
@@ -120,11 +120,29 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **Tidy-up after merging or collapsing,** limited to what the change touched: arrows that became identical are drawn once (BioPathway Studio's rule), an arrow from a shape to itself is dropped, clusters holding the same shapes become one, and a cluster left with one shape stops being a cluster.
 - **Until step 5,** a collapsed shape keeps the members' area, so shapes that weren't collapsed may overlap it.
 
-**Step 5, Layout: three ways. Compact is the default; tidy as drawn and redraw as a cell are options.**
+**Step 5, Layout: five ways. Compact is the default; tidy as drawn, squeeze, layered (ELK) and redraw as a cell are options.**
 - **How we got here:**
   - The first version redrew every figure with BioPathway Studio's Organize Layout. On Guo kept to its canonical routes, it read worse than the original: tiny shapes, long diagonal arrows, and the wrong main line. Organize Layout is made for figures drawn from scratch.
   - The second version only tidied the original. On Guo almost nothing changed, and on Yu the empty space, the oversized nucleus and the curly arrows stayed.
   - So a middle ground, **Compact**, became the default.
+  - Compact grew rule by rule (hub, spine, packing, row closing, side branches), and every rule fixed one figure while another still looked wrong. So two general-purpose network layouts were tried, as tools like Cytoscape use, and then a mathematical compaction. All are kept, side by side on a comparison page, so the attempts can be shown.
+
+- **What was tried, and what it showed** (a talking point: rules don't generalise, general methods don't know biology, and problems remain). Numbers from the comparison page: crossings, and how tall a typical shape is when the whole figure fits a 1600 × 1000 window (bigger is more readable).
+
+  | Figure | Original | Compact (rules) | ELK layered | fCoSE | Squeeze |
+  |---|---|---|---|---|---|
+  | Guo, canonical only | 0 · 30px | 0 · 32px | 8 · 27px | 24 | 0 · 38px |
+  | Guo, whole | 0 · 30px | 0 · 30px, very wide | 0 · 27px | 49 | 0 · 33px |
+  | Yu, route c | 0 · 42px | 0 · 32px | 0 · 34px | 0 | 1 · 39px |
+  | Wnt | 0 · 44px | 0 · 46px, panels overlap | 0 · 44px | 0 | 0 · 45px |
+  | Hu | 1 · 50px | 2 · 55px | 5 · 48px | 8 | 1 · 53px |
+
+  - **The original is already good on crossings.** No method beat it. What made the figures hard to read was size and space: too wide, wasted gaps, an oversized nucleus. The first measures didn't capture that, so space measures were added (`src/layout/solvers/fit.ts`): shape on screen, aspect, share of the canvas filled, arrows sharing an end.
+  - **Rules (Compact):** fixes what each rule was written for; each new figure needs another rule. It leaves more empty canvas than the original (11–14% filled against 17–30%), and on Wnt its two panels overlap.
+  - **ELK layered** (Eclipse Layout Kernel, elkjs, EPL-2.0; the layered method behind many network tools): good overall structure (arrows down, square, Wnt's panels clean) but it orders shapes only to cut crossings, not by biology, so Guo's canonical routes and Hu tangle. It first stacked the membrane vertically; it now gets the membrane as one row in the original's order (BioPathway Studio's rule: the membrane is a line, not a room).
+  - **fCoSE** (Cytoscape's compound spring layout, cytoscape-fcose, MIT): scatters the shapes even with constraints for direction, order and compartment order. Kept on the comparison page only.
+  - **Squeeze, order-kept compaction** (kiwi.js, BSD-3-Clause, the Cassowary constraint solver; the method chip layouts are compacted with): keeps the authors' arrangement, which already reads well, and closes the gaps. The best overall, but it can't fix an arrangement that was awkward to begin with.
+  - **Problems that remain:** Squeeze slides NEMO/IKK left of TAB2/3 on Yu route c (one crossing); on Wnt "Target genes" leaves a gap above the nucleus content; on Hu the inhibition labels crowd near the receptors; ELK's membrane band is too tall (it holds the proteins docked under the receptors).
 - **Compact** (`src/layout/compact.ts`) keeps the arrangement (what sits left of, above or beside what) but rebuilds the spacing. Shapes that travel together stay together, keeping their rows as drawn.
   - **Rows and columns from the original:** shapes whose heights overlap by at least 40% share a row, and likewise widths for columns. They are then laid out with even gaps, so empty space disappears, and a staggered drawing doesn't become a staircase.
   - **Hub in the middle** (your request): the first shape, going down, that nearly all routes lead into (NEMO in Guo) goes to the middle of those routes. What follows it runs straight down below it, and where that line splits (Guo's two outcomes), the shapes spread evenly below.
@@ -153,6 +171,15 @@ Any step can be skipped, and Back always works, including back to Check. Each si
   - **Arrow text clear:** text sitting on a shape moves to a clear spot; text that is already clear stays where the figure put it.
 - **On the test figures,** tidying never adds crossings and reduces arrows behind shapes (Yu 4 → 1, Guo 2 → 0, Hu 4 → 2). The typical shape moves 1–4 px.
 - **A limit, kept visible:** Guo kept to its canonical routes still keeps the shared DNA strand and the second outcome box, because step 2 traces both routes to them. They hold the figure's width, so cropping takes little.
+- **Squeeze** (`src/layout/solvers/compaction.ts`) states the layout as linear rules for a constraint solver (kiwi.js):
+  - must hold: neighbours in one compartment keep the side they were on (left of, or above), with a gap (longer where an arrow joins them); each shape sits inside its compartment, with room for its name; compartments keep a cell's order down the page and panels theirs across it; every shape is its standard size;
+  - should hold: shapes level in the original stay level, shapes in a column stay in a column (an arrow drawn straight down stays straight);
+  - as small as possible: the canvas's width plus height;
+  - where there is slack: each shape stays where it was, scaled down evenly.
+  - It never reorders, so it adds no crossings by reordering; it runs in 4–150 ms.
+- **Layered (ELK)** (`src/layout/solvers/elk.ts`): compartments as nested boxes in a cell's order (ELK's partitions), the membrane as one fixed row with a connection point under each receptor, panels laid out one at a time side by side. It answers asynchronously, so step 5 works its layout out in the background.
+- **Both share their input and output** (`src/layout/solvers/graph.ts`): units (shapes that travel together, standard sizes), compartments, panels and arrows in; bands across their panel, headings, arrow bows and text placement out, the same as the other ways.
+- **The comparison page** (`?compare=<run id>`, linked from step 5: "Compare every way on this figure") draws one figure five ways: before step 5, Compact, ELK, fCoSE and Squeeze, each with both sets of numbers. It only reads the run. `node scripts/compare-layouts.ts` prints the same for the saved test figures.
 - **Redraw as a cell** (`src/layout/adapt.ts`) feeds BioPathway Studio's engine (copied and marked: `cellLayout.ts`, `edgeLabelLayout.ts`) only from the figure:
   - a shape's compartment is the one it is drawn in; a shape with none is placed beside its most-connected partner, and listed;
   - the figure's own compartment names are kept;

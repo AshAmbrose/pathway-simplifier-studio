@@ -1,5 +1,5 @@
 /**
- * Step 5, general-purpose layout solvers (prototype): what ELK and fCoSE are given, and how their answer becomes
+ * Step 5, the solver-based layouts (ELK, fCoSE, Squeeze): what ELK and fCoSE are given, and how their answer becomes
  * the app's stored layout (value.ts). Both solvers get the same input, so the comparison is fair:
  *  - units: shapes that travel together (a cluster, shapes drawn touching), each a fixed-size block with its rows
  *    as drawn (shapes.ts), at one size per kind, with names that fit;

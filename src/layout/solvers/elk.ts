@@ -1,5 +1,5 @@
 /**
- * Step 5 prototype: the layered (Sugiyama) layout from ELK, the Eclipse Layout Kernel (elkjs, EPL-2.0).
+ * Step 5, "Layered (ELK)": the layered (Sugiyama) layout from ELK, the Eclipse Layout Kernel (elkjs, EPL-2.0).
  * The figure becomes a nested graph:
  *  - panels side by side (Wnt OFF | ON), each holding its compartments;
  *  - compartments stacked in a cell's order (outside, membrane, cytoplasm, nucleus) by ELK's partitions; an

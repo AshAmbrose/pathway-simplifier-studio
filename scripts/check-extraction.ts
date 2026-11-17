@@ -287,6 +287,20 @@ else {
     check(!tbad.length && typical < width && tm.crossings <= before.crossings && tm.behind <= before.behind,
       `${r.id}, tidy: with all ${TIDY_RULES.length} rules and with each switched off, applies cleanly, on its canvas, no overlapping shapes, the same every time; shapes stay put (typical move ${typical.toFixed(0)} px, a shape is ${width.toFixed(0)}); crossings ${before.crossings} → ${tm.crossings}, behind a shape ${before.behind} → ${tm.behind}${tbad.length ? ': ' + [...new Set(tbad)].slice(0, 6).join('; ') : ''}`);
 
+    // Squeeze (order kept, gaps closed by the constraint solver): applies cleanly, no overlaps, the same every time,
+    // and no shapes swapped between left and right or above and below beyond what new sizes force (most pairs keep their order).
+    const squeeze = { ...DEFAULT_LAYOUT, mode: 'kept' as const };
+    const sq = problems(x, W, H, squeeze, 0.15, 'squeeze');
+    const pos = (y: typeof x) => new Map(y.elements.filter((e) => e.kind !== 'heading').map((e) => { const [cw, ch] = y.canvas ?? [W, H]; return [e.id, { x: ((e.box[0] + e.box[2] / 2) / 100) * cw, y: ((e.box[1] + e.box[3] / 2) / 100) * ch }]; }));
+    const pa = pos(x), pb = pos(sq.y), ids = [...pa.keys()];
+    let kept = 0, pairs = 0;
+    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+      const p = pa.get(ids[i])!, q = pa.get(ids[j])!, P = pb.get(ids[i])!, Q = pb.get(ids[j])!;
+      if (Math.abs(p.x - q.x) > 5) { pairs++; if (Math.sign(p.x - q.x) === Math.sign(P.x - Q.x)) kept++; }
+      if (Math.abs(p.y - q.y) > 5) { pairs++; if (Math.sign(p.y - q.y) === Math.sign(P.y - Q.y)) kept++; }
+    }
+    check(!sq.bad.length && kept / pairs >= 0.9, `${r.id}, squeeze: applies cleanly, on its canvas, no overlapping shapes, the same every time; ${Math.round((kept / pairs) * 100)}% of pairs keep their order${sq.bad.length ? ': ' + [...new Set(sq.bad)].slice(0, 6).join('; ') : ''}`);
+
     // Compact (the default): every rule on, and each switched off; adds no crossings.
     const compact = { ...DEFAULT_LAYOUT, mode: 'compact' as const };
     const kbad = [compact, ...COMPACT_RULES.map((rule) => ({ ...compact, off: [rule.key] }))].flatMap((o) => problems(x, W, H, o, 0.15, o.off[0] ?? 'all rules on').bad);

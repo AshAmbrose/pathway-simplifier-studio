@@ -1,9 +1,11 @@
 /**
- * Step 5 panel: lay the figure out again, and see whether it reads better. Three ways (src/layout/):
+ * Step 5 panel: lay the figure out again, and see whether it reads better. Five ways (src/layout/):
  *  - "Compact" (the default): the original's rows and columns, re-spaced evenly; compartments fit their contents;
  *    the shape most routes lead into goes in the middle;
  *  - "Tidy as drawn": keeps the authors' arrangement and scale; lines up, closes gaps, crops, moves overlapping
  *    shapes clear, bows arrows around shapes;
+ *  - "Squeeze": keeps the original's order exactly and closes the gaps, with a constraint solver (solvers/compaction.ts);
+ *  - "Layered (ELK)": a general-purpose layered layout, ranked top to bottom (solvers/elk.ts);
  *  - "Redraw as a cell": BioPathway Studio's Organize Layout, read top to bottom. Made for figures drawn from
  *    scratch, so on a published figure it often reads worse; the numbers say so.
  *  - The main button stores the new positions as one change; nothing moves until it is pressed.
@@ -11,6 +13,7 @@
  *  - Switches: one consistent style (listing what it replaces), member names under collapsed shapes, and each
  *    layout rule, so a rule that doesn't help this figure can be switched off.
  *  - What the layout couldn't do, or decided without the figure to go on, is listed.
+ *  - A link opens the comparison page: every way side by side on this figure, with the same numbers.
  *  - After the layout, a shape can be selected and dragged; laying out again clears those moves.
  */
 import { Check, ChevronDown } from 'lucide-react';
@@ -39,7 +42,7 @@ function Row({ label, before, after, hint }: { label: string; before: number; af
   );
 }
 
-export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, restyled, replaces, hasSublabels, moves, onLayout, onRule, onSublabels, onMode, onRestyle, onUndoMoves, onHover, onShow }: {
+export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, restyled, replaces, hasSublabels, moves, compareHref, onLayout, onRule, onSublabels, onMode, onRestyle, onUndoMoves, onHover, onShow }: {
   /** The figure before this step (for names). */
   x: Extraction;
   laidOut: boolean;
@@ -55,6 +58,8 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
   hasSublabels: boolean;
   /** Shapes moved by hand since the layout. */
   moves: number;
+  /** The comparison page for this figure (src/components/LayoutCompare.tsx). */
+  compareHref: string;
   onLayout: () => void;
   onRule: (k: string, on: boolean) => void;
   onSublabels: (on: boolean) => void;
@@ -76,20 +81,23 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
     </li>
   );
   const mode: LayoutMode = opts.mode ?? 'compact';
-  const rules: readonly { key: string; name: string; why: string }[] = mode === 'compact' ? COMPACT_RULES : mode === 'tidy' ? TIDY_RULES : RULES;
-  const verb = mode === 'compact' ? 'Compact' : mode === 'tidy' ? 'Tidy' : 'Redraw';
+  // Squeeze and Layered have no rules to switch: their constraints are what they are.
+  const rules: readonly { key: string; name: string; why: string }[] = mode === 'compact' ? COMPACT_RULES : mode === 'tidy' ? TIDY_RULES : mode === 'cell' ? RULES : [];
+  const verb = { compact: 'Compact', tidy: 'Tidy', kept: 'Squeeze', layered: 'Lay out', cell: 'Redraw' }[mode];
   const offHere = opts.off.filter((k) => rules.some((r) => r.key === k)).length;
   const anyNotes = notes.beside.length + notes.emptyRegions.length + notes.behind.length + notes.textClashes.length > 0;
   const lead = {
     compact: "Keeps the figure's arrangement (what sits left of, above or beside what) but re-spaces it on an even grid: empty space goes, compartments fit what is in them, shapes of one kind share one size, and the shape most routes lead into goes in the middle with its routes either side.",
     tidy: 'Keeps the figure as its authors drew it, at the same size, and tidies it: shapes nearly in line are lined up, space left by what earlier steps took out is closed and cropped, overlapping shapes are moved clear, and arrows bow around shapes.',
+    kept: "Keeps the original's order exactly (every shape stays left of, right of, above or below the same neighbours) and closes the gaps: shapes take one size per kind, rows stay level and columns straight, and a constraint solver makes the canvas as small as those rules allow. It never reorders, so it can't fix an arrangement that was awkward to begin with.",
+    layered: "ELK's layered layout, a general-purpose method for network diagrams: ranks shapes so arrows run down, orders each row to cut crossings, keeps the membrane as one row and compartments in a cell's order. Good at overall structure; it reorders freely, so the result can look little like the original.",
     cell: 'Redraws the figure from scratch as a cell, read top to bottom: compartments as rows, each part of the figure as a column, the main route into the nucleus as a straight line, regulators beside what they act on, outcomes underneath. Made for figures drawn from scratch, so a published figure often reads worse this way: check the numbers.',
   }[mode];
   return (
     <div>
       <section className={section}>
-        <div className="grid grid-cols-3 gap-0.5 rounded bg-sunk p-0.5" role="radiogroup" aria-label="How to lay out">
-          {([['compact', 'Compact'], ['tidy', 'Tidy as drawn'], ['cell', 'Redraw as a cell']] as const).map(([m, label]) => (
+        <div className="grid grid-cols-2 gap-0.5 rounded bg-sunk p-0.5" role="radiogroup" aria-label="How to lay out">
+          {([['compact', 'Compact'], ['tidy', 'Tidy as drawn'], ['kept', 'Squeeze'], ['layered', 'Layered (ELK)'], ['cell', 'Redraw as a cell']] as const).map(([m, label]) => (
             <button key={m} role="radio" aria-checked={mode === m} onClick={() => mode !== m && onMode(m)}
               className={`rounded-[3px] px-2 py-1.5 text-body ${mode === m ? 'bg-panel font-semibold text-ink shadow-[0_1px_2px_rgb(0_0_0/0.12)]' : 'text-ink-2 hover:text-ink'}`}>{label}</button>
           ))}
@@ -99,9 +107,10 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
         {laidOut && stale && <p className={`${warnNote} mt-3`}>The figure or the switches below changed since this layout was made, so it may not match.</p>}
         {(!laidOut || stale) && (
           <button className={`${cta} mt-3`} onClick={onLayout}>
-            {laidOut ? `${verb} again` : mode === 'compact' ? 'Compact the figure' : mode === 'tidy' ? 'Tidy the figure' : 'Redraw as a cell'}
+            {laidOut ? `${verb} again` : { compact: 'Compact the figure', tidy: 'Tidy the figure', kept: 'Squeeze the figure', layered: 'Lay out in layers', cell: 'Redraw as a cell' }[mode]}
           </button>
         )}
+        <p className={`${meta} mt-2`}><a className={quiet} href={compareHref} target="_blank" rel="noreferrer">Compare every way on this figure</a> (opens a new tab; nothing is saved)</p>
         {moves > 0 && (
           <p className={`${meta} mt-2`}>
             <span className="num">{moves}</span> shape{moves === 1 ? '' : 's'} moved by hand{stale ? '; laying out again clears these moves' : ''}. <button className={quiet} onClick={onUndoMoves}>Undo moves</button>
@@ -145,7 +154,7 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
         )}
       </section>
 
-      <details className={`${section} group`}>
+      {rules.length > 0 && <details className={`${section} group`}>
         <summary className="flex cursor-pointer list-none items-center justify-between">
           <span className={sectionTitle}>{mode === 'cell' ? 'Layout rules' : mode === 'tidy' ? 'Tidying rules' : 'Compacting rules'}</span>
           <span className={`${meta} flex items-center gap-1`}><span className="num">{rules.length - offHere} of {rules.length}</span> on<ChevronDown size={ICON} className="transition-transform group-open:rotate-180" /></span>
@@ -161,7 +170,7 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
             </li>
           ))}
         </ul>
-      </details>
+      </details>}
 
       {anyNotes && (
         <section className={section}>
