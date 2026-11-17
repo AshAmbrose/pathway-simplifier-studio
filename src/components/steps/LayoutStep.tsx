@@ -103,7 +103,7 @@ export function LayoutStep({ x, laidOut, stale, opts, before, after, notes, rest
           ))}
         </div>
         {!laidOut && <p className={`${body} mt-3`}>{lead}</p>}
-        {laidOut && !stale && <p className="mt-3 flex items-start gap-2 text-body text-ok"><Check size={ICON} className="mt-0.5 shrink-0" />Laid out. Click a shape on the right, then drag it to fine-tune.</p>}
+        {laidOut && !stale && <p className="mt-3 flex items-start gap-2 text-body text-ok"><Check size={ICON} className="mt-0.5 shrink-0" />Laid out. Click a shape on the figure, then drag it to fine-tune.</p>}
         {laidOut && stale && <p className={`${warnNote} mt-3`}>The figure or the switches below changed since this layout was made, so it may not match.</p>}
         {(!laidOut || stale) && (
           <button className={`${cta} mt-3`} onClick={onLayout}>

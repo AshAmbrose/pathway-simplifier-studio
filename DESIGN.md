@@ -122,7 +122,7 @@ The drawn figures are content, not interface. Their colours are the authors', or
 - **Lists of choices** (issues, repeats, clusters, changes) are rows divided by hairlines. The selected row takes the accent wash and a 1px accent outline.
 
 ## Elevation & Depth
-Flat by default. Only things that float above the page cast a shadow: menus, pop-ups and the floating original (`0 8px 24px rgb(0 0 0 / 0.14)`). Panels, cards and rows have none.
+Flat by default. Only things that float above the page cast a shadow: menus and pop-ups (`0 8px 24px rgb(0 0 0 / 0.14)`). Panels, cards and rows have none.
 
 ## Shapes
 Small corners (4px, 3px inside a segmented control), 1px hairlines, rounded-full only for status dots and badges.

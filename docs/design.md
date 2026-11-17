@@ -78,12 +78,12 @@ All four are from *Signal Transduction and Targeted Therapy* (CC BY 4.0).
 4. Clusters
 5. Layout
 
-Any step can be skipped, and Back always works, including back to Check. Each simplification step is shown before → after: the left view is the figure after every earlier step, the right view the same with this step's choices. What a step leaves out stays on the right view, faded, so it can be clicked back in. The original opens in a small floating window.
+Any step can be skipped, and Back always works, including back to Check. Each simplification step shows one canvas: the figure with this step's choices, where what the step leaves out stays faded so it can be clicked back in. The original sits folded to a narrow rail on the canvas's left (its name turned on its side); opened, it shows the uploaded image beside the canvas, sharing its zoom while positions are the original's (steps 1–4). It stays open or folded across steps, remembered in the browser.
 
 **Why:**
 - **One line to follow:** an early version had a "Current | Simplified" switch in the header. In testing it was confusing, so the whole process became one walk-through.
 - **A fixed order:** each step works on a cleaner figure than the last. For example, a name fixed in step 1 is the name step 2 shows.
-- **Before → after for each step:** the effect of one step is easy to see on its own.
+- **One canvas after Check (user, 2026-11-17):** the first version showed every step before → after. But each step already fades or marks what it changes, so the "before" view repeated the canvas and took half the width. Check keeps its side-by-side view, because comparing with the image is its job; the steps get the room for their panels, and the original is one click away.
 
 **How it fits the change list** (see 2):
 - **Every choice is a change in the same list, tagged with its step.**
@@ -161,7 +161,7 @@ Any step can be skipped, and Back always works, including back to Check. Each si
   - **Arrows:** bowed around shapes only if that adds no crossings, and arrow text kept clear.
   - **On the test figures:** no new crossings on Yu, Guo or Wnt; arrows behind shapes go down on all four; on Guo kept to its canonical routes, NEMO sits between BCR and TNFR with IκB straight below.
 - **Arrows everywhere are straight lines** (`src/render/edgeGeometry.ts`). BioPathway Studio's port-to-port curves made arrows in published figures look curly. Where several arrows meet one side of a shape, their ends are spread along it in the order of the angle they arrive at (a bowed arrow arrives from its bow), so they can be told apart and don't cross. Arrows that meet at a shape still count as crossing if their lines cross away from it, and an arrow may bow to avoid that.
-- **In step 5 the two views zoom separately,** each fitting its own picture. The zoom menu and "Reset view" apply to both. Every step opens with the whole picture in view.
+- **In step 5 the original and the laid-out figure zoom separately** (when the original is open), each fitting its own picture. The zoom menu and "Reset view" apply to both. Every step opens with the whole picture in view.
 - **Tidy as drawn** (`src/layout/tidy.ts`) keeps the authors' arrangement and scale. Shapes that travel together (a cluster, shapes drawn touching) move as one. Each rule can be switched off:
   - **Line up:** shapes nearly in one row or column are put exactly in line (small moves only).
   - **No overlaps:** a shape covering another, from a different cluster, is moved the shortest way clear (on Guo, TRAF6 under cIAP2, and Proteasome over p50).
