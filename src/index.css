@@ -22,6 +22,9 @@
   --accent: #e8590c;      /* selection, current step, focus */
   --accent-ink: #b8430a;  /* accent as text */
   --accent-wash: #fff1e8; /* a selected row */
+  --cta: #c2410c;         /* the next thing to do: a deeper orange, so white text on it is 5.2:1 */
+  --cta-hover: #a5370a;
+  --on-cta: #ffffff;
   --ok: #2b7a4b;
   --ok-wash: #eaf6ef;
   --warn-ink: #7a4a00;
@@ -42,6 +45,9 @@
     --accent: #ff7a33;
     --accent-ink: #ff9a5c;
     --accent-wash: #33210f;
+    --cta: #ff7a33;
+    --cta-hover: #ff9152;
+    --on-cta: #111316;
     --ok: #63c98e;
     --ok-wash: #142a1d;
     --warn-ink: #f2cf7a;
@@ -64,6 +70,9 @@
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-accent-wash: var(--accent-wash);
+  --color-cta: var(--cta);
+  --color-cta-hover: var(--cta-hover);
+  --color-on-cta: var(--on-cta);
   --color-ok: var(--ok);
   --color-ok-wash: var(--ok-wash);
   --color-warn-ink: var(--warn-ink);

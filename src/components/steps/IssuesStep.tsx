@@ -12,7 +12,7 @@ import type { Issue } from '../../simplify/issues.ts';
 import type { AppliedEdit, Edit, Extraction, Simplify } from '../../types/extraction.ts';
 import { Check } from 'lucide-react';
 import { NameField } from '../EditPopover.tsx';
-import { body, button, ICON, meta, quiet, row, section, sectionTitle } from '../ui.ts';
+import { body, button, ICON, meta, quiet, row, section, sectionTitle, toDecide } from '../ui.ts';
 
 type Decision = Simplify['issues'][string];
 const btn = `${button} px-2 py-1`;
@@ -109,7 +109,10 @@ function IssueCard({ x, i, status, names, active, onSettle, onHover, onSelect }:
   return (
     <li data-issue={i.key} className={row(active, !!status)}
       onClick={() => onSelect(i)} onMouseEnter={() => onHover([i.id])} onMouseLeave={() => onHover(null)}>
-      <div className="font-semibold text-ink">{title}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="font-semibold text-ink">{title}</div>
+        {!status && <span className={toDecide}><span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />To decide</span>}
+      </div>
       {i.basis && <div className={`${meta} mt-0.5`}>{cleanText(x, i.basis)}</div>}
       {status ? (
         <div className="mt-1.5 flex items-start justify-between gap-2 text-body text-ok">

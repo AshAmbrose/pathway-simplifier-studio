@@ -5,7 +5,7 @@
  */
 import { ArrowLeft, ArrowRight, Check as Tick } from 'lucide-react';
 import { STEPS, type StepId } from '../types/extraction.ts';
-import { button, ICON, primary, quiet } from './ui.ts';
+import { button, cta, ICON, primary, quiet } from './ui.ts';
 
 export type JourneyStep = 'check' | StepId;
 export const JOURNEY: JourneyStep[] = ['check', ...STEPS];
@@ -21,13 +21,15 @@ export const STEP_INFO: Record<JourneyStep, { n: string; name: string; what: str
 /** "Check", or with its number where the order matters: "Step 5: Layout". */
 export const stepTitle = (s: JourneyStep) => (STEP_INFO[s].n ? `Step ${STEP_INFO[s].n}: ${STEP_INFO[s].name}` : STEP_INFO[s].name);
 
-export function StepBar({ current, status, choices, note, onJump, onBack, onSkip, onNext, onReset }: {
+export function StepBar({ current, status, choices, note, nextIsAction = true, onJump, onBack, onSkip, onNext, onReset }: {
   current: JourneyStep;
   status: Partial<Record<StepId, 'done' | 'skipped'>>;
   /** How many choices the current step holds (Skip and Reset undo them). Not used on Check. */
   choices: number;
   /** A short line beside the controls (e.g. "2 questions still open"). */
   note?: string | null;
+  /** Next is the thing to do now (orange, larger). Off while the screen has another next thing (open questions, a layout to make). */
+  nextIsAction?: boolean;
   onJump: (s: JourneyStep) => void; onNext: () => void;
   onBack?: () => void; onSkip?: () => void; onReset?: () => void;
 }) {
@@ -63,7 +65,7 @@ export function StepBar({ current, status, choices, note, onJump, onBack, onSkip
           </button>
         )}
         {!checking && <button className={button} onClick={onBack}><ArrowLeft size={ICON} />Back</button>}
-        <button className={primary} onClick={onNext}>
+        <button className={nextIsAction ? cta : primary} onClick={onNext}>
           {checking ? <>Continue to simplify<ArrowRight size={ICON} /></> : at === JOURNEY.length - 1 ? <>Finish<Tick size={ICON} /></> : <>Next<ArrowRight size={ICON} /></>}
         </button>
       </div>

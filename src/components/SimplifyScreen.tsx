@@ -36,7 +36,7 @@ import { STEP_INFO, StepBar, stepTitle, type JourneyStep } from './StepBar.tsx';
 import { ClustersStep, type ClusterDraft } from './steps/ClustersStep.tsx';
 import { FocusStep } from './steps/FocusStep.tsx';
 import { RepeatsStep } from './steps/RepeatsStep.tsx';
-import { IssuesStep } from './steps/IssuesStep.tsx';
+import { IssuesStep, issueStatus } from './steps/IssuesStep.tsx';
 import { LayoutStep, type StyleReplaces } from './steps/LayoutStep.tsx';
 
 const chip = button;
@@ -266,6 +266,16 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     const boxes = ids.map((id) => boxOf(right.scene, id)).filter((b): b is BoxPx => !!b).map(toFrame);
     if (boxes.length) viewer.current?.focus(union(boxes, 0), { fill: 0.5, anchorX: 0.5 });
   };
+  // Step 1 opens with its first undecided issue selected and in view, so it's clear what to look at first.
+  useEffect(() => {
+    if (step !== 'issues' || activeIssue) return;
+    const first = issues.find((i) => !issueStatus(before.extraction, i, stepEdits, s.issues));
+    if (!first) return;
+    setActiveIssue(first.key);
+    requestAnimationFrame(() => show([first.id]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   /** A click on a shape: in step 1, open its issue; in step 2, add it or drop it. */
   const select = (id: string) => {
     if (step === 'issues') {
@@ -396,7 +406,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
         </div>
       )}
 
-      <StepBar current={step} status={s.steps} choices={choices} onJump={go} onBack={() => go(at > 0 ? STEPS[at - 1] : 'check')}
+      <StepBar current={step} status={s.steps} choices={choices} nextIsAction={!(step === 'layout' && !layoutEdit)} onJump={go} onBack={() => go(at > 0 ? STEPS[at - 1] : 'check')}
         onSkip={() => { clearStep(step, 'skipped'); if (at < STEPS.length - 1) go(STEPS[at + 1]); }} onNext={next} onReset={() => clearStep(step, null)} />
 
       <div className="mt-4 flex flex-col gap-6 lg:flex-row">

@@ -65,7 +65,7 @@ export function RunScreen({ run, imageUrl, onBack }: { run: RunRecord; imageUrl:
   const status = review.simplify?.steps ?? {};
   const firstOpen = STEPS.find((k) => !status[k]) ?? 'issues';
   const checkBar = (
-    <StepBar current="check" status={status} choices={0} onJump={setStep} onNext={() => setStep(firstOpen)}
+    <StepBar current="check" status={status} choices={0} nextIsAction={openQuestions === 0} onJump={setStep} onNext={() => setStep(firstOpen)}
       note={openQuestions ? `${openQuestions} question${openQuestions === 1 ? '' : 's'} still open (you can come back to ${openQuestions === 1 ? 'it' : 'them'})` : null} />
   );
   const notices = (

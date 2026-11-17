@@ -11,7 +11,7 @@ import { applyEdits } from '../../edit/applyEdits.ts';
 import type { Apart, RepeatGroup } from '../../simplify/repeats.ts';
 import type { Tracing } from '../../simplify/routes.ts';
 import type { AppliedEdit, Edit, Extraction, Simplify } from '../../types/extraction.ts';
-import { body, button, meta, quiet, row, section, sectionTitle, warnNote } from '../ui.ts';
+import { body, button, meta, quiet, row, section, sectionTitle, toDecide, warnNote } from '../ui.ts';
 
 const btn = `${button} px-2 py-1`;
 const small = meta;
@@ -87,7 +87,10 @@ export function RepeatsStep({ x, tracing, panels, groups, apart, edits, active, 
               return (
                 <li key={g.key} data-repeat={g.key} className={row(active === g.key, done)} onClick={() => onSelect(g)}
                   onMouseEnter={() => onHover(g.copies)} onMouseLeave={() => onHover(null)}>
-                  <div className="font-semibold text-ink">{g.name} <span className="num font-normal text-ink-3">· {g.copies.length} copies</span></div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-semibold text-ink">{g.name} <span className="num font-normal text-ink-3">· {g.copies.length} copies</span></div>
+                    {!done && <span className={toDecide}><span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />To decide</span>}
+                  </div>
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     <span className="num rounded border border-ink bg-ink px-2 py-0.5 text-meta font-medium text-on-ink" onMouseEnter={(e) => { e.stopPropagation(); onHover([keeper]); }}>
                       kept · {arrowsOf(keeper)} arrow{arrowsOf(keeper) === 1 ? '' : 's'}{partOf(keeper) ? ` · ${partOf(keeper)}` : ''}

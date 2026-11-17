@@ -14,6 +14,9 @@ colors:
   accent: "#e8590c"
   accent-ink: "#b8430a"
   accent-wash: "#fff1e8"
+  cta: "#c2410c"
+  cta-hover: "#a5370a"
+  on-cta: "#ffffff"
   ok: "#2b7a4b"
   ok-wash: "#eaf6ef"
   warn-ink: "#7a4a00"
@@ -55,6 +58,14 @@ spacing:
   md: "16px"
   lg: "24px"
 components:
+  button-action:
+    backgroundColor: "{colors.cta}"
+    textColor: "{colors.on-cta}"
+    rounded: "{rounded.md}"
+    padding: "8px 16px"
+    typography: "{typography.section}"
+  button-action-hover:
+    backgroundColor: "{colors.cta-hover}"
   button-primary:
     backgroundColor: "{colors.ink}"
     textColor: "{colors.on-ink}"
@@ -91,8 +102,10 @@ The drawn figures are content, not interface. Their colours are the authors', or
 
 ## Colors
 - **Restrained:** cool neutral greys plus one accent.
-- **Accent orange (`accent`)** means only "this is what you're looking at": the current step's underline, the selected row in a list, the hover outline on a figure, the item a question is about, and focus rings. It is never decoration. Pathway figures rarely use orange for their own outlines, so it reads as the interface, not the figure.
-- **Ink (`ink`)** is for primary actions (filled buttons) and for the shape selected for editing on a figure.
+- **Orange means "look here" and "do this next"**, and nothing else; it is never decoration. Pathway figures rarely use orange for their own outlines, so it reads as the interface, not the figure.
+  - **Look here (`accent`):** the current step's underline, the selected row, the hover outline on a figure, the item a question is about, "To decide" markers, and focus rings.
+  - **Do this next (`cta`, a deeper orange so white text on it is 5.2:1):** the one action button per screen, larger than the rest. It is the next question in Check while questions are open, "Compact the figure" in step 5 before it's laid out, and otherwise Next, Continue or Finish.
+- **Ink (`ink`)** is for main actions that aren't the next thing to do, and for the shape selected for editing on a figure.
 - **Status colours:** `ok` for done and settled, `warn` for things worth a look, `bad` for destructive actions and errors. Each always comes with words or a drawn icon, never colour alone.
 - **Contrast:** every text pair is at least 4.5:1 in both themes (meta text `ink-3`: 5.2:1 on paper in light, 6.8:1 in dark); control borders (`line-2`) are at least 3:1.
 - **Dark theme:** the same roles with dark values (paper `#111316`, panel `#191c20`, ink `#eceef1`, accent `#ff7a33`), chosen by the system setting.
@@ -115,7 +128,7 @@ Flat by default. Only things that float above the page cast a shadow: menus, pop
 Small corners (4px, 3px inside a segmented control), 1px hairlines, rounded-full only for status dots and badges.
 
 ## Components
-- **Buttons:** primary (ink-filled, one per screen region); button (hairline outline on panel); quiet (underlined text for minor actions such as Undo, Change, Cancel). Icons are drawn (Lucide, 15px beside text), never Unicode glyphs.
+- **Buttons:** action (orange, larger, the one next thing to do on the screen); primary (ink-filled, other main actions); button (hairline outline on panel); quiet (underlined text for minor actions such as Undo, Change, Cancel). Icons are drawn (Lucide, 15px beside text), never Unicode glyphs.
 - **Step rail:** numbered steps in tabular figures. The current step is in ink and semibold with a 2px accent underline; done steps have a small drawn tick in `ok`; skipped steps say "skipped".
 - **Segmented control** (Compact / Tidy as drawn / Redraw as a cell; Add shape / Add arrow): a `sunk` track, with the chosen option raised on `panel`.
 - **Notes:** a tinted band with no border (warn, ok, neutral). A coloured side border is never used.
@@ -125,5 +138,6 @@ Small corners (4px, 3px inside a segmented control), 1px hairlines, rounded-full
 - **Do** use the role names; add a role in `src/index.css` before reaching for a raw colour.
 - **Do** keep the figure the loudest thing on screen.
 - **Don't** nest boxes, add coloured side borders, or use emoji or Unicode arrows and ticks as icons.
-- **Don't** use the accent for anything but "what you're looking at".
+- **Don't** use orange for anything but "look here" and "do this next", and never show two orange action buttons at once.
+- **Do** open with the next thing ready: Check opens its first open question, and step 1 selects its first undecided issue.
 - **Don't** restyle the drawn figure as part of interface work.

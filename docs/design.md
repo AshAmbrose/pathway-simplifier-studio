@@ -177,7 +177,13 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - cool neutral greys and 1px hairlines instead of boxes;
 - one typeface (Public Sans, self-hosted) with tabular figures for counts and measures;
 - ink for primary actions;
-- one orange used only for "what you're looking at": the current step, the selected row, hover outlines on the figures.
+- one orange used only for "look here" (the current step, the selected row, hover outlines on the figures, "To decide" markers) and "do this next" (one larger orange action button per screen).
+
+**Then, from testing:** it wasn't always clear what to do next. So:
+- Check opens its first open question when you arrive, zoomed to its item, with orange-outlined answers;
+- step 1 selects its first undecided issue;
+- undecided items carry an orange "To decide" marker;
+- the next action is the one big orange button on each screen.
 
 Colours are named roles defined once per theme in `src/index.css`. Shared control styles are in `src/components/ui.ts`.
 

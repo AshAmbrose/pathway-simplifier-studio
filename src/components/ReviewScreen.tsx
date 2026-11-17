@@ -11,7 +11,7 @@
  *    changes in the same list are left as they are; they are shown in the simplification steps.
  */
 import { ArrowRight, ChevronDown, ListChecks, Spline, SquarePlus } from 'lucide-react';
-import { button, ICON, meta, note, primary, quiet } from './ui.ts';
+import { button, cta, ICON, meta, note, primary, quiet } from './ui.ts';
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { RunRecord } from '../api.ts';
 import { applyEdits, dependents, optionState } from '../edit/applyEdits.ts';
@@ -218,6 +218,12 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
 
   const openQuestion = (i: number) => { setPick(null); setCheck(null); setMode(null); setHoverOpt(null); setShowChanges(false); setActive({ kind: 'q', i }); };
   const close = () => { setActive(null); setHoverOpt(null); };
+  // On arrival, the first open question is already up and its item in view: the work starts where it is needed.
+  useEffect(() => {
+    const j = nextOpen(-1);
+    if (j !== null) openQuestion(j);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const stamp = (source: string) => (e: Edit): AppliedEdit => ({ ...e, key: newKey(), source, at: new Date().toISOString() });
 
@@ -376,7 +382,7 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
           </div>
         )}
         {openCount > 0 && !asExtracted && (
-          <button className={primary} onClick={() => { const j = nextOpen(qi ?? -1); if (j !== null) openQuestion(j); }}>
+          <button className={cta} onClick={() => { const j = nextOpen(qi ?? -1); if (j !== null) openQuestion(j); }}>
             {qi === null && nAnswered === 0 ? 'Start the questions' : 'Next question'}<ArrowRight size={ICON} />
           </button>
         )}
@@ -460,7 +466,7 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
             </Popover>
           );
           if (question && qi !== null) return (
-            <Popover anchor={anchorBox} place={place} width={300}>
+            <Popover anchor={anchorBox} place={place} width={380}>
               <QuestionPopover n={qi + 1} total={base.clarify.length} question={cleanText(base, question.question)} choices={choices} answered={answered(qi)}
                 onHover={setHoverOpt} onChoose={(oi) => choose(qi, oi)} onManual={() => fixByHand(qi)} onClear={() => clearAnswer(qi)} onClose={close} />
             </Popover>
