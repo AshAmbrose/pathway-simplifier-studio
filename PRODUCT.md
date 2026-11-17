@@ -24,7 +24,7 @@ Faithful first, then simpler, with scientific rigour. The figure is first copied
 ## Capabilities and Constraints
 - **The extraction is never altered.** Every answer, fix or simplification is a change in one list on top of it, shown in plain words and undoable.
 - **Nothing is hidden.** Problems, and changes that can no longer apply, are listed, never dropped. What a step leaves out is listed with its reason and can be restored.
-- **During extraction and Check, answers come only from what is drawn.** Suggestions from prior knowledge may come later, always labelled with their source.
+- **During extraction and Check, answers come only from what is drawn.** Prior knowledge comes in Simplify, always labelled with its source: step 1 identifies each shape from public databases, never from a model.
 - **No internal ids on screen.**
 - **Undecided:** an editing canvas for final tweaks after the last step (deferred).
 

@@ -3,6 +3,7 @@
  * and save the review. Types are shared with the server, so both sides agree on the shape of a run.
  */
 import type { RunRecord, RunSummary } from '../server/runs.ts';
+import type { LabelLookup } from './identify/types.ts';
 import type { Review } from './types/extraction.ts';
 
 export type { RunRecord, RunSummary };
@@ -28,6 +29,9 @@ export const runImageUrl = (id: string) => `/api/runs/${id}/image`;
 /** Sends an image for extraction (one model call); the saved run comes back. */
 export const extract = (body: { name: string; mimeType: string; data: string; width: number; height: number }) =>
   call<RunRecord>('/api/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+/** What public databases say a label is (server/identify.ts). Only the label text and the shape's kind are sent. */
+export const identify = (label: string, kind: string) =>
+  call<LabelLookup>('/api/identify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, kind }) });
 /**
  * Saves the change list, naming the version it was built on. If the run was saved somewhere else since,
  * nothing is written and the newer review comes back as `stale`.

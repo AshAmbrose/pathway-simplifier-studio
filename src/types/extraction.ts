@@ -12,6 +12,7 @@
  * Boxes are [x, y, width, height] in percent of the image (0–100); after step 5's layout, of its own canvas.
  */
 import { z } from 'zod';
+import { IdentitySchema } from '../identify/types.ts';
 
 const nullable = <T extends z.ZodTypeAny>(t: T) => t.nullable();
 const Box = z.array(z.number()).length(4).describe('[x, y, width, height] in percent of the image, 0–100');
@@ -66,6 +67,8 @@ export const CONFIDENCE = ['high', 'medium', 'low'] as const;
  *   set_layout        id = "layout", value = the new positions as JSON (see src/layout/adapt.ts, LayoutValue): every
  *                     shape's box, the compartments and panels redrawn as one cell, each arrow's bend and text spot.
  *                     Worked out by step 5 and stored, so the figure stays exactly as laid out.
+ *   identify          id = shape, value = what it is, as JSON (src/identify/types.ts, Identity): the database records
+ *                     chosen in step 1, why each matched, and who chose. The label as drawn is never changed.
  *   restyle           id = "style": one consistent style. Shapes take a fill by kind (at most five colours);
  *                     arrows are black, or red for a bar. Text colours go back to the default.
  * After merge_into and collapse, arrows that have become identical are drawn as one, an arrow from a shape to
@@ -76,7 +79,7 @@ export const MODEL_EDIT_OPS = [
   'set_arrow_head', 'set_arrow_line', 'set_arrow_meaning', 'set_arrow_text', 'set_label', 'remove_element',
   'add_to_group', 'remove_from_group', 'set_box', 'add_element',
 ] as const;
-export const EDIT_OPS = [...MODEL_EDIT_OPS, 'hide', 'merge_into', 'collapse', 'set_layout', 'restyle'] as const;
+export const EDIT_OPS = [...MODEL_EDIT_OPS, 'hide', 'merge_into', 'collapse', 'set_layout', 'restyle', 'identify'] as const;
 const editFields = {
   id: z.string().describe('the shape, group or arrow the change applies to'),
   to: nullable(z.string()).describe('the other shape or group, for moves and arrow ends; otherwise null'),
@@ -162,6 +165,8 @@ export const ExtractionSchema = z.object({
     textColour: nullable(z.string()).describe('label colour as #rrggbb'),
     /** Set only by step 4's collapse, never by the model: the members' names ("A + B + C") under a new name. */
     sublabel: z.string().nullable().optional(),
+    /** Set only by step 1's identify change, never by the model: the database records this shape stands for. */
+    identity: IdentitySchema.optional(),
   })),
   groups: z.array(z.object({ id: z.string(), members: z.array(z.string()), label: nullable(z.string()), region: nullable(z.string()) })),
   contacts: z.array(z.object({ a: z.string(), b: z.string(), kind: z.enum(CONTACT_KINDS) })),
@@ -226,6 +231,8 @@ export function extractionJsonSchema(): unknown {
   delete s.properties?.arrows?.items?.properties?.ends;
   // Nor for a collapsed shape's sub-label, which only simplification sets.
   delete s.properties?.elements?.items?.properties?.sublabel;
+  // Nor for what a shape is: step 1 finds that in public databases.
+  delete s.properties?.elements?.items?.properties?.identity;
   // Nor for the layout step's canvas, arrow bends and text spots.
   delete s.properties?.canvas;
   if (Array.isArray(s.required)) s.required = s.required.filter((k: string) => k !== 'canvas');

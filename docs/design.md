@@ -94,10 +94,42 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 - **Step 2's changes are rebuilt from its ticks and clicks.** Ticking a route back on restores it exactly. If the figure under it changed since (a correction in Check), the step says so and offers "Update" rather than changing anything unasked.
 
 **Step 1, Issues:**
-- **Shown beside the original,** not the step before: a typo or an unlabelled part is best judged against what was drawn. Clicking a card outlines its item in orange on both pictures.
-- **Lists:** the model's typo flags, every shape with no label, and the colour or styling the model thinks carries meaning.
+- **Judged against what was drawn:** open the original beside the canvas to compare. Clicking a card outlines its item in orange.
+- **Lists:** the model's typo flags, every shape with no label, what each shape is (below), and the colour or styling the model thinks carries meaning.
 - **Colour meanings are only acknowledged,** with an optional note. No key is drawn.
 - **Counts and clusters wait for their own steps.**
+
+**Step 1, what each shape is: grounded in public databases (user, 2026-11-17).** Every labelled shape is matched to real records, as the base for science-backed checks later (arrows against SIGNOR and OmniPath, same-molecule merges, complexes, modifications against UniProt).
+- **Where it sits:** in Issues, because an unidentified or ambiguous label is an issue like a typo. Check keeps its rule that answers come only from what is drawn; identities come from prior knowledge, so they belong in Simplify, each with its source.
+- **The services** (live lookups through the local server, `server/identify.ts`):
+
+  | What | Service | Licence | Used for |
+  |---|---|---|---|
+  | Genes and proteins | HGNC REST | CC0 | approved symbol, alias, previous symbol, approved name; families by symbol stem, with their gene groups |
+  | Proteins | UniProt REST (reviewed, human) | CC BY 4.0 | gene name, gene synonym, protein name |
+  | Complexes | Complex Portal (EBI) | CC0 | named human complexes |
+  | Processes, outcomes | Gene Ontology via EBI OLS | CC BY 4.0 | exact term names and synonyms |
+  | Small molecules, stimuli | ChEBI via EBI OLS | CC BY 4.0 | exact names and synonyms |
+
+- **What is sent:** only the label text (or one part of it), with a generic client name. No image, no figure name. Answers are cached on disk (`data/identify-cache/`, never committed), so a label is sent once and gives the same answer later. A service that can't be reached is shown as "Couldn't reach … Retry"; nothing is filled in.
+- **Labels are normalised** (`src/identify/normalise.ts`): Greek letters as gene symbols write them (IκBα → IKBA, PKCθ → PKCQ), sub- and superscripts, hyphens. Labels naming several molecules are split (IRAK1/4 → IRAK1 + IRAK4, Elongin B/C, LTA LTB); outcome boxes never are.
+- **Class words** ("Receptor", "Cytokine/Growth factor", "PTPs") are offered as "a class of molecules, not one", with a class term (GO "signaling receptor activity"), looked up by its exact name.
+- **What the user is asked** (`src/identify/candidates.ts`):
+  - **Exact:** the label is a gene's approved symbol, or a term's exact name. Taken as found and listed, and each can still be changed from the list.
+  - **To confirm:** one record, through an alias, a synonym, a name or a family.
+  - **To decide:** several records. Nothing is ticked until the user picks, so a quick click can't take the first.
+  - **Not found / Retry.** The user can always mark a shape "Not a molecule" or "Leave unidentified".
+- **Every option says why it matched, in the database's own words,** with a link to the record: "HGNC lists "TAK1" as an alias of NR2C2 (approved symbol)"; "HGNC lists "TAK1" as a previous symbol of MAP3K7". HGNC and UniProt naming the same gene are one option with both reasons (HGNC's record, UniProt's accession).
+- **Answers are pooled across services** until one names a record directly (an approved symbol, a gene or term name). Weaker matches keep the next service asked: "LPS" offers ChEBI's lipopolysaccharide beside HGNC's IRF6, for which "LPS" is a previous symbol.
+- **When a label is a gene's approved symbol, other genes' aliases and retired symbols don't compete** (HGNC lists "LAT" as an alias of SPNS1). A ChEBI "related synonym" is dropped when a record is named more directly.
+- **No AI in this step, on purpose (user, 2026-11-17):** however well a model is tuned, a curated database gives the same answer every time, with a record behind it, and can't invent a molecule.
+- **Stored as one change per shape (`identify`):** the records, why each matched, and who chose (the user, or an exact match). The label as drawn never changes. Undo and the change list work as for any change.
+- **On the test figures** (`node scripts/identify-coverage.ts`, online): of 97 distinct labels, 41 exact, 39 to confirm, 27 to decide, 4 class words, 12 not found. Not found are mostly outcome boxes ("Survival, inflammation…") and names no database lists as such (Frizzled, Dishevelled, IκB, LUBAC).
+- **Limits, kept visible:**
+  - **An exact symbol can be the wrong molecule:** in an NF-κB figure "BCR" is the B-cell receptor, but HGNC's approved symbol BCR is a RhoGEF. That's why exact matches stay changeable.
+  - **Aliases collide:** "p50" is an HGNC alias of five genes, "PKC" of PRRT2, "CARMA" of CRMA. The card shows that wording, so the scientist decides.
+  - **Close spellings are not matched:** the databases have no fuzzy search; the model's typo flags cover spelling.
+- **Next (in order):** arrows checked against SIGNOR, with OmniPath where SIGNOR has no record (flags only); same-molecule merges and complex suggestions from the identities; drawn modifications checked against UniProt's modified residues.
 
 **Step 2, Focus: routes are traced from the drawing.** There's no model call and no biology.
 - **Shapes that travel together form one unit:** shapes drawn touching, or drawn in one cluster.
