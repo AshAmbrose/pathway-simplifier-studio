@@ -143,6 +143,36 @@ async function stemFamily(term: string): Promise<Hit[]> {
   return [{ record, field: 'symbol stem', matched: symbols.join(', ') }];
 }
 
+/**
+ * A family named in words: "Frizzled", "Dishevelled", "protein kinase C". HGNC's approved names are searched for
+ * the phrase; genes whose name starts with it ("protein kinase C alpha", "frizzled class receptor 1") are looked
+ * up, and the gene groups at least two of them share are offered with all their members.
+ */
+async function nameFamily(term: string): Promise<Hit[]> {
+  const t = term.replace(/"/g, '').trim();
+  if (t.length < 4 || !/^[A-Za-z][A-Za-z0-9 -]+$/.test(t)) return [];
+  const found = await hgncSearch(`name:"${t}"`);
+  const docs = (await Promise.all(found.slice(0, 14).map((f) => hgncFetch(f.hgnc_id)))).filter((d): d is HgncDoc => !!d);
+  const named = docs.filter((d) => d.name.toLowerCase().startsWith(`${t.toLowerCase()} `) && d.locus_group === 'protein-coding gene');
+  const groups = new Map<number, { name: string; n: number }>();
+  for (const d of named) (d.gene_group_id ?? []).forEach((g, k) => groups.set(g, { name: d.gene_group![k], n: (groups.get(g)?.n ?? 0) + 1 }));
+  // Groups holding at least half as many of the named genes as the best one: "protein kinase C" keeps the PKC family
+  // (9) and C2-domain kinases (7), not F-BAR proteins (3, named "protein kinase C and casein kinase substrate …").
+  const ranked = [...groups].filter(([, v]) => v.n >= 2).sort((a, b) => b[1].n - a[1].n);
+  const shared = ranked.filter(([, v]) => v.n * 2 >= (ranked[0]?.[1].n ?? 0)).slice(0, 3);
+  const hits: Hit[] = [];
+  for (const [id, g] of shared) {
+    const members = (await hgncSearch(`gene_group_id:${id}`)).map((m) => m.symbol);
+    // Catch-all groups ("CD molecules", hundreds of genes) say nothing about a family.
+    if (members.length > 60) continue;
+    hits.push({
+      record: { db: 'HGNC gene group', id: String(id), name: g.name, members, url: `https://www.genenames.org/data/genegroup/#!/group/${id}` },
+      field: 'gene group', matched: `${g.n} genes named "${t} …"`,
+    });
+  }
+  return hits;
+}
+
 // ---- UniProt -----------------------------------------------------------------------------------------------
 
 /** Reviewed human entries whose gene name, gene synonym or protein name (recommended, alternative or short) equals the term. */
@@ -201,7 +231,7 @@ const rankField = (f: Field) => ['term name', 'exact synonym', 'related synonym'
 
 const MOLECULE_FIRST = new Set(['small molecule', 'stimulus']);
 /** How directly a field names the record, strongest first. */
-const STRENGTH: Field[] = ['approved symbol', 'gene name', 'term name', 'approved name', 'protein name', 'complex name', 'alias', 'gene synonym', 'exact synonym', 'previous symbol', 'related synonym', 'symbol stem', 'class term'];
+const STRENGTH: Field[] = ['approved symbol', 'gene name', 'term name', 'approved name', 'protein name', 'complex name', 'alias', 'gene synonym', 'exact synonym', 'previous symbol', 'related synonym', 'symbol stem', 'gene group', 'class term'];
 const PROCESS = new Set(['process', 'phenotype']);
 
 /** Every service that fits the kind, each spelling in turn, stopping at the first that answers with matches. */
@@ -223,6 +253,12 @@ export async function lookupTerm(term: string, kind: string): Promise<TermLookup
     out.generic = { word, classTerm: terms.find((h) => h.field === 'term name') ? { ...terms.find((h) => h.field === 'term name')!, field: 'class term' } : null };
     return out;
   }
+  // "Other", searched as a class of molecules: its term by exact name, in Gene Ontology, then ChEBI.
+  if (kind === 'class') {
+    out.hits = await tryAll('Gene Ontology', (s) => ontology(s, 'go'));
+    if (!out.hits.length) out.hits = await tryAll('ChEBI', (s) => ontology(s, 'chebi'));
+    return out;
+  }
   if (PROCESS.has(kind)) {
     out.hits = await tryAll('Gene Ontology', (s) => ontology(s, 'go'));
     return out;
@@ -240,6 +276,8 @@ export async function lookupTerm(term: string, kind: string): Promise<TermLookup
     // A family is only looked for under a plain-letter spelling ("JAK", "PTPs"), and only when nothing named it
     // directly: "STAT" is also a UniProt gene synonym of SOAT1, which must not hide the STAT family.
     [!!plain, async () => (strong() ? [] : ask('HGNC', () => stemFamily(plain!)))],
+    // A family named in words ("Frizzled", "protein kinase C"), when nothing named it directly.
+    [true, async () => (strong() || out.hits.some((h) => h.field === 'symbol stem') ? [] : ask('HGNC', () => nameFamily(term)))],
     [kind === 'complex' || /complex/i.test(term), () => ask('Complex Portal', () => complexes(term))],
     [!(MOLECULE_FIRST.has(kind) || kind === 'ligand'), async () => (out.hits.length ? [] : tryAll('ChEBI', (s) => ontology(s, 'chebi')))],
     // Last: any Gene Ontology term ("TCR" → T cell receptor complex, a cellular component).

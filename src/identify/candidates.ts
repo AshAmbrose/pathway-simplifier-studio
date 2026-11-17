@@ -18,7 +18,18 @@ export interface IdOption extends Hit {
   also: string[];
 }
 export interface PartChoice { term: string; status: IdStatus; options: IdOption[]; generic: TermLookup['generic']; tried: string[]; failed: string[] }
-export interface Judged { label: string; status: IdStatus; parts: PartChoice[]; proposal: Identity | null }
+export interface Judged {
+  label: string; status: IdStatus; parts: PartChoice[]; proposal: Identity | null;
+  /** Searched again under the user's own words ("CARMA1" for "CARMA"), and as what kind of thing. */
+  searchedAs?: { text: string; cls: OtherClass };
+}
+
+/** What the user can say a shape is when searching under their own words ("Other"), and the kind searched as. */
+export const OTHER_CLASSES = [
+  ['molecule', 'A gene or protein', 'protein'], ['family', 'A family of genes', 'protein family'], ['complex', 'A complex', 'complex'],
+  ['process', 'A process or outcome', 'process'], ['chemical', 'A chemical or stimulus', 'small molecule'], ['class', 'A class of molecules', 'class'],
+] as const;
+export type OtherClass = (typeof OTHER_CLASSES)[number][0];
 
 /** Why a record matched, in the database's own terms, so an alias never passes for the record's own name. */
 export function whyOf(term: string, h: Hit): string {
@@ -36,6 +47,7 @@ export function whyOf(term: string, h: Hit): string {
     case 'related synonym': return `${r.db} lists "${term}" only as a related synonym of "${r.name}" (${r.id})`;
     case 'complex name': return `Complex Portal ${r.id}: "${r.name}", a human complex whose name contains "${term.replace(/\s*complex$/i, '')}"`;
     case 'symbol stem': return `HGNC symbols ${(r.members ?? []).join(', ')} share the stem "${term.replace(/s$/, '').toUpperCase()}"${r.full ? `; ${r.full}` : ''}`;
+    case 'gene group': return `HGNC gene group ${r.id} "${r.name}" (${(r.members ?? []).join(', ')}): ${h.matched} belong to it`;
     case 'class term': return `${r.db} class term ${r.id}: "${r.name}"`;
   }
 }
@@ -66,7 +78,7 @@ function judgePart(p: TermLookup): PartChoice {
   }
   // A term that is only a related synonym (ChEBI lists "TNF-α" for a recombinant zebrafish protein) is dropped
   // when the label names a record more directly; it stays when the alternatives are as weak (a previous symbol).
-  const direct = (o: IdOption) => !['related synonym', 'previous symbol', 'symbol stem'].includes(o.field);
+  const direct = (o: IdOption) => !['related synonym', 'previous symbol', 'symbol stem', 'gene group'].includes(o.field);
   let options = [...byKey.values()];
   if (options.some(direct)) options = options.filter((o) => o.field !== 'related synonym');
   // A label that is a gene's approved symbol names that gene: other genes listing it as an alias or a retired
@@ -92,13 +104,16 @@ export function judge(l: LabelLookup): Judged {
 }
 
 /** The identity from one chosen option per part (index into its options; a generic part takes its class term). */
-export function identityOf(parts: PartChoice[], chosen: number[], by: Identity['by']): Identity {
+export function identityOf(parts: PartChoice[], chosen: number[], by: Identity['by'], searchedAs?: Judged['searchedAs']): Identity {
   const picked = parts.map((p, i) => (p.status === 'generic'
     ? (p.generic?.classTerm ? { ...p.generic.classTerm, why: whyOf(p.term, p.generic.classTerm), also: [] } : null)
     : p.options[chosen[i]] ?? null));
   const kept = picked.filter((v): v is IdOption => !!v);
-  const kind: Identity['kind'] = parts.every((p) => p.status === 'generic') ? 'generic' : parts.length > 1 ? 'set' : kindOf(kept[0]?.record ?? { db: 'HGNC', id: '', name: '', url: '' });
-  return { kind, records: kept.map((v) => v.record), how: kept.map((v) => [v.why, ...v.also].join('; ')), by };
+  const kind: Identity['kind'] = searchedAs?.cls === 'class' || parts.every((p) => p.status === 'generic') ? 'generic'
+    : parts.length > 1 ? 'set' : kindOf(kept[0]?.record ?? { db: 'HGNC', id: '', name: '', url: '' });
+  // Found under the user's own words: said so, so the record is never read as matching the label as drawn.
+  const said = searchedAs ? `Searched as "${searchedAs.text}" (your words): ` : '';
+  return { kind, records: kept.map((v) => v.record), how: kept.map((v) => said + [v.why, ...v.also].join('; ')), by };
 }
 
 /** The identity in a few words, for the change list and a settled card. */

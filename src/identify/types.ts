@@ -14,7 +14,7 @@ export type Database = (typeof DATABASES)[number];
  * never mistaken for the record's own name.
  */
 export const FIELDS = ['approved symbol', 'approved name', 'alias', 'previous symbol', 'gene name', 'gene synonym', 'protein name',
-  'term name', 'exact synonym', 'related synonym', 'complex name', 'symbol stem', 'class term'] as const;
+  'term name', 'exact synonym', 'related synonym', 'complex name', 'symbol stem', 'gene group', 'class term'] as const;
 export type Field = (typeof FIELDS)[number];
 
 export const RecordSchema = z.object({

@@ -105,12 +105,19 @@ Any step can be skipped, and Back always works, including back to Check. Each si
 
   | What | Service | Licence | Used for |
   |---|---|---|---|
-  | Genes and proteins | HGNC REST | CC0 | approved symbol, alias, previous symbol, approved name; families by symbol stem, with their gene groups |
+  | Genes and proteins | HGNC REST | CC0 | approved symbol, alias, previous symbol, approved name; families by symbol stem ("JAK") or by name ("Frizzled", "protein kinase C"), with their gene groups |
   | Proteins | UniProt REST (reviewed, human) | CC BY 4.0 | gene name, gene synonym, protein name |
   | Complexes | Complex Portal (EBI) | CC0 | named human complexes |
   | Processes, outcomes | Gene Ontology via EBI OLS | CC BY 4.0 | exact term names and synonyms |
   | Small molecules, stimuli | ChEBI via EBI OLS | CC BY 4.0 | exact names and synonyms |
 
+- **Why several databases (user, 2026-11-17):** each one knows a different kind of name, so together they match what a figure writes. One database alone misses most labels:
+  - **HGNC** names genes. It is the authority on symbols, and it keeps the aliases and retired symbols figures still use (NEMO → IKBKG, RANKL → TNFSF11, CARMA1 → CARD11), plus gene groups for families (JAK, the Protein kinase C family).
+  - **UniProt** names proteins. It catches protein names and short names HGNC doesn't hold as symbols ("TNF-a", "β-catenin", "BAFF receptor"), and gives each gene its protein accession.
+  - **The Complex Portal** names complexes ("Proteasome" → the 26S proteasome complex), which are neither one gene nor a family.
+  - **Gene Ontology** names processes and outcomes ("Gene expression"), and class terms for generic words ("Receptor" → signaling receptor activity).
+  - **ChEBI** names chemicals and stimuli (lipopolysaccharide, hydrogen peroxide), which no gene database holds.
+  - **They also check each other:** HGNC and UniProt naming the same gene become one option with both reasons; "LPS" is a retired HGNC symbol (IRF6) but a ChEBI chemical, and seeing both is what lets a scientist choose.
 - **What is sent:** only the label text (or one part of it), with a generic client name. No image, no figure name. Answers are cached on disk (`data/identify-cache/`, never committed), so a label is sent once and gives the same answer later. A service that can't be reached is shown as "Couldn't reach … Retry"; nothing is filled in.
 - **Labels are normalised** (`src/identify/normalise.ts`): Greek letters as gene symbols write them (IκBα → IKBA, PKCθ → PKCQ), sub- and superscripts, hyphens. Labels naming several molecules are split (IRAK1/4 → IRAK1 + IRAK4, Elongin B/C, LTA LTB); outcome boxes never are.
 - **Class words** ("Receptor", "Cytokine/Growth factor", "PTPs") are offered as "a class of molecules, not one", with a class term (GO "signaling receptor activity"), looked up by its exact name.
@@ -119,12 +126,15 @@ Any step can be skipped, and Back always works, including back to Check. Each si
   - **To confirm:** one record, through an alias, a synonym, a name or a family.
   - **To decide:** several records. Nothing is ticked until the user picks, so a quick click can't take the first.
   - **Not found / Retry.** The user can always mark a shape "Not a molecule" or "Leave unidentified".
+  - **Other (user, 2026-11-17):** every card offers "Other: none of these". The user says what it is in their own words and what kind of thing (a gene or protein, a family, a complex, a process, a chemical, a class of molecules), and the databases are searched again with that: "CARMA" as CARMA1 finds CARD11; "PKC" as "protein kinase C", a family, finds HGNC's Protein kinase C family. The stored reason says it was found under the user's words, so it's never read as matching the label as drawn.
+- **Shapes with the same label are one card,** answered together (Guo draws IKKα three times); each shape still gets its own change, so each can be undone.
+- **Any card can be clicked to work on it.** The orange highlight suggests the next one, but nothing has to be done in order (also for typos and unlabelled parts).
 - **Every option says why it matched, in the database's own words,** with a link to the record: "HGNC lists "TAK1" as an alias of NR2C2 (approved symbol)"; "HGNC lists "TAK1" as a previous symbol of MAP3K7". HGNC and UniProt naming the same gene are one option with both reasons (HGNC's record, UniProt's accession).
 - **Answers are pooled across services** until one names a record directly (an approved symbol, a gene or term name). Weaker matches keep the next service asked: "LPS" offers ChEBI's lipopolysaccharide beside HGNC's IRF6, for which "LPS" is a previous symbol.
 - **When a label is a gene's approved symbol, other genes' aliases and retired symbols don't compete** (HGNC lists "LAT" as an alias of SPNS1). A ChEBI "related synonym" is dropped when a record is named more directly.
 - **No AI in this step, on purpose (user, 2026-11-17):** however well a model is tuned, a curated database gives the same answer every time, with a record behind it, and can't invent a molecule.
 - **Stored as one change per shape (`identify`):** the records, why each matched, and who chose (the user, or an exact match). The label as drawn never changes. Undo and the change list work as for any change.
-- **On the test figures** (`node scripts/identify-coverage.ts`, online): of 97 distinct labels, 41 exact, 39 to confirm, 27 to decide, 4 class words, 12 not found. Not found are mostly outcome boxes ("Survival, inflammation…") and names no database lists as such (Frizzled, Dishevelled, IκB, LUBAC).
+- **On the test figures** (`node scripts/identify-coverage.ts`, online): of 123 distinct labels, 41 exact, 37 to confirm, 31 to decide, 4 class words, 10 not found. Not found are mostly outcome boxes ("Survival, inflammation…") and names no database lists as such (IκB, LUBAC); "Other" covers them.
 - **Limits, kept visible:**
   - **An exact symbol can be the wrong molecule:** in an NF-κB figure "BCR" is the B-cell receptor, but HGNC's approved symbol BCR is a RhoGEF. That's why exact matches stay changeable.
   - **Aliases collide:** "p50" is an HGNC alias of five genes, "PKC" of PRRT2, "CARMA" of CRMA. The card shows that wording, so the scientist decides.

@@ -36,7 +36,7 @@ import { measure } from '../src/layout/measures.ts';
 import { DEFAULT_LAYOUT } from '../src/layout/value.ts';
 import { STYLE_RED } from '../src/edit/applyEdits.ts';
 import { getRun, listRuns } from '../server/runs.ts';
-import { judge } from '../src/identify/candidates.ts';
+import { identityOf, judge } from '../src/identify/candidates.ts';
 import { genericWord, spellings, splitLabel } from '../src/identify/normalise.ts';
 import type { DbRecord, Hit, TermLookup } from '../src/identify/types.ts';
 
@@ -380,6 +380,9 @@ else {
   check(one('Zorblax', part('Zorblax', [])).status === 'not found' && one('X', part('X', [], ['HGNC'])).status === 'failed', 'identify: no record is "not found"; an unreachable service is "failed" (retry), never filled in');
   const gexp = judge({ label: 'Gene expression', kind: 'process', parts: [part('Gene expression', [{ record: rec('GO', 'GO:0010467', 'gene expression'), field: 'term name', matched: 'gene expression' }])] });
   check(gexp.status === 'exact' && gexp.proposal?.kind === 'process', 'identify: "Gene expression" is the GO term by its exact name, a process');
+  const again = identityOf(tak1.parts, [1], 'you', { text: 'TAK1 kinase', cls: 'molecule' });
+  check(again.records[0].name === 'MAP3K7' && again.how[0].startsWith('Searched as "TAK1 kinase" (your words)'), 'identify: a record found under the user\'s own words ("Other") says so in its reason');
+  check(identityOf(gexp.parts, [0], 'you', { text: 'gene expression', cls: 'class' }).kind === 'generic', 'identify: searched as a class of molecules, the identity is a class');
   const bad = applyEdits(base, [E('identify', 'e1', null, JSON.stringify({ kind: 'molecule', records: [{ db: 'Made-up DB', id: 'x' }] }))]);
   check(bad.failed.length === 1 && !bad.extraction.elements[0].identity, 'identify: an identity not in the expected form is refused, and nothing is set');
 }

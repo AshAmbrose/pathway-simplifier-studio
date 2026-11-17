@@ -17,6 +17,8 @@ export interface Issue {
   kind: IssueKind;
   /** The shape, group or arrow it is about. */
   id: string;
+  /** What each shape is: every shape with this label, answered together (the first is `id`). */
+  ids?: string[];
   asWritten: string | null;
   suggestion: string | null;
   /** The model's reason, in its words; or what makes it an issue. */
