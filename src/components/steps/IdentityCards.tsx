@@ -185,7 +185,16 @@ function IdentityCard({ i, j, chosen, active, onSettle, onHover, onSelect, onRet
               <select className="w-full rounded border border-line-2 bg-panel px-2 py-1 text-body" value={cls} aria-label="What kind of thing" onChange={(e) => setCls(e.target.value as OtherClass)}>
                 {OTHER_CLASSES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
               </select>
-              <button className={`${button} px-2 py-1`} disabled={!text.trim() || searching} onClick={() => { onSearch(i, { text: text.trim(), cls }); setOther(false); }}>{searching ? 'Searching…' : 'Search again'}</button>
+              <div className="flex flex-wrap gap-1">
+                <button className={`${button} px-2 py-1`} disabled={!text.trim() || searching} onClick={() => { onSearch(i, { text: text.trim(), cls }); setOther(false); }}>{searching ? 'Searching…' : 'Search again'}</button>
+                {/* Settles the card with the user's own words, kept as theirs: no database record is claimed. */}
+                <button className={`${primary} px-2 py-1`} disabled={!text.trim()} onClick={() => {
+                  const c = OTHER_CLASSES.find((v) => v[0] === cls)!;
+                  const kind = ({ molecule: 'molecule', family: 'family', complex: 'complex', process: 'process', chemical: 'chemical', class: 'generic' } as const)[cls];
+                  onSettle(i, store({ kind, records: [], how: [`Named by you: "${text.trim()}" (${c[1].toLowerCase()}); no database record`], by: 'you', yours: { text: text.trim(), kind: c[1] } }));
+                }}>Use my words</button>
+              </div>
+              <p className={meta}>Search again to find a record for it; or use your words as they are, kept as yours.</p>
             </div>
           )}
           <div className="flex flex-wrap gap-1 pt-0.5">

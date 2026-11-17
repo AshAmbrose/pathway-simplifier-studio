@@ -76,5 +76,10 @@ export const IdentitySchema = z.object({
   how: z.array(z.string()),
   /** Chosen by the user, or an exact approved-symbol match taken as found. */
   by: z.enum(['you', 'exact match']),
+  /**
+   * Named by the user in their own words ("Other" → "Use my words"), with what kind of thing they said it is.
+   * Kept apart from records: it is the user's statement, never presented as a database's.
+   */
+  yours: z.object({ text: z.string(), kind: z.string() }).optional(),
 });
 export type Identity = z.infer<typeof IdentitySchema>;

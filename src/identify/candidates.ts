@@ -118,6 +118,7 @@ export function identityOf(parts: PartChoice[], chosen: number[], by: Identity['
 
 /** The identity in a few words, for the change list and a settled card. */
 export function identityText(i: Identity): string {
+  if (i.yours && !i.records.length) return `"${i.yours.text}", ${i.yours.kind.toLowerCase()} (your words; no database record)`;
   const names = i.records.map((r) => (r.db === 'HGNC' || r.db === 'UniProt' ? r.name : `"${r.name}"`)).join(' + ');
   const ids = i.records.map((r) => (r.db === 'HGNC' && r.uniprot?.length ? `${r.id}, UniProt ${r.uniprot[0]}` : r.db === 'HGNC gene group' ? `HGNC gene group ${r.id}` : r.id)).join('; ');
   switch (i.kind) {

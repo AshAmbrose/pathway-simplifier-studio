@@ -36,7 +36,7 @@ import { measure } from '../src/layout/measures.ts';
 import { DEFAULT_LAYOUT } from '../src/layout/value.ts';
 import { STYLE_RED } from '../src/edit/applyEdits.ts';
 import { getRun, listRuns } from '../server/runs.ts';
-import { identityOf, judge } from '../src/identify/candidates.ts';
+import { identityOf, identityText, judge } from '../src/identify/candidates.ts';
 import { genericWord, spellings, splitLabel } from '../src/identify/normalise.ts';
 import type { DbRecord, Hit, TermLookup } from '../src/identify/types.ts';
 
@@ -383,6 +383,9 @@ else {
   const again = identityOf(tak1.parts, [1], 'you', { text: 'TAK1 kinase', cls: 'molecule' });
   check(again.records[0].name === 'MAP3K7' && again.how[0].startsWith('Searched as "TAK1 kinase" (your words)'), 'identify: a record found under the user\'s own words ("Other") says so in its reason');
   check(identityOf(gexp.parts, [0], 'you', { text: 'gene expression', cls: 'class' }).kind === 'generic', 'identify: searched as a class of molecules, the identity is a class');
+  const mine = applyEdits(base, [E('identify', 'e1', null, JSON.stringify({ kind: 'family', records: [], how: ['Named by you'], by: 'you', yours: { text: 'protein kinase C', kind: 'A family of genes' } }))]);
+  check(!mine.failed.length && mine.extraction.elements[0].identity?.yours?.text === 'protein kinase C' && /your words; no database record/.test(identityText(mine.extraction.elements[0].identity!)),
+    'identify: the user\'s own words can be stored, said to be theirs, with no database record claimed');
   const bad = applyEdits(base, [E('identify', 'e1', null, JSON.stringify({ kind: 'molecule', records: [{ db: 'Made-up DB', id: 'x' }] }))]);
   check(bad.failed.length === 1 && !bad.extraction.elements[0].identity, 'identify: an identity not in the expected form is refused, and nothing is set');
 }
