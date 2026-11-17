@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { getRun, runImageUrl, type RunRecord } from './api.ts';
+import { LayoutCompare } from './components/LayoutCompare.tsx';
 import { RunScreen } from './components/RunScreen.tsx';
 import { UploadScreen } from './components/UploadScreen.tsx';
 
@@ -23,6 +24,9 @@ export default function App() {
     const id = new URL(location.href).searchParams.get('run');
     if (id) open(id);
   }, []);
+  // Prototype: ?compare=<run id> shows step 5's layouts side by side (not linked from the app).
+  const compare = new URL(location.href).searchParams.get('compare');
+  if (compare) return <LayoutCompare runId={compare} />;
   if (run) return <RunScreen key={run.id} run={run} imageUrl={runImageUrl(run.id)} onBack={() => show(null)} />;
   return (
     <>

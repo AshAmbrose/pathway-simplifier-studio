@@ -16,7 +16,7 @@ export const STEP_INFO: Record<JourneyStep, { n: string; name: string; what: str
   focus: { n: '2', name: 'Focus', what: 'What do you want to show? Choose the routes to keep.' },
   repeats: { n: '3', name: 'Repeats', what: 'One copy of each plain repeat.' },
   clusters: { n: '4', name: 'Clusters', what: 'Collapse the clusters you choose into one shape.' },
-  layout: { n: '5', name: 'Layout', what: 'Compact the figure, tidy it as drawn, or redraw it as a cell.' },
+  layout: { n: '5', name: 'Layout', what: 'Lay the figure out again, five ways, and compare them by the numbers.' },
 };
 /** "Check", or with its number where the order matters: "Step 5: Layout". */
 export const stepTitle = (s: JourneyStep) => (STEP_INFO[s].n ? `Step ${STEP_INFO[s].n}: ${STEP_INFO[s].name}` : STEP_INFO[s].name);

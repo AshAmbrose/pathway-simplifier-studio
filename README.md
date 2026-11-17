@@ -22,9 +22,11 @@ A step bar across the top walks you through: **Check**, then **1 Issues → 2 Fo
    - **2 Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
    - **3 Repeats:** merge copies of a molecule drawn more than once in the same place and state. If the figure has panels, say first whether they are different conditions (copies stay apart) or one picture.
    - **4 Clusters:** open a cluster, tick the shapes that should become one, name it and press Collapse. Its members' names stay small under the new name.
-   - **5 Layout:** three ways, chosen at the top of the step.
+   - **5 Layout:** five ways, chosen at the top of the step. "Compare every way on this figure" opens them all side by side, with the same numbers (`?compare=<run id>`).
      - **Compact** (the default) keeps the figure's arrangement but re-spaces it on an even grid. Compartments fit what's in them, and shapes of one kind share one size. Where several routes meet in one shape, that shape goes in the middle of them, with what follows it straight down. Otherwise the longest route runs straight down the middle, with everything else packed beside it.
      - **Tidy as drawn** keeps the figure at its own size. It lines up shapes that are nearly in line, closes and crops the space earlier steps left, moves overlapping shapes clear, and bows arrows around shapes.
+     - **Squeeze** keeps the original's order exactly and closes the gaps: one size per kind, rows level, columns straight, the smallest canvas a constraint solver can find under those rules.
+     - **Layered (ELK)** uses a general-purpose network layout: shapes ranked so arrows run down, each row ordered to cut crossings.
      - **Redraw as a cell** rebuilds it top to bottom: compartments as rows, panels as columns, and the route into the nucleus as a straight line.
      - A table shows before → after: arrows crossing, behind a shape, and pointing up.
      - Optional: one consistent style, and hiding the member names under collapsed shapes. Any rule that doesn't help can be switched off.
@@ -36,6 +38,7 @@ A step bar across the top walks you through: **Check**, then **1 Issues → 2 Fo
 |---|---|
 | `npm run check:extraction` | Offline checks (no network) |
 | `npm run lint` | Type-check |
+| `node scripts/compare-layouts.ts` | Step 5's layouts on the saved test figures, side by side by the numbers (`FCOSE=1` adds fCoSE) |
 | `npm run spend` | AI spend by day |
 | `node scripts/make-practice-run.ts <result.json> <image> "<name>" [ids]` | A practice copy of a run with chosen shapes taken out |
 | `node scripts/check-practice.ts <run id>` | Says whether the removed shapes and arrows were put back |

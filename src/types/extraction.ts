@@ -110,7 +110,7 @@ export type StepId = (typeof STEPS)[number];
  *  - focus:  step 2's choices: routes and regulators ticked off, and shapes kept or dropped by clicking.
  *            The step's changes are worked out from these, so ticking a route back on restores it exactly.
  *  - panels: step 3's answer about the panels.
- *  - layout: step 5's switches: compact, tidy as drawn, or redraw as a cell; the layout rules in use (all on unless switched off) and whether collapsed
+ *  - layout: step 5's switches: compact, tidy as drawn, squeeze, layered (ELK) or redraw as a cell; the layout rules in use (all on unless switched off) and whether collapsed
  *            shapes show their members' names. The positions themselves are in the step's set_layout change.
  */
 export const SimplifySchema = z.object({
@@ -120,7 +120,7 @@ export const SimplifySchema = z.object({
   /** Step 3's question: are the figure's panels different conditions (repeats kept apart) or one picture? */
   panels: z.enum(['conditions', 'one']).nullable().optional(),
   /** Step 5's switches. */
-  layout: z.object({ mode: z.enum(['compact', 'tidy', 'cell']).optional(), off: z.array(z.string()), sublabels: z.boolean() }).optional(),
+  layout: z.object({ mode: z.enum(['compact', 'tidy', 'kept', 'layered', 'cell']).optional(), off: z.array(z.string()), sublabels: z.boolean() }).optional(),
 });
 export type Simplify = z.infer<typeof SimplifySchema>;
 export const EMPTY_SIMPLIFY: Simplify = { steps: {}, issues: {}, focus: { off: [], keep: [], drop: [] } };

@@ -48,7 +48,7 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 | `server/aiLedger.ts` | A log of every AI call and its cost, and the daily budget. |
 | `src/edit/` | Applying the list of changes to the extraction, the order they apply in (`order.ts`), and describing each in plain words (`describe.ts`, which also keeps internal ids off the screen). |
 | `src/simplify/` | The simplification steps' logic, without any screen: step 1's issues, step 2's route tracing (and the figure's parts), step 3's repeats, step 4's clusters. Step 5's is in `src/layout/`. |
-| `src/layout/` | Step 5: compact (`compact.ts`, the default), tidy as drawn (`tidy.ts`), redraw as a cell (BioPathway Studio's engine, copied and marked, fed by `adapt.ts`); shared shape sizes (`shapes.ts`), arrow bows and text placement (`arrows.ts`), and the before → after measures. |
+| `src/layout/` | Step 5: compact (`compact.ts`, the default), tidy as drawn (`tidy.ts`), squeeze (`solvers/compaction.ts`, order kept, kiwi.js constraint solver), layered (`solvers/elk.ts`, ELK), redraw as a cell (BioPathway Studio's engine, copied and marked, fed by `adapt.ts`); `solvers/` also holds fCoSE (comparison page only) and the space measures (`fit.ts`); shared shape sizes (`shapes.ts`), arrow bows and text placement (`arrows.ts`), and the before → after measures. |
 | `src/render/` | Turning an extraction into shapes and arrows at their positions (the original's, or step 5's canvas). |
 | `src/components/RunScreen.tsx` | One run: holds and saves the change list, and which step of the journey is open (Check, then ①–⑤). |
 | `src/components/StepBar.tsx` | The step bar across the top: the whole journey, with Back, Skip and Next. |
