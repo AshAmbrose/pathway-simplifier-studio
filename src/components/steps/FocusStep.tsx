@@ -122,7 +122,7 @@ export function FocusStep({ x, tracing, focus, hidden, arrowsLeftOut, onItem, on
         </div>
         {hidden.size === 0 ? <p className={`mt-1 ${small}`}>Nothing yet. Everything in the figure is kept.</p> : (
           <>
-            <p className={`mt-1 ${small} num`}>{hidden.size} shape{hidden.size === 1 ? '' : 's'} and {arrowsLeftOut} arrow{arrowsLeftOut === 1 ? '' : 's'}. Faded on the right-hand view; click one there to bring it back.</p>
+            <p className={`mt-1 ${small} num`}>{hidden.size} shape{hidden.size === 1 ? '' : 's'} and {arrowsLeftOut} arrow{arrowsLeftOut === 1 ? '' : 's'}. Faded on the figure; click one there to bring it back.</p>
             <ul className="mt-1.5 max-h-56 space-y-0.5 overflow-y-auto">
               {[...hidden].map(([id, why]) => (
                 <li key={id} className="flex items-center justify-between gap-2 text-body" onMouseEnter={() => onHover([id])} onMouseLeave={() => onHover(null)}>

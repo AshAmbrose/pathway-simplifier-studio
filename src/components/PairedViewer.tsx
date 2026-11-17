@@ -3,9 +3,13 @@
  * the right picture has its own size (`rightSize`), each pane with its own.
  * Wheel to zoom about the cursor, drag to pan, double-click to reset. `focus` moves the panes to a box.
  * Pop-ups are plain HTML laid over the right pane; `overlay` receives what it needs to place them.
+ * The left pane can fold away to a narrow rail (`leftCollapsed`), giving the right pane the room: the
+ * simplification steps show one canvas, with the original beside it only when asked for.
  */
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { BoxPx } from '../render/edgePorts.ts';
+import { ICON } from './ui.ts';
 
 interface View { x: number; y: number; w: number; h: number }
 
@@ -29,7 +33,7 @@ export interface ViewerHandle {
 
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 
-export function PairedViewer({ ref, width, height, rightSize, left, right, leftTitle, rightTitle, overlay, banner, hint, help, onBackgroundClick }: {
+export function PairedViewer({ ref, width, height, rightSize, left, right, leftTitle, rightTitle, overlay, banner, hint, help, onBackgroundClick, leftCollapsed = false, onToggleLeft }: {
   ref?: Ref<ViewerHandle>;
   width: number; height: number;
   /**
@@ -48,6 +52,9 @@ export function PairedViewer({ ref, width, height, rightSize, left, right, leftT
   help?: string;
   /** A click on the picture that hit no shape, with where it landed in picture coordinates. */
   onBackgroundClick?: (at: { x: number; y: number }) => void;
+  /** The left pane is folded to a rail with its title turned on its side; `onToggleLeft` opens or folds it. */
+  leftCollapsed?: boolean;
+  onToggleLeft?: () => void;
 }) {
   const linked = !rightSize;
   const worlds = [{ w: width, h: height }, { w: rightSize?.width ?? width, h: rightSize?.height ?? height }];
@@ -118,7 +125,7 @@ export function PairedViewer({ ref, width, height, rightSize, left, right, leftT
       return () => svg.removeEventListener('wheel', onWheel);
     });
     return () => listeners.forEach((off) => off?.());
-  }, [width, rightSize?.width, linked]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [width, rightSize?.width, linked, leftCollapsed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => setViews([fullOf(0), fullOf(1)]), [width, height, rightSize?.width, rightSize?.height]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => anim.current.forEach((a) => cancelAnimationFrame(a)), []);
@@ -154,7 +161,14 @@ export function PairedViewer({ ref, width, height, rightSize, left, right, leftT
 
   const pane_ = (i: number, content: ReactNode, title: string) => (
     <div className="flex min-w-0 flex-1 flex-col" data-pane={i ? 'right' : 'left'}>
-      <div className="mb-1.5 text-body font-medium text-ink-2">{title}</div>
+      <div className="mb-1.5 flex items-center justify-between gap-2 text-body font-medium text-ink-2">
+        {title}
+        {i === 0 && onToggleLeft && (
+          <button className="flex items-center gap-1 text-meta font-normal text-ink-3 underline decoration-line-2 underline-offset-4 hover:text-ink" onClick={onToggleLeft} aria-expanded="true">
+            <ChevronLeft size={ICON} aria-hidden />Hide
+          </button>
+        )}
+      </div>
       <div className="relative">
         <svg
           ref={(el) => { svgs.current[i] = el; }}
@@ -196,7 +210,14 @@ export function PairedViewer({ ref, width, height, rightSize, left, right, leftT
     <div>
       {banner}
       <div className="flex flex-col gap-3 lg:flex-row">
-        {pane_(0, left(unitOf(0)), leftTitle)}
+        {leftCollapsed ? (
+          // The folded pane: a narrow rail as tall as the canvas, its title read bottom to top.
+          <button onClick={onToggleLeft} aria-expanded="false" aria-label={`Show ${leftTitle.toLowerCase()}`}
+            className="mt-[1.875rem] hidden h-[calc(100vh-13.5rem)] min-h-[420px] w-8 shrink-0 flex-col items-center gap-2 rounded border border-line bg-panel py-3 text-body font-medium text-ink-2 hover:bg-sunk hover:text-ink lg:flex">
+            <ChevronRight size={ICON} aria-hidden />
+            <span className="[writing-mode:vertical-rl] rotate-180">{leftTitle}</span>
+          </button>
+        ) : pane_(0, left(unitOf(0)), leftTitle)}
         {pane_(1, right(unitOf(1)), rightTitle)}
       </div>
       <div className="mt-2 flex h-6 items-center justify-between gap-3 text-meta text-ink-3">

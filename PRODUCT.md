@@ -18,7 +18,7 @@ Faithful first, then simpler, with scientific rigour. The figure is first copied
 ## Operating Context
 - **Input:** a published figure (PNG, JPEG or WebP), read by one model call.
 - **Check:** the researcher answers the model's questions and fixes anything misread, side by side with the original.
-- **Simplify:** five ordered, skippable steps: Issues, Focus, Repeats, Clusters, Layout. Each is shown before → after.
+- **Simplify:** five ordered, skippable steps: Issues, Focus, Repeats, Clusters, Layout. Each shows one canvas, with what the step changes faded or marked, and the original folded beside it.
 - **Runs locally:** a single-user web app on the researcher's own machine. The API key stays on the computer.
 
 ## Capabilities and Constraints

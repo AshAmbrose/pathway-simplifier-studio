@@ -7,7 +7,7 @@ A local web app that turns a published pathway figure into an editable diagram.
 1. **Upload:** you upload a figure.
 2. **Extract:** one model call reads what is drawn.
 3. **Check:** you check the result side by side with the original, answer the model's questions, and fix or add anything it got wrong.
-4. **Simplify:** "Continue to simplify →" leads into five ordered, skippable steps (Issues, Focus, Repeats, Clusters, Layout), each shown before → after. All five steps are built.
+4. **Simplify:** "Continue to simplify →" leads into five ordered, skippable steps (Issues, Focus, Repeats, Clusters, Layout), each on one canvas, with the step's changes faded or marked and the original folded beside it. All five steps are built.
 
 Design decisions and their reasons are in [docs/design.md](docs/design.md).
 
@@ -53,7 +53,7 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 | `src/components/RunScreen.tsx` | One run: holds and saves the change list, and which step of the journey is open (Check, then ①–⑤). |
 | `src/components/StepBar.tsx` | The step bar across the top: the whole journey, with Back, Skip and Next. |
 | `src/components/ReviewScreen.tsx` | Check: the two views, pins, pop-ups, adding shapes and arrows, the change list. |
-| `src/components/SimplifyScreen.tsx`, `steps/` | The simplification steps: the before → after views, and one panel per step. |
+| `src/components/SimplifyScreen.tsx`, `steps/` | The simplification steps: one canvas with the original folded beside it (`PairedViewer.tsx`), and one panel per step. |
 | `src/components/ui.ts`, `src/index.css` | The visual system in code: colour roles for light and dark, the type scale, and the shared button, section and note styles. See [DESIGN.md](DESIGN.md). |
 | `src/components/SceneSvg.tsx` | Drawing the reconstruction and the marks on top of it (pins, outlines, handles). |
 | `scripts/` | Offline checks, practice runs, spend, and the paid re-test of the prompt. |

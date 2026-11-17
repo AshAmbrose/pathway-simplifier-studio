@@ -28,7 +28,6 @@ import { findRepeats, type RepeatGroup } from '../simplify/repeats.ts';
 import { focusHidden, items, setItem, toggleShape, traceRoutes } from '../simplify/routes.ts';
 import { EMPTY_SIMPLIFY, STEPS, type AppliedEdit, type Edit, type Review, type Simplify, type StepId } from '../types/extraction.ts';
 import { Check, ChevronDown, Download, Image as ImageIcon, ListChecks } from 'lucide-react';
-import { FloatingOriginal } from './FloatingOriginal.tsx';
 import { body, button, ICON, meta, okNote, quiet, warnNote } from './ui.ts';
 import { PairedViewer, type ViewerHandle } from './PairedViewer.tsx';
 import { ImageLayer, MarkerDefs, SceneSvg, type Mark, type SceneUi } from './SceneSvg.tsx';
@@ -81,7 +80,14 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
   const [draft, setDraft] = useState<ClusterDraft | null>(null);
   const [layoutSel, setLayoutSel] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
-  const [showOriginal, setShowOriginal] = useState(false);
+  // The original beside the canvas: folded by default, and kept open or folded across steps and visits (this
+  // viewer's own setting, so it lives in the browser, not in the run).
+  const [showOriginal, setShowOriginalState] = useState(() => { try { return localStorage.getItem('pss.originalOpen') === '1'; } catch { return false; } });
+  const setShowOriginal = (f: (v: boolean) => boolean) => setShowOriginalState((v) => {
+    const next = f(v);
+    try { localStorage.setItem('pss.originalOpen', next ? '1' : '0'); } catch { /* storage blocked: still works for this visit */ }
+    return next;
+  });
   const [showChanges, setShowChanges] = useState(false);
   const viewer = useRef<ViewerHandle>(null);
   const changesBox = useRef<HTMLDivElement>(null);
@@ -431,7 +437,7 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
 
       <div className="mt-4 flex flex-col gap-6 lg:flex-row">
         {/* The step's panel reads as a document: its title, what it does, then its sections divided by hairlines. */}
-        <aside className="w-full shrink-0 lg:max-h-[calc(100vh-11rem)] lg:w-[380px] lg:overflow-y-auto lg:pr-2">
+        <aside className="w-full shrink-0 lg:max-h-[calc(100vh-11rem)] lg:w-[440px] lg:overflow-y-auto lg:pr-2">
           <h2 className="text-title font-semibold text-ink">{stepTitle(step)}</h2>
           <p className={`${body} mb-4 mt-1`}>{info.what}</p>
           {step === 'focus' && <p className={`${meta} -mt-2 mb-4`}>Traced from the figure as it stands after Check and step 1, so your fixes, names and left-out parts are already included.</p>}
@@ -494,13 +500,13 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
             rightSize={ownSize ? { width: right.scene.width, height: right.scene.height } : undefined}
             width={W}
             height={H}
-            leftTitle={step === 'issues' ? 'Original' : 'Before this step'}
+            leftTitle="Original"
             rightTitle={`After ${STEP_INFO[step].name.toLowerCase()}`}
+            leftCollapsed={!showOriginal}
+            onToggleLeft={() => setShowOriginal((v) => !v)}
             hint={hint}
-            help={step === 'layout' ? 'Scroll to zoom · drag to pan · after laying out, click a shape on the right and drag it to move it' : step === 'focus' ? 'Scroll to zoom · drag to pan · click a shape to leave it out or bring it back' : 'Scroll to zoom · drag to pan · faded = left out by this step'}
-            left={(unit) => step === 'issues'
-              ? <ImageLayer scene={beforeScene} src={imageUrl} ui={ui(unit)} />
-              : <><MarkerDefs /><SceneSvg scene={beforeScene} ui={ui(unit)} /></>}
+            help={step === 'layout' ? 'Scroll to zoom · drag to pan · after laying out, click a shape and drag it to move it' : step === 'focus' ? 'Scroll to zoom · drag to pan · click a shape to leave it out or bring it back' : 'Scroll to zoom · drag to pan · faded = left out by this step'}
+            left={(unit) => <ImageLayer scene={beforeScene} src={imageUrl} ui={ui(unit)} />}
             right={(unit) => (
               <><MarkerDefs />
                 <g transform={`translate(${fit.ox} ${fit.oy}) scale(${fit.k})`}>
@@ -510,7 +516,6 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
           />
         </div>
       </div>
-      {showOriginal && <FloatingOriginal src={imageUrl} onClose={() => setShowOriginal(false)} />}
     </div>
   );
 }
