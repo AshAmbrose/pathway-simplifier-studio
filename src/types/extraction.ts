@@ -273,6 +273,10 @@ export function referenceProblems(x: Extraction): string[] {
   const filled = x.elements.filter((e) => e.outline !== 'text only');
   const noFill = filled.filter((e) => !e.fill).length;
   if (filled.length >= 4 && noFill > filled.length / 2) out.push(`${noFill} of ${filled.length} shapes came back without a fill colour, so they are drawn in a default grey`);
+  // A reply once wrote every colour as "##rrggbb". The drawing reads past the extra "#" (src/render/toScene.ts);
+  // this says it happened, since the extraction itself keeps what was written.
+  const doubled = [...x.elements.flatMap((e) => [e.fill, e.textColour]), ...x.arrows.map((a) => a.colour)].filter((c) => c?.trim().startsWith('##')).length;
+  if (doubled) out.push(`${doubled} colours were written with an extra "#" (e.g. "##d92121"); they are drawn as if written once`);
   x.clarify.forEach((c, i) => {
     for (const id of c.about) if (!node(id) && !ar.has(id)) out.push(`question ${i + 1}: unknown id "${id}"`);
     for (const o of c.options) if (o.shape && !node(o.shape)) out.push(`question ${i + 1}, answer "${o.label}": unknown shape "${o.shape}"`);

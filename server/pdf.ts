@@ -21,9 +21,25 @@ const CANDIDATES = [
 ];
 export const chromePath = () => CANDIDATES.find((p) => p && existsSync(p)) ?? null;
 
+/**
+ * The page comes from the browser, and Chrome opens it from a local file, so a crafted page could pull other files
+ * on this computer (e.g. .env.local) into the PDF. A Content-Security-Policy placed straight after the doctype, before
+ * anything else on the page, stops that: the report only needs inline styles, its inline SVG and the original as a
+ * data: URL, so everything else (scripts, local files, network) is blocked. A page that doesn't start with the
+ * doctype is refused.
+ */
+const CSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:">`;
+export function lockDown(html: string): string | null {
+  const doctype = '<!doctype html>';
+  return html.slice(0, doctype.length).toLowerCase() === doctype ? doctype + CSP + html.slice(doctype.length) : null;
+}
+
 export function htmlToPdf(html: string): Promise<Buffer | null> {
   const chrome = chromePath();
   if (!chrome) return Promise.resolve(null);
+  const safe = lockDown(html);
+  if (!safe) return Promise.reject(new Error('The report page must start with <!doctype html>.'));
+  html = safe;
   const dir = mkdtempSync(join(tmpdir(), 'pss-report-'));
   const page = join(dir, 'report.html'), out = join(dir, 'report.pdf');
   writeFileSync(page, html);

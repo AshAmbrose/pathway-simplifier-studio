@@ -3,9 +3,10 @@
  * Says plainly when the key or model isn't set, and shows each run's time and cost.
  */
 import { Upload } from 'lucide-react';
-import { primary, warnNote } from './ui.ts';
+import { button, primary, quiet, warnNote } from './ui.ts';
 import { useEffect, useRef, useState } from 'react';
 import { extract, getStatus, listRuns, type RunRecord, type RunSummary, type Status } from '../api.ts';
+import { EXAMPLES, type Example } from '../examples.ts';
 
 const TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX_BYTES = 11_000_000;
@@ -61,6 +62,21 @@ export function UploadScreen({ onDone, onOpen }: { onDone: (run: RunRecord) => v
       setPicked({ file, url, ...(await readSize(url)) });
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+
+  /** Picks a bundled example as if it had been chosen from disk, ready for a fresh model call. */
+  async function pickExample(ex: Example) {
+    setError(null);
+    try {
+      const res = await fetch(ex.file);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      await pick(new File([blob], ex.file.split('/').pop()!, { type: blob.type }));
+      // The chosen figure appears in the drop area above, beside the Extract button.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      setError('That example could not be loaded.');
     }
   }
 
@@ -120,10 +136,35 @@ export function UploadScreen({ onDone, onOpen }: { onDone: (run: RunRecord) => v
         >
           {busy ? 'Reading the figure…' : 'Extract'}
         </button>
-        {busy && <span className="num text-body text-ink-2">{elapsed}s. One model call; this usually takes under a minute.</span>}
+        {busy && <span className="num text-body text-ink-2">{elapsed}s. One model call; this usually takes {status?.thinking ? 'about a minute' : '1–4 minutes'}, longer when the model is busy.</span>}
         {status?.ready && !busy && <span className="num text-meta text-ink-3">Model {status.model} · spent today ${status.spentTodayUsd.toFixed(2)} of ${status.dailyCapUsd}</span>}
       </div>
       {error && <div className={`${warnNote} mt-3 text-bad`}>{error}</div>}
+      {/* Said up front: a quick read is faster but asks fewer questions, so an ambiguity may be settled without asking. */}
+      {status?.thinking && <p className="mt-3 max-w-[65ch] text-meta text-ink-3">Quick read is on: readings are about three times faster, but the model asks fewer questions and may pick one reading of an unclear arrow without asking.</p>}
+      {/* Said before anything is sent: the figure goes to Google, and on a free key Google may use it. */}
+      <p className="mt-3 max-w-[65ch] text-meta text-ink-3">Please use published figures. The image is sent to Google's Gemini API to be read, and shape labels (text only) are looked up in public databases.</p>
+
+      <section className="mt-10">
+        <h2 className="text-section font-semibold text-ink">Examples</h2>
+        <p className="mt-1 text-body text-ink-2">Open-licence figures. Open the saved result straight away, or read the figure again with the model.</p>
+        <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {EXAMPLES.map((ex) => {
+            const saved = ex.savedRun && runs.some((r) => r.id === ex.savedRun!.id) ? ex.savedRun.id : null;
+            return (
+              <li key={ex.file} className="flex flex-col rounded border border-line bg-panel p-3">
+                <img src={ex.file} alt={ex.title} className="h-32 w-full rounded bg-white object-contain" />
+                <div className="mt-2 font-medium text-ink">{ex.title}</div>
+                <div className="text-meta text-ink-3">{ex.credit} · <a className={quiet} href={ex.link} target="_blank" rel="noreferrer">source</a> · {ex.licence}</div>
+                <div className="mt-auto flex flex-wrap gap-2 pt-3">
+                  {saved && <button className={primary} onClick={() => onOpen(saved)}>Open saved result</button>}
+                  <button className={button} disabled={busy} onClick={() => pickExample(ex)}>Choose to read again</button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
       {runs.length > 0 && (
         <section className="mt-12">
@@ -147,7 +188,7 @@ export function UploadScreen({ onDone, onOpen }: { onDone: (run: RunRecord) => v
                   <td className="num py-2 pr-4 text-right text-ink-2">{r.counts.elements}</td>
                   <td className="num py-2 pr-4 text-right text-ink-2">{r.counts.arrows}</td>
                   {/* Practice copies are made from saved results, not read by a model. */}
-                  <td className="num py-2 text-meta text-ink-3">{r.model === 'unknown' ? 'practice copy' : `${r.model} · ${r.seconds.toFixed(0)} s${r.priceKnown ? ` · $${r.costUsd.toFixed(3)}` : ''}`}</td>
+                  <td className="num py-2 text-meta text-ink-3">{r.model === 'unknown' ? 'practice copy' : `${r.model}${r.thinking ? ' · quick read' : ''} · ${r.seconds.toFixed(0)} s${r.priceKnown ? ` · $${r.costUsd.toFixed(3)}` : ''}`}</td>
                 </tr>
               ))}
             </tbody>

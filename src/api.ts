@@ -9,7 +9,7 @@ import type { Review } from './types/extraction.ts';
 
 export type { RunRecord, RunSummary };
 
-export interface Status { ready: boolean; hasKey: boolean; model: string; spentTodayUsd: number; dailyCapUsd: number }
+export interface Status { ready: boolean; hasKey: boolean; model: string; spentTodayUsd: number; dailyCapUsd: number; thinking?: string }
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -27,9 +27,20 @@ export const getStatus = () => call<Status>('/api/status');
 export const listRuns = () => call<RunSummary[]>('/api/runs');
 export const getRun = (id: string) => call<RunRecord>(`/api/runs/${id}`);
 export const runImageUrl = (id: string) => `/api/runs/${id}/image`;
-/** Sends an image for extraction (one model call); the saved run comes back. */
-export const extract = (body: { name: string; mimeType: string; data: string; width: number; height: number }) =>
-  call<RunRecord>('/api/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+/**
+ * Sends an image for extraction (one model call); the saved run comes back. The server answers 200 at once and
+ * keeps the line open while the model works (see keepAlive in server/plugin.ts), so a failure arrives as an
+ * `error` field in a 200 reply, not as an error status.
+ */
+export async function extract(body: { name: string; mimeType: string; data: string; width: number; height: number }): Promise<RunRecord> {
+  const rec = await call<RunRecord & { error?: string; detail?: unknown }>('/api/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (rec.error) {
+    const err = new Error(rec.error) as Error & { detail?: unknown };
+    err.detail = rec.detail;
+    throw err;
+  }
+  return rec;
+}
 /** What public databases say a label is (server/identify.ts). Only the label text and the shape's kind are sent. */
 export const identify = (label: string, kind: string) =>
   call<LabelLookup>('/api/identify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, kind }) });

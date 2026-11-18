@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "demo": "vite build && vite preview --host 127.0.0.1 --port 4173 --strictPort --mode demo",
+    "seed:demo": "node scripts/seed-demo.ts",
     "lint": "tsc --noEmit",
     "check:extraction": "node scripts/check-extraction.ts",
     "run:figures": "node scripts/run-figures.ts",

@@ -44,7 +44,8 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 |---|---|
 | `src/types/extraction.ts` | The data formats: the extraction, an edit (one change), the review (a run's list of edits, plus the simplification record). |
 | `server/extract.ts`, `server/prompts/` | One model call per figure, with the current extraction prompt (v3). |
-| `server/runs.ts`, `server/plugin.ts` | Saving and loading runs, and the local API. Saves are versioned so newer work is never overwritten. |
+| `server/runs.ts`, `server/plugin.ts` | Saving and loading runs, and the local API (in `npm run dev` and in `npm run demo`, with the demo's password check, keep-alive for long readings and optional daily call cap). Saves are versioned so newer work is never overwritten. |
+| `src/examples.ts`, `public/examples/`, `scripts/seed-demo.ts` | The bundled open-licence examples and their saved results, for the shared demo ([docs/hosting.md](docs/hosting.md)). |
 | `server/aiLedger.ts` | A log of every AI call and its cost, and the daily budget. |
 | `src/edit/` | Applying the list of changes to the extraction, the order they apply in (`order.ts`), and describing each in plain words (`describe.ts`, which also keeps internal ids off the screen). |
 | `src/identify/`, `server/identify.ts` | Step 1's "what each shape is": label spellings and splitting (`normalise.ts`), what the user is asked and why (`candidates.ts`), and the live, cached lookups in HGNC, UniProt, Complex Portal, GO and ChEBI (server). |

@@ -37,12 +37,21 @@ export interface Scene {
 const HEX = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i;
 const NAMED: Record<string, string> = { black: '#1e293b', red: '#c0392b', blue: '#2563eb', green: '#15803d', grey: '#94a3b8', gray: '#94a3b8', purple: '#7e22ce', orange: '#ea580c', pink: '#db2777' };
 /** A colour the model wrote (hex, with or without #, or a plain name like "red") → hex; otherwise the fallback. */
-export function colour(c: string | null | undefined, fallback: string): string {
-  if (!c) return fallback;
-  const t = c.trim().toLowerCase();
-  if (HEX.test(t)) return t.startsWith('#') ? t : '#' + t;
+/**
+ * A colour as the model wrote it, made drawable, or null if it can't be read. Extra leading "#"s are dropped: one
+ * reply wrote every colour as "##d1368e", which a browser rejects, so the whole figure drew without colour. The
+ * extraction itself keeps what was written; referenceProblems lists the slip.
+ */
+export function readColour(c: string | null | undefined): string | null {
+  if (!c) return null;
+  const t = c.trim().toLowerCase().replace(/^#+/, '');
+  if (HEX.test(t)) return '#' + t;
   for (const [k, v] of Object.entries(NAMED)) if (t.includes(k)) return v;
-  return fallback;
+  return null;
+}
+
+export function colour(c: string | null | undefined, fallback: string): string {
+  return readColour(c) ?? fallback;
 }
 
 function px(box: number[], w: number, h: number): BoxPx {
@@ -76,7 +85,7 @@ export function toScene(x: Extraction, imageW: number, imageH: number): Scene {
   const [width, height] = x.canvas ?? [imageW, imageH];
   const skipped: string[] = [];
   const nodes: SceneNode[] = x.elements.map((e) => ({
-    id: e.id, label: e.label, kind: e.kind, outline: e.outline, fill: e.fill, textColour: e.textColour, sublabel: e.sublabel ?? null,
+    id: e.id, label: e.label, kind: e.kind, outline: e.outline, fill: readColour(e.fill), textColour: readColour(e.textColour), sublabel: e.sublabel ?? null,
     mods: e.modifications.map((m) => ({ text: badgeText(m) })),
     ...px(e.box, width, height),
   }));
