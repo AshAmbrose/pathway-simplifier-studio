@@ -301,3 +301,17 @@ Colours are named roles defined once per theme in `src/index.css`. Shared contro
 **How it's checked:**
 - Impeccable's automated checker runs clean on the code. On the running app, only labels inside the drawn figures remain flagged; they are figure content and zoomable.
 - Every text pair is at least 4.5:1 in both themes, and control borders at least 3:1.
+
+## 10. Sharing a live demo from the laptop
+**Decision:** the demo runs on the presenter's laptop, behind one password, and is shared through a temporary Cloudflare tunnel. The visitor sees only the built app, open-licence examples and their own uploads. Details are in [hosting.md](hosting.md).
+
+**Why:**
+- **The app needs a normal computer.** It keeps runs on disk, prints the PDF with the local Chrome, and reads 8 MB of database snapshots. Free hosts would mean rebuilding all three.
+- **It's free, and uploads stay local** (apart from the call to Google).
+- **The cost:** it only works while the laptop is on, and the link changes each time.
+
+**What had to change to open it to others:**
+- only the built files are served, never the project folder;
+- a long model call sends a space every 15 seconds, because the tunnel drops a silent request after about 100 seconds;
+- the PDF page is locked down, so it can't pull local files into a PDF;
+- model calls can be capped per day (`MAX_CALLS_PER_DAY`), which works even when the price is unknown. With billing on and prices known, the dollar budget (`DAILY_USD`) is the limit and the call cap is left off.

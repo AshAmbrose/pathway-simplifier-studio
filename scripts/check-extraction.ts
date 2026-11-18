@@ -24,7 +24,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { ExtractionSchema, extractionJsonSchema, referenceProblems } from '../src/types/extraction.ts';
-import { toScene } from '../src/render/toScene.ts';
+import { readColour, toScene } from '../src/render/toScene.ts';
 import { v1ToV2 } from './v1ToV2.ts';
 import { applyEdits, dependents, optionProblems, optionState } from '../src/edit/applyEdits.ts';
 import { describeEdit } from '../src/edit/describe.ts';
@@ -43,7 +43,7 @@ import { STYLE_RED } from '../src/edit/applyEdits.ts';
 import { getRun, listRuns } from '../server/runs.ts';
 import { accountFor } from '../src/report/account.ts';
 import { checkArrows } from '../server/relations.ts';
-import { chromePath, htmlToPdf } from '../server/pdf.ts';
+import { chromePath, htmlToPdf, lockDown } from '../server/pdf.ts';
 import { reportHtml } from '../src/report/printable.ts';
 import { drawnSign } from '../src/relations/types.ts';
 import type { Identity } from '../src/identify/types.ts';
@@ -445,6 +445,16 @@ else {
     'arrows: a bar is read as inhibition, an arrowhead that activates as activation, a binding as binding');
 }
 
+// Colours written with an extra "#" (one reply wrote "##d1368e" throughout) still draw, and the slip is listed.
+{
+  check(readColour('##d1368e') === '#d1368e' && readColour('#D92121') === '#d92121' && readColour('abc') === '#abc' && readColour('##') === null && readColour(null) === null,
+    'colours: extra "#"s are read past; an unreadable colour is null, not a broken one');
+  const x = structuredClone(base);
+  x.elements[0].fill = '##d1368e';
+  x.arrows[0].colour = '##d92121';
+  check(referenceProblems(x).some((p) => p.startsWith('2 colours were written with an extra "#"')), 'colours: a doubled "#" is listed as a problem, not hidden');
+}
+
 // 13. The report as a PDF: the printable page keeps labels exactly as written and is printed by the local Chrome.
 {
   const r = accountFor(base, []);
@@ -454,7 +464,17 @@ else {
   if (chromePath()) {
     const pdf = await htmlToPdf(html);
     check(!!pdf && pdf.subarray(0, 5).toString() === '%PDF-', `report PDF: the local Chrome prints it (${pdf ? Math.round(pdf.length / 1024) : 0} KB)`);
+    // The page comes from the browser, so it must not be able to pull files on this computer into the PDF. The same
+    // image is printed twice: as a data: URL it is in the PDF (large), as a file:// link it must be blocked (small).
+    const png = new URL('../public/examples/il6-wp364.png', import.meta.url);
+    const page = (src: string) => `<!doctype html><html><head></head><body><img src="${src}"></body></html>`;
+    const inline = await htmlToPdf(page(`data:image/png;base64,${readFileSync(png).toString('base64')}`));
+    const local = await htmlToPdf(page(png.href));
+    check(!!inline && !!local && inline.length > 100_000 && local.length < 20_000,
+      `report PDF: a page can't pull a local file into the PDF (data: image ${Math.round((inline?.length ?? 0) / 1024)} KB, file:// image ${Math.round((local?.length ?? 0) / 1024)} KB)`);
   } else console.log('skip report PDF printing (no Chrome found)');
+  check(lockDown('<p>no doctype</p><!doctype html>') === null && lockDown('<!doctype html><p>x</p>')!.startsWith(`<!doctype html><meta http-equiv="Content-Security-Policy"`),
+    'report PDF: the lock-down goes first on the page, and a page without the doctype is refused');
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

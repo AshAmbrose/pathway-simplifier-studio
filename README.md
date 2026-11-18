@@ -40,9 +40,14 @@ A step bar across the top walks you through: **Check**, then **1 Issues → 2 Fo
      - **Every shape and arrow, grouped by what happened:** kept, renamed, left out (with the reason), merged, collapsed, re-pointed, added, with the step it happened in and what each shape was identified as.
      - The SVG is always the finished figure, whichever step the report was opened on. An editing canvas for final tweaks is planned.
 
+## Sharing a live demo
+`npm run demo` serves the built app on this computer behind one password, with open-licence examples ready to open. A temporary Cloudflare tunnel shares it. Setup, the free tier's limits and what this choice gives up are in [docs/hosting.md](docs/hosting.md).
+
 ## Scripts
 | Command | What it does |
 |---|---|
+| `npm run demo` | Builds the app and serves it for a shared demo (settings in `.env.demo`; see [docs/hosting.md](docs/hosting.md)) |
+| `npm run seed:demo` | Copies the bundled examples' saved results into the demo's run list |
 | `npm run check:extraction` | Offline checks (no network) |
 | `npm run lint` | Type-check |
 | `node scripts/identify-coverage.ts` | How far step 1's identification gets on the saved test figures (online; only label text is sent) |
@@ -54,5 +59,6 @@ A step bar across the top walks you through: **Check**, then **1 Issues → 2 Fo
 
 ## More
 - [docs/design.md](docs/design.md): the design decisions and why.
+- [docs/hosting.md](docs/hosting.md): sharing a live demo.
 - [CLAUDE.md](CLAUDE.md): rules for working on the code.
 - [DESIGN.md](DESIGN.md): the visual system (colours, type, components), and [PRODUCT.md](PRODUCT.md): who it's for and what it must keep.
