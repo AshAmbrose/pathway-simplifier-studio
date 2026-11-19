@@ -1,0 +1,34 @@
+# Using the app
+
+A step-by-step guide to every screen. For what the app is and how to set it up, see the [README](../README.md); for why it works this way, see [decisions.md](decisions.md).
+
+A step bar across the top walks you through: **Check**, then **1 Issues → 2 Focus → 3 Repeats → 4 Clusters → 5 Layout**. Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures. Each step opens with the whole picture in view. Arrows are drawn straight; where several meet one side of a shape, their ends are spread along it.
+
+1. **Upload** a PNG, JPEG or WebP figure. One model call reads it, and the result is saved, so reopening it is free.
+2. **Answer the questions.** Numbered pins mark where the model wasn't sure. Pick an answer, and both views move on to the next question.
+3. **Fix** anything else: click a shape or arrow to rename it, re-point it, change it or remove it.
+4. **Add** what's missing: use "+ Shape" and "+ Arrow". A new shape takes its colour from the figure. To draw an arrow from or to a whole cluster, hover it and use its grey "cluster" tab, or select the cluster and drag from its blue dots.
+5. **Review your changes:** the list at the top shows each one in plain words, with undo, and "Show as extracted" shows the model's own reading.
+6. **Simplify:** press **Continue to simplify →**. Five steps follow in order, and any can be skipped. Each shows one large canvas: the figure after the step, with what the step leaves out faded so it can be clicked back. The original sits folded on the canvas's left edge; click the "Original" rail (or the header button) to open it beside the canvas. It stays open or folded from step to step. "Back" from step 1 returns to Check.
+   - **1 Issues:** click a card to outline its item on the figure. Fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.
+     - **What each shape is:** every labelled shape is looked up in HGNC, UniProt, the Complex Portal, Gene Ontology and ChEBI (only the label text is sent; answers are cached in `data/identify-cache/`). Exact gene symbols are taken as found; aliases wait for you to confirm, and labels several genes share ("TAK1", "p50") for you to choose. Every option says why it matched, in the database's words, with a link to the record. If none is right, choose **Other**, type what it is ("CARMA1", "protein kinase C") and what kind of thing, and **Search again**, or **Use my words** to keep your name as it is (marked as yours, with no database record). Shapes with the same label are answered together; click any card to work on it. Shapes still to answer have a dashed orange outline.
+     - **Arrows against curated records:** each arrow between identified shapes is looked up in SIGNOR, then OmniPath where SIGNOR has no record, on this machine (snapshots in `data/signor/` and `data/omnipath/`: `npm run fetch:signor`, `npm run fetch:omnipath`). Arrows recorded with the opposite effect, or only the other way round, become cards to look at, with the records, their PubMed links and curators' sentences; "Seen" (with a note) settles them. Flags only: nothing is changed.
+   - **2 Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
+   - **3 Repeats:** merge copies of a molecule drawn more than once in the same place and state. If the figure has panels, say first whether they are different conditions (copies stay apart) or one picture.
+   - **4 Clusters:** open a cluster, tick the shapes that should become one, name it and press Collapse. Its members' names stay small under the new name.
+   - **5 Layout:** five ways, chosen at the top of the step. "Compare every way on this figure" opens them all side by side, with the same numbers (`?compare=<run id>` added to the address).
+     - **Compact** (the default) keeps the figure's arrangement but re-spaces it on an even grid. Compartments fit what's in them, and shapes of one kind share one size. Where several routes meet in one shape, that shape goes in the middle of them, with what follows it straight down. Otherwise the longest route runs straight down the middle, with everything else packed beside it.
+     - **Tidy as drawn** keeps the figure at its own size. It lines up shapes that are nearly in line, closes and crops the space earlier steps left, moves overlapping shapes clear, and bows arrows around shapes.
+     - **Squeeze** keeps the original's order exactly and closes the gaps: one size per kind, rows level, columns straight, the smallest canvas a constraint solver can find under those rules.
+     - **Layered (ELK)** uses a general-purpose network layout: shapes ranked so arrows run down, each row ordered to cut crossings.
+     - **Redraw as a cell** rebuilds it top to bottom: compartments as rows, panels as columns, and the route into the nucleus as a straight line.
+     - A table shows before → after: arrows crossing, behind a shape, and pointing up.
+     - Optional: one consistent style, and hiding the member names under collapsed shapes. Any rule that doesn't help can be switched off.
+     - Afterwards, click a shape on the right and drag it to fine-tune.
+   - **Finish** marks the simplification done and opens the **report** (also under **Report** in the header, at any time). It is compact: the figures side by side, the counts beside the science checks, shapes beside arrows. **Download PDF** saves it as an A4 PDF (printed by your local Chrome, with the figure as vector and every label exactly as written; with no Chrome, the print dialog opens instead). The finished figure downloads as SVG, and the report also as Markdown.
+     - **Original and finished side by side:** the uploaded image beside the finished figure, each with its counts ("Larger" makes both taller).
+     - **Fidelity first:** whether every shape and arrow the model read is accounted for: unchanged, or a change in the list says what happened to it. Anything changed with no change saying so (a shape gone, an arrow reversed, a label altered) is listed at the top.
+     - **Simpler, in numbers:** shapes, arrows, clusters and compartments as read, after Check, and finished.
+     - **Every shape and arrow, grouped by what happened:** kept, renamed, left out (with the reason), merged, collapsed, re-pointed, added, with the step it happened in and what each shape was identified as.
+     - The SVG is always the finished figure, whichever step the report was opened on. An editing canvas for final tweaks is planned ([issue #21](https://github.com/AshAmbrose/pathway-simplifier-studio/issues/21)).
+

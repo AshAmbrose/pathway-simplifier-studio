@@ -1,64 +1,135 @@
 # Pathway Simplifier Studio
 
-Turns a published pathway figure into an editable diagram, copied faithfully first.
+Turns a published pathway figure into an editable, simpler diagram, without losing track of what the original said.
 
-You check the copy beside the original and fix anything the model got wrong. Then you simplify it, step by step. Every change you make is listed and can be undone.
+Pathway figures in papers are dense: the same molecule drawn several times, unlabelled shapes, arrows whose ends are unclear. This app reads a figure, lets you check that reading against the original, then guides you through simplifying it. Every change is listed in plain words and can be undone, and the final report shows that nothing went missing on the way.
 
-## Setup
-1. `npm install`
-2. Copy `.env.example` to `.env.local`, then fill in `GEMINI_API_KEY` and `EXTRACT_MODEL`. The key stays on your computer and is never sent to the browser.
-3. `npm run dev`, then open the address it prints.
+## How it works
+1. **Upload** a figure (PNG, JPEG or WebP). One call to Google's Gemini model reads what is drawn, exactly as drawn.
+2. **Check:** the reading sits beside the original. Answer the model's questions (it asks rather than guesses), and fix or add anything it got wrong.
+3. **Simplify** in five steps, each optional:
+   - **Issues:** what each shape is, looked up in public gene and protein databases, and arrows checked against curated records;
+   - **Focus:** choose which routes to keep;
+   - **Repeats:** merge copies of the same molecule;
+   - **Clusters:** collapse groups into one shape;
+   - **Layout:** tidy the arrangement.
+4. **Finish:** a report that accounts for every shape and arrow, with the original and the result side by side, downloadable as PDF, SVG or Markdown.
 
-## Using it
-A step bar across the top walks you through: **Check**, then **1 Issues → 2 Focus → 3 Repeats → 4 Clusters → 5 Layout**. Zoom with the scroll wheel or a trackpad pinch, or pick a level from the zoom menu under the pictures. Each step opens with the whole picture in view. Arrows are drawn straight; where several meet one side of a shape, their ends are spread along it.
+The principles behind it: record the figure faithfully before changing anything, never alter the model's reading (changes are a list on top of it), and never hide anything (what's left out is listed with its reason). The full guide to each screen is in [docs/using.md](docs/using.md).
 
-1. **Upload** a PNG, JPEG or WebP figure. One model call reads it, and the result is saved, so reopening it is free.
-2. **Answer the questions.** Numbered pins mark where the model wasn't sure. Pick an answer, and both views move on to the next question.
-3. **Fix** anything else: click a shape or arrow to rename it, re-point it, change it or remove it.
-4. **Add** what's missing: use "+ Shape" and "+ Arrow". A new shape takes its colour from the figure. To draw an arrow from or to a whole cluster, hover it and use its grey "cluster" tab, or select the cluster and drag from its blue dots.
-5. **Review your changes:** the list at the top shows each one in plain words, with undo, and "Show as extracted" shows the model's own reading.
-6. **Simplify:** press **Continue to simplify →**. Five steps follow in order, and any can be skipped. Each shows one large canvas: the figure after the step, with what the step leaves out faded so it can be clicked back. The original sits folded on the canvas's left edge; click the "Original" rail (or the header button) to open it beside the canvas. It stays open or folded from step to step. "Back" from step 1 returns to Check.
-   - **1 Issues:** click a card to outline its item on the figure. Fix typos, name or leave out unlabelled parts, and note what colours or line styles mean.
-     - **What each shape is:** every labelled shape is looked up in HGNC, UniProt, the Complex Portal, Gene Ontology and ChEBI (only the label text is sent; answers are cached in `data/identify-cache/`). Exact gene symbols are taken as found; aliases wait for you to confirm, and labels several genes share ("TAK1", "p50") for you to choose. Every option says why it matched, in the database's words, with a link to the record. If none is right, choose **Other**, type what it is ("CARMA1", "protein kinase C") and what kind of thing, and **Search again**, or **Use my words** to keep your name as it is (marked as yours, with no database record). Shapes with the same label are answered together; click any card to work on it. Shapes still to answer have a dashed orange outline.
-     - **Arrows against curated records:** each arrow between identified shapes is looked up in SIGNOR, then OmniPath where SIGNOR has no record, on this machine (snapshots in `data/signor/` and `data/omnipath/`: `npm run fetch:signor`, `npm run fetch:omnipath`). Arrows recorded with the opposite effect, or only the other way round, become cards to look at, with the records, their PubMed links and curators' sentences; "Seen" (with a note) settles them. Flags only: nothing is changed.
-   - **2 Focus:** choose which routes to show. The routes are traced from the figure's own arrows, after your fixes in Check and step ①. Open a route ("show ▾") to tick its shapes one by one, or click any shape on the pictures.
-   - **3 Repeats:** merge copies of a molecule drawn more than once in the same place and state. If the figure has panels, say first whether they are different conditions (copies stay apart) or one picture.
-   - **4 Clusters:** open a cluster, tick the shapes that should become one, name it and press Collapse. Its members' names stay small under the new name.
-   - **5 Layout:** five ways, chosen at the top of the step. "Compare every way on this figure" opens them all side by side, with the same numbers (`?compare=<run id>`).
-     - **Compact** (the default) keeps the figure's arrangement but re-spaces it on an even grid. Compartments fit what's in them, and shapes of one kind share one size. Where several routes meet in one shape, that shape goes in the middle of them, with what follows it straight down. Otherwise the longest route runs straight down the middle, with everything else packed beside it.
-     - **Tidy as drawn** keeps the figure at its own size. It lines up shapes that are nearly in line, closes and crops the space earlier steps left, moves overlapping shapes clear, and bows arrows around shapes.
-     - **Squeeze** keeps the original's order exactly and closes the gaps: one size per kind, rows level, columns straight, the smallest canvas a constraint solver can find under those rules.
-     - **Layered (ELK)** uses a general-purpose network layout: shapes ranked so arrows run down, each row ordered to cut crossings.
-     - **Redraw as a cell** rebuilds it top to bottom: compartments as rows, panels as columns, and the route into the nucleus as a straight line.
-     - A table shows before → after: arrows crossing, behind a shape, and pointing up.
-     - Optional: one consistent style, and hiding the member names under collapsed shapes. Any rule that doesn't help can be switched off.
-     - Afterwards, click a shape on the right and drag it to fine-tune.
-   - **Finish** marks the simplification done and opens the **report** (also under **Report** in the header, at any time). It is compact: the figures side by side, the counts beside the science checks, shapes beside arrows. **Download PDF** saves it as an A4 PDF (printed by your local Chrome, with the figure as vector and every label exactly as written; with no Chrome, the print dialog opens instead). The finished figure downloads as SVG, and the report also as Markdown.
-     - **Original and finished side by side:** the uploaded image beside the finished figure, each with its counts ("Larger" makes both taller).
-     - **Fidelity first:** whether every shape and arrow the model read is accounted for: unchanged, or a change in the list says what happened to it. Anything changed with no change saying so (a shape gone, an arrow reversed, a label altered) is listed at the top.
-     - **Simpler, in numbers:** shapes, arrows, clusters and compartments as read, after Check, and finished.
-     - **Every shape and arrow, grouped by what happened:** kept, renamed, left out (with the reason), merged, collapsed, re-pointed, added, with the step it happened in and what each shape was identified as.
-     - The SVG is always the finished figure, whichever step the report was opened on. An editing canvas for final tweaks is planned.
+## Run it yourself
+About 15 minutes, most of it waiting for downloads.
 
-## Sharing a live demo
-`npm run demo` serves the built app on this computer behind one password, with open-licence examples ready to open. A temporary Cloudflare tunnel shares it. Setup, the free tier's limits and what this choice gives up are in [docs/hosting.md](docs/hosting.md).
+**You need:**
+- **[Node.js](https://nodejs.org) 22.18 or newer** (it runs the TypeScript scripts directly). Check with `node --version`.
+- **A Google Gemini API key** (free to create; step 3 below).
+- **Google Chrome** (optional), for the PDF download. Without it, the browser's print dialog opens instead.
+
+Built and tested on macOS. It should work on Linux and Windows, but that hasn't been tried.
+
+**Steps:**
+1. **Get the code.** `git clone https://github.com/AshAmbrose/pathway-simplifier-studio.git`, then `cd pathway-simplifier-studio`.
+2. **Install.** `npm install`
+3. **Get an API key.**
+   1. Go to [Google AI Studio's API keys page](https://aistudio.google.com/apikey) and sign in with a Google account.
+   2. Choose **Create API key**. If asked, let it create a new Google Cloud project.
+   3. Copy the key.
+
+   A new key starts on the **free tier**. See [Your key, your data and cost](#your-key-your-data-and-cost) before uploading anything that isn't already published.
+4. **Add the key.** Copy the settings template, `cp .env.example .env.local`, then open `.env.local` and fill in:
+   ```
+   GEMINI_API_KEY=your-key-here
+   EXTRACT_MODEL=gemini-4-hydrogen
+   DAILY_USD=5
+   ```
+   `.env.local` is never committed (it's in `.gitignore`). The key is read only by the local server and never sent to the browser.
+5. **Optional: download the curated records** for step 1's arrow check. These are free, public and about 7 MB; they take about 2 minutes (OmniPath) and 5 minutes (SIGNOR):
+   ```
+   npm run fetch:omnipath
+   npm run fetch:signor
+   ```
+   Without them, everything else works and the arrow check says it has no records.
+6. **Start it.** `npm run dev`, then open the address it prints (usually http://localhost:5173).
+7. **Try a figure.** The upload screen offers five open-licence example figures. Choose one ("Choose to read again"), then **Extract**. A reading takes 1–4 minutes. When it's done, the run is saved, and reopening it later is free.
+
+**To check the install:** `npm run check:extraction` runs the offline checks. It needs no key or network, and should end with "all checks passed". A few checks are skipped on a fresh copy because they use the author's local test files.
+
+**If something goes wrong:**
+- **"No GEMINI_API_KEY":** check that `.env.local` is in the project folder, then restart `npm run dev`.
+- **"Today's free-tier limit … is used up":** the free tier allows about 20 readings a day per Google project, and failed attempts count. It resets at midnight Pacific time; turning on billing lifts it.
+- **"The model is busy":** Google reports high demand. Try again in a few minutes.
+- **The PDF opens a print dialog:** Chrome wasn't found. Set `CHROME_PATH` to Chrome's program file.
+
+## Your key, your data and cost
+- **What leaves your computer:**
+  - the figure, sent to Google's Gemini API to be read;
+  - shape labels (text only), sent to HGNC, UniProt, Complex Portal, Gene Ontology and ChEBI in step 1.
+
+  Everything else (runs, changes, reports) stays in the project's `data/` folder, which is never committed.
+- **Free tier:** about 20 readings a day, and Google [may use what you send](https://ai.google.dev/gemini-api/terms) to improve its products, with human review. Use published figures only.
+- **Paid tier:** turn on billing for the key's Google Cloud project (in AI Studio, under the key's project). What you send is then not used to improve Google's products. A reading costs about **$0.13–0.24** (about 6,000 tokens in and 16,000–30,000 out, at $1.50 and $7.50 per million). The app logs every call's cost and stops for the day at `DAILY_USD`; `npm run spend` shows spend by day.
+- **Faster, less careful readings:** add `EXTRACT_THINKING=LOW` to `.env.local` and restart. A reading is about 3× faster, but the model asks fewer questions and may settle unclear arrows without asking. Runs made this way are marked "quick read".
+
+## How it was built
+Built over five days (15–19 November 2026), one feature per pull request, with [Claude Code](https://claude.com/claude-code) as the pair programmer. The pull requests, in order:
+
+| PR | What it added |
+|---|---|
+| (first commits) | One model call reads a figure; the reading is shown beside the original |
+| [#1](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/1) | Check on the canvas: answer the model's questions and fix the reading |
+| [#2](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/2) | Add shapes and arrows the model missed |
+| [#3](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/3) | Documentation: decisions, plain-language README, code comments |
+| [#4](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/4) | One guided journey (Check, then steps); steps 1–2 |
+| [#5](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/5) | Polish: regulators kept with their routes |
+| [#6](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/6) | Steps 3–4: Repeats and Clusters |
+| [#7](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/7) | Step 5: Layout |
+| [#8](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/8) | Design pass: "a precise instrument" ([DESIGN.md](DESIGN.md)) |
+| [#9](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/9) | More layout methods, and a page comparing them on one figure |
+| [#10](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/10) | One canvas after Check, with the original folded beside it |
+| [#12](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/12) | Step 1: what each shape is, from public databases |
+| [#13](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/13) | Finish report: every shape and arrow accounted for |
+| [#14](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/14) | Step 1: arrows checked against curated records (SIGNOR, OmniPath) |
+| [#15](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/15) | Report: original and finished side by side; PDF download |
+| [#16](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/16) | Sharing a live demo from the laptop |
+| [#32](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/32) | Demo polish: change list and Issues cards |
+
+Each pull request explains what changed and how it was checked. [docs/decisions.md](docs/decisions.md) records why each choice was made, including approaches that were tried and dropped.
+
+**Under the hood:** React 19, TypeScript and Tailwind, served by Vite 8. The small local API (model call, saving runs, database lookups, PDF) runs inside the Vite server ([server/](server/)). Layout uses ELK and the kiwi.js constraint solver. A map of the code is in [CLAUDE.md](CLAUDE.md#map-of-the-code).
+
+## What's next
+Planned work is in the [issues](https://github.com/AshAmbrose/pathway-simplifier-studio/issues). It includes using the figure's legend as context, a larger accuracy test set, SBGN/GPML export, an editor after Finish, and calibrated confidence for the model's questions.
+
+## Docs
+| Page | For |
+|---|---|
+| [docs/using.md](docs/using.md) | Every screen, step by step |
+| [docs/decisions.md](docs/decisions.md) | The design decisions and why, including what was tried |
+| [PRODUCT.md](PRODUCT.md) | Who it's for and what it must keep |
+| [DESIGN.md](DESIGN.md) | The visual system: colours, type, components |
+| [docs/hosting.md](docs/hosting.md) | Sharing a live demo from a laptop, behind a password |
+| [docs/examples.md](docs/examples.md) | The example figures, their sources and licences |
+| [CLAUDE.md](CLAUDE.md) | Working rules and a map of the code |
 
 ## Scripts
 | Command | What it does |
 |---|---|
-| `npm run demo` | Builds the app and serves it for a shared demo (settings in `.env.demo`; see [docs/hosting.md](docs/hosting.md)) |
-| `npm run seed:demo` | Copies the bundled examples' saved results into the demo's run list |
-| `npm run check:extraction` | Offline checks (no network) |
+| `npm run dev` | Runs the app locally, reloading as the code changes |
+| `npm run check:extraction` | Offline checks (no key, no network) |
 | `npm run lint` | Type-check |
-| `node scripts/identify-coverage.ts` | How far step 1's identification gets on the saved test figures (online; only label text is sent) |
-| `node scripts/compare-layouts.ts` | Step 5's layouts on the saved test figures, side by side by the numbers (`FCOSE=1` adds fCoSE) |
+| `npm run build` | Builds the app into `dist/` |
+| `npm run fetch:signor`, `npm run fetch:omnipath` | Download the curated records for step 1's arrow check |
 | `npm run spend` | AI spend by day |
+| `npm run demo` | Builds the app and serves it for a shared demo (settings in `.env.demo`; see [docs/hosting.md](docs/hosting.md)) |
+| `npm run seed:demo` | Copies the examples' saved results into the demo's run list |
+| `node scripts/identify-coverage.ts` | How far step 1's identification gets on saved runs (online; only label text is sent) |
+| `node scripts/compare-layouts.ts` | Step 5's layouts on the saved test figures, by the numbers (`FCOSE=1` adds fCoSE) |
 | `node scripts/make-practice-run.ts <result.json> <image> "<name>" [ids]` | A practice copy of a run with chosen shapes taken out |
 | `node scripts/check-practice.ts <run id>` | Says whether the removed shapes and arrows were put back |
-| `node scripts/run-figures.ts --yes` | **Paid:** re-runs the prompt on the local test figures |
+| `node scripts/run-figures.ts --yes` | **Paid:** re-runs the prompt on local test figures (list in `local/examples/figures.json`) |
 
-## More
-- [docs/design.md](docs/design.md): the design decisions and why.
-- [docs/hosting.md](docs/hosting.md): sharing a live demo.
-- [CLAUDE.md](CLAUDE.md): rules for working on the code.
-- [DESIGN.md](DESIGN.md): the visual system (colours, type, components), and [PRODUCT.md](PRODUCT.md): who it's for and what it must keep.
+## Credits
+- **Example figures:** four from *Signal Transduction and Targeted Therapy* (CC BY 4.0) and one from WikiPathways (CC0); full credits in [docs/examples.md](docs/examples.md) and on the upload screen.
+- **Curated records:** [SIGNOR](https://signor.uniroma2.it) (CC BY-SA 4.0) and [OmniPath](https://omnipathdb.org) (academic licence), downloaded to your computer, not included here.
+- **Identity lookups:** HGNC, UniProt, Complex Portal, Gene Ontology and ChEBI, queried live.
+- **Layout:** [ELK](https://eclipse.dev/elk/) (EPL 2.0), [kiwi.js](https://github.com/IjzerenHein/kiwi.js) (BSD), and the "Redraw as a cell" engine, arrow bowing, text placement and arrow markers, copied with changes from BioPathway Studio (each file marked).

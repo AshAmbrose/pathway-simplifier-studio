@@ -9,7 +9,7 @@ A local web app that turns a published pathway figure into an editable diagram.
 3. **Check:** you check the result side by side with the original, answer the model's questions, and fix or add anything it got wrong.
 4. **Simplify:** "Continue to simplify →" leads into five ordered, skippable steps (Issues, Focus, Repeats, Clusters, Layout), each on one canvas, with the step's changes faded or marked and the original folded beside it. All five steps are built.
 
-Design decisions and their reasons are in [docs/design.md](docs/design.md).
+Design decisions and their reasons are in [docs/decisions.md](docs/decisions.md). The user's guide to each screen is [docs/using.md](docs/using.md); the README is the front door (what it is, setup with your own key, how it was built).
 
 ## Principles
 - **Faithful first.** The input image is the starting point. Record what is drawn, exactly as drawn (typos, unlabelled shapes, odd styling), before anything is changed.
@@ -36,7 +36,7 @@ Design decisions and their reasons are in [docs/design.md](docs/design.md).
 - **Never name the confidential test material** in committed files, issues or pull requests.
 - **Push only to the private GitHub repo,** after checking it's still private.
 - **One branch per feature,** with a pull request. Merge only when the user says.
-- **Keep the docs current with every commit.** Before each commit, check whether `README.md`, `docs/design.md` or this file need updating, and include those updates in the same commit. Keep them short, clear and in plain language.
+- **Keep the docs current with every commit.** Before each commit, check whether `README.md`, `docs/using.md`, `docs/decisions.md` or this file need updating, and include those updates in the same commit. Keep them short, clear and in plain language.
 - **Model calls:** a free-tier key may let the provider use what is sent, so send only open-licence figures on it. Ask before any paid run (`scripts/run-figures.ts` refuses without `--yes`).
 
 ## Map of the code
