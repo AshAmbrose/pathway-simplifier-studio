@@ -92,6 +92,7 @@ Built over five days (15–19 November 2026), one feature per pull request, with
 | [#15](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/15) | Report: original and finished side by side; PDF download |
 | [#16](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/16) | Sharing a live demo from the laptop |
 | [#32](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/32) | Demo polish: change list and Issues cards |
+| [#34](https://github.com/AshAmbrose/pathway-simplifier-studio/pull/34) | This README: setup with your own key, and the docs reorganised |
 
 Each pull request explains what changed and how it was checked. [docs/decisions.md](docs/decisions.md) records why each choice was made, including approaches that were tried and dropped.
 
