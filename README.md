@@ -132,4 +132,4 @@ Planned work is in the [issues](https://github.com/AshAmbrose/pathway-simplifier
 - **Example figures:** four from *Signal Transduction and Targeted Therapy* (CC BY 4.0) and one from WikiPathways (CC0); full credits in [docs/examples.md](docs/examples.md) and on the upload screen.
 - **Curated records:** [SIGNOR](https://signor.uniroma2.it) (CC BY-SA 4.0) and [OmniPath](https://omnipathdb.org) (academic licence), downloaded to your computer, not included here.
 - **Identity lookups:** HGNC, UniProt, Complex Portal, Gene Ontology and ChEBI, queried live.
-- **Layout:** [ELK](https://eclipse.dev/elk/) (EPL 2.0), [kiwi.js](https://github.com/IjzerenHein/kiwi.js) (BSD), and the "Redraw as a cell" engine, arrow bowing, text placement and arrow markers, copied with changes from BioPathway Studio (each file marked).
+- **Layout:** [ELK](https://eclipse.dev/elk/) (EPL 2.0), [kiwi.js](https://github.com/IjzerenHein/kiwi.js) (BSD), and the "Redraw as a cell" engine, arrow bowing, text placement and arrow markers, copied with changes from my earlier project, BioPathway Studio (each file marked).
