@@ -106,8 +106,9 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowChanges(false); setShowReport(false); setActiveIssue(null); setActiveRepeat(null); setDraft(null); setLayoutSel(null); } };
     const onDown = (e: PointerEvent) => { if (changesBox.current && !changesBox.current.contains(e.target as Node)) setShowChanges(false); };
     window.addEventListener('keydown', onKey);
-    window.addEventListener('pointerdown', onDown);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('pointerdown', onDown); };
+    // Listen while the click is on its way down (capture), so canvas clicks that stop the event still close the list.
+    window.addEventListener('pointerdown', onDown, true);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('pointerdown', onDown, true); };
   }, []);
 
   // --- the figure at each point: corrections, then each step in order ---
@@ -275,8 +276,9 @@ export function SimplifyScreen({ run, imageUrl, review, setReview, top, notices,
     const issuesRec = { ...sim.issues };
     delete issuesRec[i.key];
     if (decision) issuesRec[i.key] = decision;
-    // An identity goes on every shape with the label, one change each (so each can still be undone on its own).
-    const added = edit ? (i.kind === 'identity' ? ids.map((id) => stamp('issues')({ ...edit, id })) : [stamp('issues')(edit)]) : [];
+    // An identity goes on every shape with the label, and a name on every look-alike unlabelled shape in the card:
+    // one change each, so each can still be undone on its own.
+    const added = edit ? (i.kind === 'identity' || i.kind === 'unlabelled' ? ids.map((id) => stamp('issues')({ ...edit, id })) : [stamp('issues')(edit)]) : [];
     return { ...r, edits: [...r.edits.filter((e) => !mine(e)), ...added], simplify: { ...sim, issues: issuesRec } };
   });
 

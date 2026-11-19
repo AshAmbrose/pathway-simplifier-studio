@@ -5,6 +5,7 @@
  * one moves the selection on to the next undecided issue.
  *  - Typo: use the suggested spelling, type your own, or keep it as written.
  *  - Unlabelled part: type a name (names written in the figure are suggested), keep it unlabelled, or leave it out.
+ *    Look-alike unlabelled shapes in the same compartment share one card and one answer (src/simplify/issues.ts).
  *  - Colour or styling that carries meaning: "Seen", with an optional note of what it means. No key is drawn.
  *  - What each shape is: matched to database records, confirmed or chosen here (IdentityCards.tsx).
  *  - Arrows against curated records: SIGNOR and OmniPath on each arrow between identified shapes (ArrowChecks.tsx).
@@ -129,17 +130,18 @@ function IssueCard({ x, i, status, names, active, onSettle, onHover, onSelect }:
   // at something that isn't drawn as an item (its id is never shown).
   const known = textOf(x, i.id).exists;
   const title = i.kind === 'typo' ? `"${i.asWritten ?? textOf(x, i.id).text ?? ''}"`
-    : i.kind === 'unlabelled' ? `Unlabelled ${el?.kind ?? 'part'}`
+    : i.kind === 'unlabelled' ? (i.ids && i.ids.length > 1 ? `${i.ids.length} unlabelled ${el?.kind ?? 'part'} shapes that look alike` : `Unlabelled ${el?.kind ?? 'part'}`)
       : `${i.flag === 'colour carries meaning' ? 'Colour' : 'Line style'} ${known ? `on ${nameOf(x, i.id)}` : 'in the figure'}`;
   return (
     // Any click inside a card makes it the one being worked on (captured first, so its buttons still act).
     <li data-issue={i.key} className={row(active, !!status)}
-      onClickCapture={() => { if (!active) onSelect(i); }} onMouseEnter={() => onHover([i.id])} onMouseLeave={() => onHover(null)}>
+      onClickCapture={() => { if (!active) onSelect(i); }} onMouseEnter={() => onHover(i.ids ?? [i.id])} onMouseLeave={() => onHover(null)}>
       <div className="flex items-start justify-between gap-2">
         <div className="font-semibold text-ink">{title}</div>
         {!status && <span className={toDecide}><span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />To decide</span>}
       </div>
       {i.basis && <div className={`${meta} mt-0.5`}>{cleanText(x, i.basis)}</div>}
+      {i.kind === 'unlabelled' && i.ids && i.ids.length > 1 && !status && <div className={`${meta} mt-0.5`}>Same shape, colour and size, in the same compartment: answered together. Each can still be undone on its own.</div>}
       {status ? (
         <div className="mt-1.5 flex items-start justify-between gap-2 text-body text-ok">
           <span className="flex items-start gap-1.5"><Check size={ICON} className="mt-0.5 shrink-0" />{status}</span>

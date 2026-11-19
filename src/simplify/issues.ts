@@ -43,5 +43,28 @@ export function findIssues(x: Extraction): Issue[] {
     if (e.label || ['heading', 'symbol', 'dna'].includes(e.kind)) continue;
     push({ key: `unlabelled:${e.id}`, kind: 'unlabelled', id: e.id, asWritten: null, suggestion: null, basis: e.description });
   }
+  return groupLookalikes(x, out);
+}
+
+/**
+ * Unlabelled shapes that look the same and sit in the same place (same kind, outline, fill colour, a similar size,
+ * and the same compartment and panel) become one card, answered together: a row of identical unlabelled receptors
+ * is named once, not one by one. The card keeps the first shape's key, so a decision saved before grouping still
+ * counts. Each shape still gets its own change, so any one can be undone on its own.
+ */
+function groupLookalikes(x: Extraction, list: Issue[]): Issue[] {
+  const byId = new Map(x.elements.map((e) => [e.id, e]));
+  const similar = (a: number, b: number) => Math.min(a, b) / Math.max(a, b) >= 0.7;
+  const out: Issue[] = [];
+  for (const i of list) {
+    const e = i.kind === 'unlabelled' ? byId.get(i.id) : undefined;
+    const into = e && out.find((g) => {
+      const f = g.kind === 'unlabelled' ? byId.get(g.id) : undefined;
+      return !!f && f.kind === e.kind && f.outline === e.outline && (f.fill ?? '').toLowerCase() === (e.fill ?? '').toLowerCase()
+        && f.region === e.region && f.panel === e.panel && similar(f.box[2], e.box[2]) && similar(f.box[3], e.box[3]);
+    });
+    if (into) into.ids = [...(into.ids ?? [into.id]), i.id];
+    else out.push({ ...i });
+  }
   return out;
 }

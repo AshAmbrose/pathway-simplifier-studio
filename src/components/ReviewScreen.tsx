@@ -105,6 +105,13 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
   const img = useRef<HTMLImageElement | null>(null);
   useEffect(() => { const i = new Image(); i.src = imageUrl; img.current = i; }, [imageUrl]);
   const [showChanges, setShowChanges] = useState(false);
+  // A click anywhere outside the change list closes it. Capture, so canvas clicks that stop the event still count.
+  const changesBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => { if (changesBox.current && !changesBox.current.contains(e.target as Node)) setShowChanges(false); };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => window.removeEventListener('pointerdown', onDown, true);
+  }, []);
   const [hot, setHot] = useState<string | null>(null);
   const viewer = useRef<ViewerHandle>(null);
 
@@ -367,7 +374,7 @@ export function ReviewScreen({ run, imageUrl, review: fullReview, setReview, top
       <header className="mb-2 flex flex-wrap items-center gap-3">
         {top}
         <span className="flex-1" />
-        <div className="relative">
+        <div className="relative" ref={changesBox}>
           <button className={chip} aria-expanded={showChanges} onClick={() => setShowChanges((v) => !v)}><ListChecks size={ICON} /><span className="num">{changeList.length}</span> change{changeList.length === 1 ? '' : 's'}<ChevronDown size={ICON} className="text-ink-3" /></button>
           {showChanges && (
             <div className="absolute right-0 z-20 mt-1 max-h-[60vh] w-[26rem] overflow-y-auto rounded border border-line-2 bg-panel p-4 text-body shadow-[0_8px_24px_rgb(0_0_0/0.14)]">
