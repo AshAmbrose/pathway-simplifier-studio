@@ -4,7 +4,7 @@
 !.env.example
 
 # Confidential and test images, answer keys drafted from them, run outputs.
-# The two exercise figures must never be committed.
+# Never committed: other people's figures used for testing.
 local/
 
 # Uploaded figures, extraction runs and the AI cost ledger (per machine; uploads may be confidential)

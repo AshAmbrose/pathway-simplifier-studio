@@ -5,15 +5,18 @@
  *   node scripts/run-figures.ts --yes [F1 F2 …]
  *
  * Refuses to run without --yes. Every call is logged to data/ai-ledger.jsonl and counts against DAILY_USD.
+ *
+ * The figures are listed in local/examples/figures.json (gitignored, like the figures themselves), as
+ * { "F1": ["file name in local/examples/", "image/png"], … }. Kept out of the code because some test figures
+ * aren't ours to publish, not even by name.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extractFigure, PROMPT_VERSION } from '../server/extract.ts';
 import { localDay, spentOn } from '../server/aiLedger.ts';
 
-const FIGS: Record<string, [string, string]> = {
-  F1: ['exercise-il6.png', 'image/png'], F2: ['exercise-nfkb.png', 'image/png'], F3: ['jakstat-hu2021-fig3.jpg', 'image/jpeg'],
-  F4: ['nfkb-yu2020-fig1.jpg', 'image/jpeg'], F5: ['nfkb-guo2024-fig1.jpg', 'image/jpeg'], F6: ['wnt-liu2022.jpg', 'image/jpeg'],
-};
+const LIST = new URL('../local/examples/figures.json', import.meta.url);
+if (!existsSync(LIST)) { console.error('No figure list: create local/examples/figures.json (see the comment at the top of this script).'); process.exit(1); }
+const FIGS: Record<string, [string, string]> = JSON.parse(readFileSync(LIST, 'utf8'));
 
 function env(): Record<string, string> {
   const f = new URL('../.env.local', import.meta.url);
@@ -23,7 +26,7 @@ function env(): Record<string, string> {
 
 const args = process.argv.slice(2);
 if (!args.includes('--yes')) { console.error('This makes paid model calls. Re-run with --yes.'); process.exit(1); }
-const pick = args.filter((a) => /^F[1-6]$/.test(a));
+const pick = args.filter((a) => a in FIGS);
 const e = env();
 const model = e.EXTRACT_MODEL ?? '', cap = Number(e.DAILY_USD ?? 5) || 5;
 const NAME = `Hydrogen4-${PROMPT_VERSION}`;

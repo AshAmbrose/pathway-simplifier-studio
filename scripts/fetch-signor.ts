@@ -172,6 +172,8 @@ async function formedBy(id: string): Promise<string[] | null> {
 const missing = [...entities.values()].filter((e) => (e.type === 'complex' || e.type === 'proteinfamily') && !e.members);
 const toFetch = missing.filter((e) => !(e.id in memberCache));
 console.log(`Member lists still missing for ${missing.length} complexes/families (${toFetch.length} not cached yet)…`);
+// The loop below saves its progress every 25 lookups, so the folder must exist first (on a fresh clone it doesn't).
+mkdirSync(OUT_DIR, { recursive: true });
 for (const [k, e] of toFetch.entries()) {
   try {
     memberCache[e.id] = await formedBy(e.id);
